@@ -79,11 +79,39 @@ final class MRSA_Executable_Content_Policy {
 		}
 	}
 
-	private function validate_jpeg( $handle ) {
+	private function read_jpeg( $handle ) {
 		$content = stream_get_contents( $handle, 10485761 );
 		if ( false === $content || strlen( $content ) > 10485760 ) {
 			throw new RuntimeException( 'The JPEG could not be checked within the 10 MB image limit.' );
 		}
+		return $content;
+	}
+
+	private function validate_jpeg( $handle ) {
+		$content = $this->read_jpeg( $handle );
+		if ( $this->jpeg_primary_length( $content ) !== strlen( $content ) ) {
+			throw new RuntimeException( 'The JPEG is incomplete, malformed or contains appended content. Export a fresh image and scan again.' );
+		}
+	}
+
+	/**
+	 * Byte length of a JPEG's primary image through its first top-level EOI marker, or null if
+	 * the file is not a JPEG. Phones commonly append gain maps, MPF images, trailers, or video.
+	 */
+	public function primary_jpeg_length( $path ) {
+		$handle = fopen( $path, 'rb' );
+		if ( ! $handle ) {
+			throw new RuntimeException( 'The file could not be read for executable-content checks.' );
+		}
+		try {
+			$content = $this->read_jpeg( $handle );
+		} finally {
+			fclose( $handle );
+		}
+		return "\xFF\xD8" === substr( $content, 0, 2 ) ? $this->jpeg_primary_length( $content ) : null;
+	}
+
+	private function jpeg_primary_length( $content ) {
 		$length = strlen( $content );
 		$offset = 2;
 		$scanned = false;
@@ -99,8 +127,8 @@ final class MRSA_Executable_Content_Policy {
 			}
 			$marker = ord( $content[ $offset++ ] );
 			if ( 0xD9 === $marker ) {
-				if ( $scanned && $offset === $length ) {
-					return;
+				if ( $scanned ) {
+					return $offset;
 				}
 				break;
 			}

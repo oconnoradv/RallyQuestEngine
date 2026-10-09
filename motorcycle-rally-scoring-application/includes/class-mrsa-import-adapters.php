@@ -29,6 +29,16 @@ final class MRSA_Gallery_Filesystem {
 	public function exists( $path ) { return file_exists( $path ); }
 	public function size( $path ) { return filesize( $path ); }
 	public function copy( $source, $destination ) { return copy( $source, $destination ); }
+	public function truncate( $path, $length ) {
+		$handle = fopen( $path, 'r+b' );
+		if ( ! $handle ) {
+			return false;
+		}
+		$truncated = ftruncate( $handle, $length ) && fflush( $handle );
+		fclose( $handle );
+		clearstatcache( true, $path );
+		return $truncated;
+	}
 	public function move( $source, $destination ) { return rename( $source, $destination ); }
 	public function remove_file( $path ) { return unlink( $path ); }
 	public function make_directory( $path, $mode = 0700 ) { return mkdir( $path, $mode ); }

@@ -483,6 +483,14 @@ try {
 		) );
 		check( ! isset( $result['pending_token'] ) && is_file( $GLOBALS['test_root'] . '/mrsa-event-gallery/32/' . $format . '.' . $fixture[3] ), $format . ': real compressed image passes staging and audited unavailable-scanner import without false script rejection' );
 	}
+	$primary_jpeg = file_get_contents( __DIR__ . '/fixtures/jpeg-binary-marker.jpg' );
+	$url = 'https://example.com/gallery/PHONE.jpg';
+	$GLOBALS['responses'][ $url ] = array( 'code' => 200, 'type' => 'image/jpeg', 'body' => $primary_jpeg . $primary_jpeg . str_repeat( "\0", 64 ) . 'SEFH<?php trailer();' );
+	( new MRSA_Bonus_Application_Service() )->import( 32, array(
+		'import_step' => 'images', 'image_source' => 'url', 'gallery_url' => $url, 'files' => array(),
+	) );
+	$stored = $GLOBALS['test_root'] . '/mrsa-event-gallery/32/PHONE.jpg';
+	check( is_file( $stored ) && file_get_contents( $stored ) === $primary_jpeg, 'phone JPEG with appended gain-map image and trailer imports as only the validated primary image' );
 	MRSA_Bonus::revoke_bypass( 31 );
 } finally {
 	foreach ( $GLOBALS['cleanup'] ?? array() as $args ) {

@@ -262,6 +262,19 @@ final class MRSA_Bonus {
 		if ( ! self::filesystem()->copy( $path, $staged_path ) ) {
 			throw new RuntimeException( 'An image could not be staged for import.' );
 		}
+		if ( 'jpg' === $extension ) {
+			// Keep only the primary image; phone gain maps, MPF images and trailers are discarded before scanning.
+			$primary_length = ( new MRSA_Executable_Content_Policy() )->primary_jpeg_length( $staged_path );
+			if ( null === $primary_length ) {
+				throw new RuntimeException( 'Only valid JPEG, PNG, GIF, and WebP images can be imported.' );
+			}
+			if ( $primary_length < $size ) {
+				if ( ! self::filesystem()->truncate( $staged_path, $primary_length ) ) {
+					throw new RuntimeException( 'Extra data after the JPEG image could not be removed.' );
+				}
+				$size = $primary_length;
+			}
+		}
 		$scan_session->scan( $staged_path, $name );
 		$handle = fopen( $staged_path, 'rb' );
 		if ( ! $handle ) {
