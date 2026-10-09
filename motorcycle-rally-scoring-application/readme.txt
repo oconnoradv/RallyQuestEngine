@@ -26,6 +26,13 @@ Authorization, scanning, audit requirements and coordinated database/gallery
 rollback remain part of the operation contracts. Standalone PHP regression
 suites exercise these contracts; no new production dependencies are required.
 
+Release publication requires successful CodeQL JavaScript security analysis
+and no open repository Dependabot alerts, in addition to the existing gates.
+Repository owners must enable the security features and configure the
+read-only RELEASE_SECURITY_TOKEN Actions secret as documented in README.md.
+Unavailable alert access or failed analysis blocks publication. CodeQL does
+not analyze PHP; PHP remains covered by Semgrep.
+
 Motorcycle Rally Scoring Application provides administrative tabs for:
 
 * Riders: rider details, make/model-filtered motorcycles with optional manually entered four-digit years, emergency contacts, insurance information, and registered events.

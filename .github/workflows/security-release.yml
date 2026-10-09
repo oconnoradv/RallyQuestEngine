@@ -33,6 +33,7 @@ jobs:
           find motorcycle-rally-scoring-application -name '*.php' -print0 |
             xargs -0 -r -n 1 php -l
           node --check motorcycle-rally-scoring-application/assets/admin.js
+          node tests/release-security.cjs
 
       - name: Check bonus image import behavior
         run: |
@@ -129,15 +130,91 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  codeql:
+    name: CodeQL release-source analysis
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+      - name: Analyze the checked-out commit
+        id: analyze
+        uses: github/codeql-action/analyze@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
+        with:
+          output: ${{ runner.temp }}/codeql-results
+      - name: Reject CodeQL findings or incomplete reports
+        env:
+          SARIF_DIRECTORY: ${{ steps.analyze.outputs.sarif-output }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const { checkCodeQL } = require('./.github/scripts/release-security.cjs');
+          const directory = process.env.SARIF_DIRECTORY;
+          if (!directory) throw new Error('CodeQL did not return an output directory.');
+          const reports = fs.readdirSync(directory).filter(file => file.endsWith('.sarif'))
+            .map(file => JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8')));
+          checkCodeQL(reports);
+          NODE
+
+  dependabot:
+    name: Dependabot release gate
+    if: github.event_name == 'workflow_dispatch' || (startsWith(github.ref, 'refs/tags/v') && github.event_name != 'pull_request')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Require Dependabot alert access
+        env:
+          ALERT_TOKEN: ${{ secrets.RELEASE_SECURITY_TOKEN }}
+        run: |
+          if [ -z "$ALERT_TOKEN" ]; then
+            echo "::error::Configure RELEASE_SECURITY_TOKEN with Dependabot alerts read permission and enable repository Dependabot alerts."
+            exit 1
+          fi
+      - name: Block all open Dependabot alerts
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          github-token: ${{ secrets.RELEASE_SECURITY_TOKEN }}
+          script: |
+            const { checkDependabot } = require('./.github/scripts/release-security.cjs');
+            await checkDependabot(github, context.repo);
+
   release:
     name: Publish ZIP release
-    needs: security
+    needs: [security, codeql, dependabot]
     if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: write
     steps:
+      - name: Check out verified release source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Recheck Dependabot immediately before publication
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          github-token: ${{ secrets.RELEASE_SECURITY_TOKEN }}
+          script: |
+            const { checkDependabot } = require('./.github/scripts/release-security.cjs');
+            await checkDependabot(github, context.repo);
       - name: Download verified release package
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -158,4 +235,4 @@ jobs:
             "motorcycle-rally-scoring-application-$RELEASE_TAG.zip" SHA256SUMS \
             --verify-tag \
             --title "Motorcycle Rally Scoring Application $RELEASE_TAG" \
-            --notes "Install the ZIP through WordPress Plugins > Add New > Upload Plugin. See the bundled readme changelog for this version's changes. This source passed the workflow's syntax, Semgrep static security (including WordPress exploit rules), Trivy dependency/secret, and Gitleaks history/working-tree secret checks. These checks do not certify NIST compliance or absence of all CVEs; deployed WordPress, PHP, and other plugins require separate assessment. The Event Bonus Point Library supports listing and image imports; bonus scoring calculations and submission review remain future work. Back up the database and event gallery files separately before upgrading."
+            --notes "Install the ZIP through WordPress Plugins > Add New > Upload Plugin. See the bundled readme changelog for this version's changes. This source passed syntax, Semgrep static security (including WordPress exploit rules), CodeQL JavaScript security analysis, Trivy dependency/secret, and Gitleaks history/working-tree secret checks. Publication also required no open repository Dependabot alerts. These checks do not certify NIST compliance or absence of all CVEs; deployed WordPress, PHP, and other plugins require separate assessment. The Event Bonus Point Library supports listing and image imports; bonus scoring calculations and submission review remain future work. Back up the database and event gallery files separately before upgrading."
