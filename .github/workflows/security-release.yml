@@ -38,6 +38,8 @@ jobs:
         run: |
           php tests/bonus-import.php
           php tests/bonus-feedback.php
+          php tests/diagnostics.php
+          php tests/roster-import.php
 
       - name: Install static security scanner
         shell: bash

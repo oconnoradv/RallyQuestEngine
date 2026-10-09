@@ -3,6 +3,47 @@
 	'use strict';
 	const root = document.querySelector('.mrsa');
 	if (!root) return;
+	root.querySelectorAll('.mrsa-destructive-action').forEach(section => {
+		const form = section.querySelector('form');
+		const verification = form.querySelector('.mrsa-delete-verification');
+		const dialog = document.createElement('dialog');
+		if (typeof dialog.showModal !== 'function') return;
+		const input = verification.querySelector('[name="verification_code"]');
+		const action = Array.from(form.querySelectorAll('button')).find(button => !verification.contains(button));
+		dialog.className = 'mrsa-delete-dialog';
+		dialog.setAttribute('aria-labelledby', verification.querySelector('h4').id);
+		dialog.append(verification);
+		form.append(dialog);
+		input.disabled = true;
+		verification.querySelectorAll('button').forEach(button => { button.hidden = false; });
+		form.addEventListener('submit', event => {
+			if (dialog.open) return;
+			event.preventDefault();
+			const selected = form.querySelector('select');
+			verification.querySelector('.mrsa-delete-target').textContent = selected ?
+				selected.previousElementSibling.textContent + ': ' + selected.selectedOptions[0].textContent : '';
+			input.disabled = false;
+			dialog.showModal();
+			verification.querySelector('.mrsa-delete-cancel').focus();
+		});
+		verification.querySelector('.mrsa-delete-cancel').addEventListener('click', () => dialog.close());
+		dialog.addEventListener('close', () => {
+			input.value = '';
+			input.disabled = true;
+			action.focus();
+		});
+	});
+	root.querySelectorAll('.mrsa-url-help').forEach(help => {
+		help.addEventListener('mouseenter', () => { help.open = true; });
+		help.addEventListener('mouseleave', () => { help.open = false; });
+		help.addEventListener('focusin', () => { help.open = true; });
+		help.addEventListener('focusout', event => {
+			if (!help.contains(event.relatedTarget)) help.open = false;
+		});
+		help.addEventListener('keydown', event => {
+			if (event.key === 'Escape') { help.open = false; event.stopPropagation(); }
+		});
+	});
 	const galleryDialog = root.querySelector('.mrsa-gallery-dialog');
 	if (galleryDialog && typeof galleryDialog.showModal === 'function') {
 		const image = galleryDialog.querySelector('.mrsa-gallery-full-image');

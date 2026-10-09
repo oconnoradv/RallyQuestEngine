@@ -152,7 +152,7 @@ final class MRSA_Bonus {
 		return $normalized;
 	}
 
-	private static function read_csv( $path ) {
+	private static function read_csv( $path, $raw = false ) {
 		$handle = fopen( $path, 'rb' );
 		if ( ! $handle ) {
 			throw new RuntimeException( 'The CSV file could not be opened.' );
@@ -171,7 +171,7 @@ final class MRSA_Bonus {
 			}
 		}
 		fclose( $handle );
-		return self::normalize_rows( $header, $rows );
+		return $raw ? array( $header, $rows ) : self::normalize_rows( $header, $rows );
 	}
 
 	private static function extract_zip_entry( $archive, $name, $list, $max_size ) {
@@ -204,7 +204,7 @@ final class MRSA_Bonus {
 		return $parsed;
 	}
 
-	private static function read_xlsx( $path ) {
+	private static function read_xlsx( $path, $raw = false ) {
 		if ( ! class_exists( 'PclZip' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
 		}
@@ -320,7 +320,17 @@ final class MRSA_Bonus {
 			throw new RuntimeException( 'The XLSX worksheet is empty.' );
 		}
 		$header = array_shift( $rows );
-		return self::normalize_rows( $header, $rows );
+		return $raw ? array( $header, $rows ) : self::normalize_rows( $header, $rows );
+	}
+
+	public static function read_spreadsheet( $path, $extension ) {
+		if ( 'csv' === $extension ) {
+			return self::read_csv( $path, true );
+		}
+		if ( 'xlsx' === $extension ) {
+			return self::read_xlsx( $path, true );
+		}
+		throw new RuntimeException( 'Choose a CSV or XLSX file.' );
 	}
 
 	private static function upload_file( $key, $multiple = false ) {
@@ -634,12 +644,23 @@ final class MRSA_Bonus {
 			'occurred_at' => gmdate( 'Y-m-d H:i:s' ), 'event_id' => $event_id,
 			'action' => $action, 'detail' => $detail,
 		) ) ) {
-			throw new RuntimeException( 'The virus-scan bypass audit record could not be saved. Unscanned imports cannot proceed without an audit record.' );
+			throw new RuntimeException( 'The audit record could not be saved. Deletions and unscanned imports cannot proceed without an audit record.' );
 		}
 	}
 
 	public static function revoke_bypass( $event_id ) {
 		self::audit( $event_id, 'bypass_disabled', 'Administrator restored mandatory ClamAV scanning for their imports.' );
+	}
+
+	public static function audit_deletion( $event_id, $operation, $detail ) {
+		self::audit( $event_id, $operation, $detail );
+	}
+
+	public static function enable_bypass( $event_id ) {
+		if ( '1' !== MRSA_Admin::posted( 'bypass_confirmation' ) ) {
+			throw new RuntimeException( 'Confirm the risk of importing without antivirus scanning before enabling the override.' );
+		}
+		self::audit( $event_id, 'bypass_enabled', 'Administrator explicitly enabled the unavailable-ClamAV override from Step 0 for their account on this site.' );
 	}
 
 	public static function pending( $event_id, $token ) {
@@ -897,7 +918,13 @@ final class MRSA_Bonus {
 		$sheet_files = self::upload_file( 'bonus_file' );
 		$sheet = $sheet_files ? $sheet_files[0] : null;
 		$remote_url = trim( MRSA_Admin::posted( 'gallery_url' ) );
-		$uploaded = self::upload_file( 'bonus_images', true );
+		$uploaded = 'images' === $step && 'url' === MRSA_Admin::posted( 'image_source' ) ? array() : self::upload_file( 'bonus_images', true );
+		if ( 'images' === $step && 'url' === MRSA_Admin::posted( 'image_source' ) ) {
+			if ( '' === $remote_url ) {
+				throw new RuntimeException( 'Enter a public HTTPS image, ZIP, or directory-listing URL before choosing Load via URL.' );
+			}
+			$uploaded = array();
+		}
 		$has_uploads = false;
 		foreach ( $uploaded as $file ) {
 			if ( UPLOAD_ERR_NO_FILE !== (int) $file['error'] ) {
@@ -969,7 +996,9 @@ final class MRSA_Bonus {
 		$partial = '1' === MRSA_Admin::posted( 'allow_partial_images' );
 		$errors = array();
 		try {
-			self::upload_images( $stage_dir, $images, $total_size, $errors );
+			if ( 'url' !== MRSA_Admin::posted( 'image_source' ) ) {
+				self::upload_images( $stage_dir, $images, $total_size, $errors );
+			}
 			if ( '' !== $remote_url ) {
 				self::image_attempt( $remote_url, static function () use ( $remote_url, $stage_dir, &$images, &$total_size, &$errors ) {
 					self::stage_remote( $remote_url, $stage_dir, $images, $total_size, $errors );

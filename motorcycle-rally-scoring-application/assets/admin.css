@@ -6,9 +6,28 @@
 .mrsa .mrsa-header p { margin: 0; color: #50575e; font-size: 16px; }
 .mrsa .mrsa-header p span { margin-left: 8px; font-size: 13px; }
 .mrsa .mrsa-panel { background: #fff; border: 1px solid #c3c4c7; padding: 18px; margin: 16px 0; }
+.mrsa .mrsa-recommended-plugins { border-color: #008a20; background: #edfaef; color: #004d16; }
+.mrsa .mrsa-recommended-plugins h2 { margin-top: 0; }
+.mrsa .mrsa-recommended-plugins h2, .mrsa .mrsa-recommended-plugins h3 { color: #006b1b; }
 .mrsa .mrsa-bike-entry { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 16px 0 24px; }
 .mrsa .mrsa-bike-entry > .mrsa-panel { min-width: 0; margin: 0; }
 .mrsa .mrsa-bike-entry h3 { margin-top: 0; }
+.mrsa .mrsa-bike-import-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.mrsa .mrsa-bike-import-heading h3 { margin-bottom: 12px; }
+.mrsa .mrsa-bike-import-heading .mrsa-url-help { flex-shrink: 0; }
+.mrsa .mrsa-bike-import-controls { display: flex; align-items: end; gap: 12px; margin-bottom: 12px; }
+.mrsa .mrsa-bike-import-controls .mrsa-field { flex: 1; min-width: 0; margin: 8px 0 0; }
+.mrsa .mrsa-bike-import-controls .button { white-space: normal; }
+.mrsa .mrsa-destructive-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin: 16px 0; }
+.mrsa .mrsa-destructive-grid > .mrsa-panel { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.mrsa .mrsa-destructive-action h4 { margin-top: 0; }
+.mrsa .mrsa-delete-dialog { width: 480px; max-width: calc(100vw - 48px); max-height: calc(100vh - 48px); overflow-y: auto; box-sizing: border-box; padding: 18px; border: 1px solid #c3c4c7; color: #1d2327; background: #fff; }
+.mrsa .mrsa-delete-dialog:not([open]) { display: none; }
+.mrsa .mrsa-delete-dialog::backdrop { background: rgba(0, 0, 0, .7); }
+.mrsa .mrsa-delete-confirm { color: #b32d2e; border-color: #b32d2e; }
+@media (max-width: 1100px) {
+	.mrsa .mrsa-destructive-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .mrsa .mrsa-bike-entry .mrsa-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .mrsa .mrsa-bike-entry p, .mrsa .mrsa-bike-entry label { overflow-wrap: anywhere; }
 .mrsa .mrsa-roster-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 12px 0 16px; }
@@ -36,6 +55,9 @@
 .mrsa .mrsa-sort:focus-visible { outline: 2px solid #2271b1; outline-offset: 3px; }
 .mrsa .button { margin: 2px 4px 2px 0; }
 .mrsa details > summary { cursor: pointer; width: fit-content; }
+.mrsa .mrsa-administrative-audit > summary { padding: 8px 0; }
+.mrsa .mrsa-administrative-audit > summary h3 { display: inline; margin: 0; }
+.mrsa .mrsa-administrative-audit > summary:focus-visible { outline: 2px solid #2271b1; outline-offset: 3px; }
 .mrsa details[open] > summary { margin-bottom: 12px; }
 .mrsa .mrsa-inline { display: inline-block; margin-left: 8px; }
 .mrsa .mrsa-bike-row { border: 1px solid #c3c4c7; padding: 12px; margin-bottom: 10px; display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
@@ -64,6 +86,11 @@
 .mrsa .mrsa-clamav-unconfigured > .mrsa-panel { border-color: #d63638; border-left-width: 4px; background: #fcf0f1; }
 .mrsa .mrsa-clamav-unconfigured h4:first-child { color: #8a2424; }
 .mrsa .mrsa-import-header h4:first-child { margin-top: 0; }
+.mrsa .mrsa-url-actions { display: flex; align-items: center; gap: 8px; margin: 12px 0 16px; }
+.mrsa .mrsa-url-help { position: relative; }
+.mrsa .mrsa-url-help > summary { color: #135e96; text-decoration: underline; padding: 6px; }
+.mrsa .mrsa-url-help-content { display: none; position: absolute; z-index: 10; right: 0; top: 100%; width: 280px; max-width: calc(100vw - 64px); padding: 12px; border: 1px solid #8c8f94; background: #fff; color: #1d2327; box-shadow: 0 4px 12px rgba(0, 0, 0, .15); }
+.mrsa .mrsa-url-help[open] > .mrsa-url-help-content { display: block; }
 .mrsa .mrsa-import-feedback { min-width: 0; overflow-wrap: anywhere; }
 .mrsa .mrsa-import-feedback:empty { display: none; }
 .mrsa .mrsa-import-feedback .notice-success { border-left-color: #008a20; background: #edfaef; color: #004d16; }
@@ -79,7 +106,9 @@
 	.mrsa .mrsa-header h1 { font-size: 24px; }
 	.mrsa .mrsa-table-tools, .mrsa .mrsa-table-tools label { align-items: start; }
 	.mrsa .mrsa-grid { grid-template-columns: 1fr; }
+	.mrsa .mrsa-destructive-grid { grid-template-columns: 1fr; }
 	.mrsa .mrsa-bike-entry, .mrsa .mrsa-bike-entry .mrsa-grid { grid-template-columns: 1fr; }
+	.mrsa .mrsa-bike-import-controls { flex-wrap: wrap; }
 	.mrsa .nav-tab { margin-top: 8px; }
 	.mrsa .mrsa-roster-toolbar { align-items: stretch; flex-direction: column; }
 	.mrsa .mrsa-roster-event-select { align-items: stretch; }

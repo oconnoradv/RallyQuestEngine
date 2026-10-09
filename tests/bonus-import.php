@@ -163,6 +163,23 @@ $GLOBALS['responses'] = array(
 $_FILES = array();
 $_POST = array( 'import_step' => 'images', 'gallery_url' => 'https://example.com/gallery/', 'allow_partial_images' => '1' );
 try {
+	$_POST['image_source'] = 'url';
+	$_POST['gallery_url'] = '';
+	try {
+		MRSA_Bonus::import( 7 );
+		throw new RuntimeException( 'Empty URL unexpectedly accepted' );
+	} catch ( RuntimeException $exception ) {
+		check( strpos( $exception->getMessage(), 'Enter a public HTTPS' ) !== false, 'Load via URL requires a URL explicitly' );
+	}
+	$_POST['gallery_url'] = 'https://example.com/gallery/GOOD.png';
+	$_FILES['bonus_images'] = array( 'name' => array( 'LOCAL.png' ), 'tmp_name' => array( '' ), 'error' => array( UPLOAD_ERR_INI_SIZE ), 'size' => array( 0 ) );
+	$prepared = MRSA_Bonus::import( 7 );
+	$pending = MRSA_Bonus::pending( 7, $prepared['pending_token'] );
+	check( $pending['can_approve'] && 1 === count( $pending['images'] ) && ! $pending['errors'], 'Load via URL uses remote source only and retains scan approval' );
+	MRSA_Bonus::approve( 7, $prepared['pending_token'], true );
+	$_FILES = array();
+	unset( $_POST['image_source'] );
+	$_POST['gallery_url'] = 'https://example.com/gallery/';
 	$connection = MRSA_File_Scan::check_connection();
 	check( $connection['passed'] && array() === $wpdb->rows, 'Step 0 connection check performs an actual scan without importing data' );
 	foreach ( array( 'ERROR', 'TRUNCATED' ) as $mode ) {
@@ -412,6 +429,16 @@ try {
 	MRSA_Bonus::approve( 31, $prepared['pending_token'], true );
 	MRSA_Bonus::revoke_bypass( 31 );
 	check( ! MRSA_Bonus::bypass_enabled() && 'bypass_disabled' === end( $wpdb->audit_rows )['action'], 'restoring mandatory scanning revokes remembered consent and is audited' );
+	try {
+		MRSA_Bonus::enable_bypass( 31 );
+		throw new RuntimeException( 'Unconfirmed Step 0 override unexpectedly succeeded' );
+	} catch ( RuntimeException $exception ) {
+		check( ! MRSA_Bonus::bypass_enabled() && strpos( $exception->getMessage(), 'Confirm' ) !== false, 'Step 0 override rejects missing risk confirmation' );
+	}
+	$_POST['bypass_confirmation'] = '1';
+	MRSA_Bonus::enable_bypass( 31 );
+	check( MRSA_Bonus::bypass_enabled() && 'bypass_enabled' === end( $wpdb->audit_rows )['action'], 'Step 0 override records consent in persistent audit' );
+	MRSA_Bonus::revoke_bypass( 31 );
 } finally {
 	foreach ( $GLOBALS['cleanup'] ?? array() as $args ) {
 		MRSA_Bonus::expire( ...$args );

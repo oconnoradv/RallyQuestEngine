@@ -60,13 +60,17 @@ $GLOBALS['query'] = array( 'bonus_feedback' => $feedback_id, 'clamav_check' => s
 $GLOBALS['transients']['mrsa_bonus_feedback_1_' . $feedback_id] = array( 'event_id' => 7, 'step' => 'setup', 'severity' => 'success', 'message' => 'Check completed.' );
 $GLOBALS['transients']['mrsa_clamav_check_1_' . str_repeat( 'b', 24 )] = array( 'event_id' => 7, 'passed' => false, 'message' => 'ClamAV unavailable.' );
 $html = render_library();
+check( strpos( $html, 'Load via URL' ) < strpos( $html, 'name="allow_partial_images"' ) && strpos( $html, 'name="bonus_images[]"' ) < strpos( $html, 'name="allow_partial_images"' ), 'partial-image checkbox follows both file chooser and URL load button' );
+check( false !== strpos( $html, 'value="url">Load via URL</button><details class="mrsa-url-help">' ) && false !== strpos( $html, 'class="mrsa-url-help-content">Public URLs must use HTTPS' ), 'URL requirements live in help immediately to the right of load button' );
 $setup = section( $html, 'setup' );
 check( false !== strpos( $setup, 'ClamAV unavailable.' ) && false !== strpos( $setup, 'bypass is enabled' ), 'connection results and bypass warning appear in shared feedback area' );
 check( 1 === substr_count( $html, 'ClamAV unavailable.' ) && strpos( $html, 'id="mrsa-import-feedback"' ) > strpos( $html, 'Validate and Import Bonus Images' ), 'single feedback area immediately follows all three import columns' );
 check( false === strpos( $html, 'mrsa-clamav-enabled' ), 'unavailable scanner does not show enabled status' );
 check( false !== strpos( $html, '<details class="mrsa-clamav-disabled"><summary>ClamAV Manually Disabled</summary>' ) && false === strpos( $html, '<details class="mrsa-clamav-disabled" open' ), 'remembered bypass collapses Step 0 to orange manually disabled summary' );
+check( false !== strpos( $html, 'Remove ClamAV Scanning Override' ) && false === strpos( $html, '>Disable ClamAV Scanning<' ), 'disabled Step 0 offers override removal instead of disabling again' );
 $GLOBALS['bypassed'] = false;
 $html = render_library();
+check( false !== strpos( $html, '>Disable ClamAV Scanning<' ) && false !== strpos( $html, 'name="bypass_confirmation" value="1" required' ), 'Step 0 disable button requires explicit risk consent' );
 check( false !== strpos( $html, 'mrsa-clamav-unconfigured' ) && false === strpos( $html, 'mrsa-clamav-disabled' ), 'unconfigured scanner without bypass displays red expanded setup' );
 $GLOBALS['scanner_ready'] = true;
 $html = render_library();

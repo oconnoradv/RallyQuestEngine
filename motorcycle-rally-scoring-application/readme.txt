@@ -3,7 +3,7 @@ Contributors: oconnoradv
 Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
-Stable tag: 0.1.8
+Stable tag: 0.1.9
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -19,6 +19,7 @@ Motorcycle Rally Scoring Application provides administrative tabs for:
 * Scoring: event-specific Bonus Point Library, CSV/XLSX listing import, local-folder and public-URL image import, and event-roster scoring summaries in the remaining workspace tabs.
 * Results: score ordering, computed overall placing, read-only result status, and rider score-sheet placeholders.
 * Bikes: side-by-side manual entry and motorcycle make/model import on wide screens, stacked on narrow screens, plus transactional bulk deletion of unassigned catalog rows.
+* Rosters: selected-event CSV/XLSX import of existing riders by Rider ID or Email, with a downloadable sample CSV. Optional Bib ID, Status and Pillion columns; blank bibs receive the next available number. Global administrators only, maximum 10 MB / 5,000 rows. ClamAV is required; invalid or conflicting rows reject the whole batch.
 * Diagnostics: JSON export, restorable SQL backup, and verification-string-protected scoped deletion. Gallery image files are stored separately and are not included in database exports or backups.
 * About: version, licensing, attribution, scope, and an optional Gallery for SpotWalla recommendation with documentation and download links.
 
@@ -36,8 +37,13 @@ an unscanned-import warning. Available scanners are still used; malware,
 scanner errors, and unsafe content cannot be bypassed. Consent and unscanned
 import activity retain user ID, username, UTC timestamp and event in the import
 audit table. Diagnostics displays recent audit records; exports include all
-records. Diagnostics deletions retain the audit and bypass choices. Restore
-Mandatory ClamAV Scanning revokes the choice for your account. Manual image
+records. Diagnostics data deletions retain the audit and bypass choices and
+record the administrator, UTC timestamp and deletion scope in the same log.
+Delete Virus Scan Audit Data explicitly clears that history and resets all
+remembered overrides; a new record of the deletion remains. Destructive actions
+use a responsive three-column layout with randomized-string verification in a
+confirmation pop-up (inline without JavaScript or dialog support).
+Remove ClamAV Scanning Override in Step 0 revokes the choice for your account. Manual image
 replacement still requires ClamAV.
 Step 0 on the import screen provides optional setup commands and configuration
 guidance plus a Check ClamAV Connection button. Run installation commands in
@@ -190,6 +196,15 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.1.9 =
+* Added selected-event CSV/XLSX roster imports for existing riders, automatic available-bib assignment, batch validation and a downloadable sample CSV.
+* Added Step 0 controls to enable or remove the audited unavailable-ClamAV override without bypassing working scanners.
+* Added a Load via URL image-import button and compact source help, with the partial-import checkbox below both source controls.
+* Grouped Diagnostics destructive actions in three responsive columns and moved randomized verification to accessible confirmation dialogs.
+* Recorded Diagnostics deletions in the Administrative Audit, collapsed its history by default, and added explicit audit deletion that resets all overrides while retaining a new deletion record.
+* Streamlined bike import information into contextual help and updated About headings with a green plugin recommendation section.
+* Added roster and Diagnostics regression tests to the blocking release workflow.
 
 = 0.1.8 =
 * Arranged bonus import steps 0, 1, and 2 in a responsive three-column header.
