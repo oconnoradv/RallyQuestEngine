@@ -470,6 +470,19 @@ try {
 	$_POST['bypass_confirmation'] = '1';
 	MRSA_Bonus::enable_bypass( 31 );
 	check( MRSA_Bonus::bypass_enabled() && 'bypass_enabled' === end( $wpdb->audit_rows )['action'], 'Step 0 override records consent in persistent audit' );
+	foreach ( array(
+		'JPEG' => array( 'jpeg', 'image/jpeg', file_get_contents( __DIR__ . '/fixtures/jpeg-binary-marker.jpg' ), 'jpg' ),
+		'PNG' => array( 'png', 'image/png', $png, 'png' ),
+		'GIF' => array( 'gif', 'image/gif', file_get_contents( __DIR__ . '/fixtures/gif-binary-marker.gif' ), 'gif' ),
+		'WEBP' => array( 'webp', 'image/webp', file_get_contents( __DIR__ . '/fixtures/webp-binary-marker.webp' ), 'webp' ),
+	) as $format => $fixture ) {
+		$url = 'https://example.com/gallery/' . $format . '.' . $fixture[0];
+		$GLOBALS['responses'][ $url ] = array( 'code' => 200, 'type' => $fixture[1], 'body' => $fixture[2] );
+		$result = ( new MRSA_Bonus_Application_Service() )->import( 32, array(
+			'import_step' => 'images', 'image_source' => 'url', 'gallery_url' => $url, 'files' => array(),
+		) );
+		check( ! isset( $result['pending_token'] ) && is_file( $GLOBALS['test_root'] . '/mrsa-event-gallery/32/' . $format . '.' . $fixture[3] ), $format . ': real compressed image passes staging and audited unavailable-scanner import without false script rejection' );
+	}
 	MRSA_Bonus::revoke_bypass( 31 );
 } finally {
 	foreach ( $GLOBALS['cleanup'] ?? array() as $args ) {

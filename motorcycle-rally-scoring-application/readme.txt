@@ -4,7 +4,7 @@ Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.1.13
+Stable tag: 0.1.14
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -72,6 +72,11 @@ use a responsive three-column layout with randomized-string verification in a
 confirmation pop-up (inline without JavaScript or dialog support).
 Remove ClamAV Scanning Override in Step 0 revokes the choice for your account. Manual image
 replacement still requires ClamAV.
+JPEG, PNG, GIF and WebP checks distinguish compressed pixels and binary color
+tables from script text, preventing short random byte sequences from causing
+false executable-content warnings. Metadata is still inspected, including
+bounded PNG metadata decompression. Malformed/truncated containers, appended
+content and malware results remain blocked; ClamAV scans the entire file.
 The persistent ClamAV bypass warning is inside the minimized Step 0 panel.
 Step 2 collects filename, local upload, URL, limit and skip-failed guidance in
 Help? beside its heading, available on hover, keyboard focus or click/tap.
@@ -255,6 +260,12 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.1.14 =
+* Fixed false executable-content warnings caused by compressed JPEG, PNG, GIF and WebP image bytes.
+* Added format-aware container checks while retaining metadata inspection, bounded PNG metadata decompression, full-file ClamAV scanning and appended-content rejection.
+* Added real compressed-image fixtures and regressions for metadata scripts, truncated containers, animation frames and event-gallery imports.
+* Required Dependabot release checks and CodeQL analysis for public repositories; private repositories explicitly disclose skipped CodeQL while retaining the other release gates.
 
 = 0.1.13 =
 * Rebuilt this release to fix sequential image uploads targeting an invalid URL when the hidden action field shadows the form destination; added a real-browser regression fixture.

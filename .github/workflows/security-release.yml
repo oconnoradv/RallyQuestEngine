@@ -44,6 +44,8 @@ jobs:
           php tests/image-queue.php
           php tests/roster-import.php
           php tests/backend-services.php
+          php tests/jpeg-policy.php
+          php tests/raster-policy.php
           php tests/read-models.php
           php tests/diagnostic-contracts.php
 

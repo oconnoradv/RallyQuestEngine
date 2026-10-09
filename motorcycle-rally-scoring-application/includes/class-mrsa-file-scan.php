@@ -73,12 +73,272 @@ final class MRSA_ClamAV_Transport {
 }
 
 final class MRSA_Executable_Content_Policy {
+	private function validate_text( $content ) {
+		if ( preg_match( '/<\?(?:php\b|=)|<script\b|<%|#!\s*\/(?:usr|bin)\//i', $content ) ) {
+			throw new RuntimeException( 'Executable or script content was detected. Only data files and raster images are allowed.' );
+		}
+	}
+
+	private function validate_jpeg( $handle ) {
+		$content = stream_get_contents( $handle, 10485761 );
+		if ( false === $content || strlen( $content ) > 10485760 ) {
+			throw new RuntimeException( 'The JPEG could not be checked within the 10 MB image limit.' );
+		}
+		$length = strlen( $content );
+		$offset = 2;
+		$scanned = false;
+		while ( $offset < $length ) {
+			if ( "\xFF" !== $content[ $offset ] ) {
+				break;
+			}
+			while ( $offset < $length && "\xFF" === $content[ $offset ] ) {
+				++$offset;
+			}
+			if ( $offset >= $length ) {
+				break;
+			}
+			$marker = ord( $content[ $offset++ ] );
+			if ( 0xD9 === $marker ) {
+				if ( $scanned && $offset === $length ) {
+					return;
+				}
+				break;
+			}
+			if ( 0x00 === $marker || 0xD8 === $marker || ( $marker >= 0xD0 && $marker <= 0xD7 ) ) {
+				break;
+			}
+			if ( 0x01 === $marker ) {
+				continue;
+			}
+			if ( $offset + 2 > $length ) {
+				break;
+			}
+			$size = unpack( 'nsize', substr( $content, $offset, 2 ) )['size'];
+			if ( $size < 2 || $offset + $size > $length ) {
+				break;
+			}
+			$this->validate_text( substr( $content, $offset + 2, $size - 2 ) );
+			$offset += $size;
+			if ( 0xDA === $marker ) {
+				$scanned = true;
+				// Entropy-coded pixels are binary, not script text. Metadata stays checked above.
+				while ( $offset < $length ) {
+					$next = strpos( $content, "\xFF", $offset );
+					if ( false === $next || $next + 1 >= $length ) {
+						$offset = $length;
+						break;
+					}
+					$offset = $next;
+					$code_offset = $next + 1;
+					while ( $code_offset < $length && "\xFF" === $content[ $code_offset ] ) {
+						++$code_offset;
+					}
+					if ( $code_offset >= $length ) {
+						$offset = $length;
+						break;
+					}
+					$code = ord( $content[ $code_offset ] );
+					if ( 0x00 !== $code && ! ( $code >= 0xD0 && $code <= 0xD7 ) ) {
+						break;
+					}
+					$offset = $code_offset + 1;
+				}
+			}
+		}
+		throw new RuntimeException( 'The JPEG is incomplete, malformed or contains appended content. Export a fresh image and scan again.' );
+	}
+
+	private function read_image( $handle ) {
+		$content = stream_get_contents( $handle, 10485761 );
+		if ( false === $content || strlen( $content ) > 10485760 ) {
+			throw new RuntimeException( 'The image could not be checked within the 10 MB image limit.' );
+		}
+		return $content;
+	}
+
+	private function invalid_image() {
+		throw new RuntimeException( 'The image is incomplete, malformed or contains appended content. Export a fresh image and scan again.' );
+	}
+
+	private function validate_png( $content ) {
+		$offset = 8;
+		$length = strlen( $content );
+		$has_pixels = false;
+		while ( $offset + 12 <= $length ) {
+			$size = unpack( 'Nsize', substr( $content, $offset, 4 ) )['size'];
+			$type = substr( $content, $offset + 4, 4 );
+			if ( $size > $length - $offset - 12 || ! preg_match( '/^[A-Za-z]{4}$/D', $type ) ) {
+				$this->invalid_image();
+			}
+			$data = substr( $content, $offset + 8, $size );
+			if ( 8 === $offset && ( 'IHDR' !== $type || 13 !== $size ) ) {
+				$this->invalid_image();
+			}
+			if ( 'IDAT' === $type ) {
+				$has_pixels = true;
+			} elseif ( in_array( $type, array( 'tEXt', 'eXIf' ), true ) ) {
+				$this->validate_text( $data );
+			} elseif ( in_array( $type, array( 'zTXt', 'iCCP', 'iTXt' ), true ) ) {
+				$this->validate_png_metadata( $type, $data );
+			} elseif ( ! in_array( $type, array( 'IHDR', 'IEND', 'PLTE', 'tRNS', 'bKGD', 'sBIT', 'hIST', 'pHYs', 'tIME', 'sRGB', 'gAMA', 'cHRM', 'acTL', 'fcTL', 'fdAT' ), true ) ) {
+				$this->validate_text( $data );
+			}
+			$offset += $size + 12;
+			if ( 'IEND' === $type ) {
+				if ( 0 === $size && $has_pixels && $offset === $length ) {
+					return;
+				}
+				$this->invalid_image();
+			}
+		}
+		$this->invalid_image();
+	}
+
+	private function validate_png_metadata( $type, $data ) {
+		$separator = strpos( $data, "\0" );
+		if ( false === $separator || $separator + 2 >= strlen( $data ) ) {
+			$this->invalid_image();
+		}
+		$this->validate_text( substr( $data, 0, $separator ) );
+		$offset = $separator + 2;
+		$compressed = true;
+		if ( 'iTXt' === $type ) {
+			$flag = ord( $data[ $separator + 1 ] );
+			if ( $flag > 1 || ! isset( $data[ $offset ] ) || "\0" !== $data[ $offset ] ) {
+				$this->invalid_image();
+			}
+			$compressed = 1 === $flag;
+			++$offset;
+			for ( $field = 0; $field < 2; ++$field ) {
+				$end = strpos( $data, "\0", $offset );
+				if ( false === $end ) {
+					$this->invalid_image();
+				}
+				$this->validate_text( substr( $data, $offset, $end - $offset ) );
+				$offset = $end + 1;
+			}
+		} elseif ( "\0" !== $data[ $separator + 1 ] ) {
+			$this->invalid_image();
+		}
+		$text = substr( $data, $offset );
+		if ( $compressed ) {
+			$text = @gzuncompress( $text, 10485760 );
+			if ( false === $text ) {
+				throw new RuntimeException( 'Compressed image metadata is invalid or exceeds the inspection limit.' );
+			}
+		}
+		$this->validate_text( $text );
+	}
+
+	private function gif_blocks( $content, &$offset ) {
+		$blocks = '';
+		$length = strlen( $content );
+		while ( $offset < $length ) {
+			$size = ord( $content[ $offset++ ] );
+			if ( 0 === $size ) {
+				return $blocks;
+			}
+			if ( $size > $length - $offset ) {
+				$this->invalid_image();
+			}
+			$blocks .= substr( $content, $offset, $size );
+			$offset += $size;
+		}
+		$this->invalid_image();
+	}
+
+	private function validate_gif( $content ) {
+		$length = strlen( $content );
+		if ( $length < 13 ) {
+			$this->invalid_image();
+		}
+		$packed = ord( $content[10] );
+		$offset = 13 + ( ( $packed & 0x80 ) ? 3 * ( 1 << ( ( $packed & 7 ) + 1 ) ) : 0 );
+		$has_pixels = false;
+		while ( $offset < $length ) {
+			$type = ord( $content[ $offset++ ] );
+			if ( 0x3B === $type && $has_pixels && $offset === $length ) {
+				return;
+			}
+			if ( 0x21 === $type && $offset < $length ) {
+				++$offset;
+				$this->validate_text( $this->gif_blocks( $content, $offset ) );
+			} elseif ( 0x2C === $type && $offset + 9 < $length ) {
+				$packed = ord( $content[ $offset + 8 ] );
+				$offset += 9 + ( ( $packed & 0x80 ) ? 3 * ( 1 << ( ( $packed & 7 ) + 1 ) ) : 0 );
+				if ( $offset >= $length || ord( $content[ $offset ] ) < 2 || ord( $content[ $offset ] ) > 8 ) {
+					$this->invalid_image();
+				}
+				++$offset;
+				$this->gif_blocks( $content, $offset );
+				$has_pixels = true;
+			} else {
+				$this->invalid_image();
+			}
+		}
+		$this->invalid_image();
+	}
+
+	private function validate_webp( $content, $is_frame = false ) {
+		$length = strlen( $content );
+		if ( $length < 12 || unpack( 'Vsize', substr( $content, 4, 4 ) )['size'] + 8 !== $length ) {
+			$this->invalid_image();
+		}
+		$offset = 12;
+		$has_pixels = false;
+		while ( $offset + 8 <= $length ) {
+			$type = substr( $content, $offset, 4 );
+			$size = unpack( 'Vsize', substr( $content, $offset + 4, 4 ) )['size'];
+			$offset += 8;
+			if ( $size > $length - $offset || $offset + $size + ( $size % 2 ) > $length ) {
+				$this->invalid_image();
+			}
+			$data = substr( $content, $offset, $size );
+			if ( 'ANMF' === $type ) {
+				if ( $is_frame || $size < 16 ) {
+					$this->invalid_image();
+				}
+				$frame = substr( $data, 16 );
+				$this->validate_webp( 'RIFF' . pack( 'V', strlen( $frame ) + 4 ) . 'WEBP' . $frame, true );
+				$has_pixels = true;
+			} elseif ( in_array( $type, array( 'VP8 ', 'VP8L' ), true ) ) {
+				$has_pixels = true;
+			} elseif ( ! in_array( $type, array( 'VP8X', 'ALPH', 'ANIM' ), true ) ) {
+				$this->validate_text( $data );
+			}
+			$offset += $size + ( $size % 2 );
+		}
+		if ( ! $has_pixels || $offset !== $length ) {
+			$this->invalid_image();
+		}
+	}
+
 	public function validate( $path ) {
 		$handle = fopen( $path, 'rb' );
 		if ( ! $handle ) {
 			throw new RuntimeException( 'The file could not be read for executable-content checks.' );
 		}
 		try {
+			$signature = fread( $handle, 12 );
+			if ( false === $signature || 0 !== fseek( $handle, 0 ) ) {
+				throw new RuntimeException( 'The file could not be read for executable-content checks.' );
+			}
+			if ( "\xFF\xD8" === substr( $signature, 0, 2 ) ) {
+				$this->validate_jpeg( $handle );
+				return;
+			}
+			if ( "\x89PNG\r\n\x1A\n" === substr( $signature, 0, 8 ) ) {
+				$this->validate_png( $this->read_image( $handle ) );
+				return;
+			}
+			if ( in_array( substr( $signature, 0, 6 ), array( 'GIF87a', 'GIF89a' ), true ) ) {
+				$this->validate_gif( $this->read_image( $handle ) );
+				return;
+			}
+			if ( 'RIFF' === substr( $signature, 0, 4 ) && 'WEBP' === substr( $signature, 8, 4 ) ) {
+				$this->validate_webp( $this->read_image( $handle ) );
+				return;
+			}
 			$tail = '';
 			while ( ! feof( $handle ) ) {
 				$chunk = fread( $handle, 65536 );
@@ -86,9 +346,7 @@ final class MRSA_Executable_Content_Policy {
 					throw new RuntimeException( 'The file could not be read for executable-content checks.' );
 				}
 				$content = $tail . $chunk;
-				if ( preg_match( '/<\?(?:php\b|=)|<script\b|<%|#!\s*\/(?:usr|bin)\//i', $content ) ) {
-					throw new RuntimeException( 'Executable or script content was detected. Only data files and raster images are allowed.' );
-				}
+				$this->validate_text( $content );
 				$tail = substr( $content, -64 );
 			}
 		} finally {
