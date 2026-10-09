@@ -61,17 +61,19 @@ function plugins_url( $path, $file ) { return 'https://example.test/plugins/mrsa
 function wp_nonce_field( $action ) { echo '<input name="_wpnonce" value="test">'; }
 function wp_list_pluck( $rows, $key ) { return array_column( $rows, $key ); }
 function selected( $first, $second ) { if ( (string) $first === (string) $second ) { echo ' selected'; } }
+function get_current_user_id() { return 1; }
 function wp_die( $message, $title = '', $args = array() ) { throw new RuntimeException( $args['response'] . ': ' . $message ); }
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-admin.php';
+require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-file-scan.php';
+require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-spreadsheet-reader.php';
+require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-roster-import-service.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-bonus.php';
 function check( $ok, $label ) {
 	if ( ! $ok ) { throw new RuntimeException( 'FAIL: ' . $label ); }
 	echo 'PASS: ' . $label . PHP_EOL;
 }
 function import_rows( $rows, $header = array( 'Rider ID', 'Email', 'Bib ID', 'Status', 'Pillion' ) ) {
-	$method = new ReflectionMethod( 'MRSA_Admin', 'import_roster_rows' );
-	if ( PHP_VERSION_ID < 80100 ) { $method->setAccessible( true ); }
-	return $method->invoke( null, 7, $header, $rows );
+	return MRSA_Roster_Import_Service::import_rows( 7, $header, $rows );
 }
 $wpdb = new Roster_Test_DB();
 $wpdb->registrations = array( array( 'event_id' => 7, 'rider_id' => 5, 'bib' => 2 ), array( 'event_id' => 8, 'rider_id' => 1, 'bib' => 1 ) );

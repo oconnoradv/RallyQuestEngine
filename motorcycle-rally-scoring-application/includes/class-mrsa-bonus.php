@@ -12,6 +12,33 @@ final class MRSA_Bonus {
 	const MAX_SHEET_SIZE = 10485760;
 	const MAX_ARCHIVE_SIZE = 52428800;
 	const MAX_BONUS_POINTS = 2147483647;
+	private static $pending_store;
+	private static $scheduler;
+	private static $gallery_filesystem;
+	private static $audit_service;
+
+	public static function configure_adapters( $pending_store = null, $scheduler = null, $filesystem = null, $audit = null ) {
+		self::$pending_store = $pending_store;
+		self::$scheduler = $scheduler;
+		self::$gallery_filesystem = $filesystem;
+		self::$audit_service = $audit;
+	}
+
+	private static function pending_store() {
+		return self::$pending_store ?: ( self::$pending_store = new MRSA_Pending_Review_Store() );
+	}
+
+	private static function scheduler() {
+		return self::$scheduler ?: ( self::$scheduler = new MRSA_Import_Scheduler() );
+	}
+
+	private static function filesystem() {
+		return self::$gallery_filesystem ?: ( self::$gallery_filesystem = new MRSA_Gallery_Filesystem() );
+	}
+
+	private static function audit_service() {
+		return self::$audit_service ?: ( self::$audit_service = new MRSA_Import_Audit() );
+	}
 
 	public static function storage_root() {
 		$uploads = wp_upload_dir();
@@ -42,15 +69,15 @@ final class MRSA_Bonus {
 	}
 
 	private static function ensure_directory( $directory ) {
-		if ( ! is_dir( $directory ) && ! wp_mkdir_p( $directory ) ) {
+		if ( ! self::filesystem()->is_dir( $directory ) && ! self::filesystem()->create_tree( $directory ) ) {
 			throw new RuntimeException( 'The dedicated event image directory could not be created.' );
 		}
 		$index = trailingslashit( $directory ) . 'index.php';
-		if ( ! file_exists( $index ) && false === file_put_contents( $index, "<?php\n// Silence is golden.\n" ) ) {
+		if ( ! self::filesystem()->exists( $index ) && false === self::filesystem()->write( $index, "<?php\n// Silence is golden.\n" ) ) {
 			throw new RuntimeException( 'The event image directory could not be protected from directory listing.' );
 		}
 		$rules = trailingslashit( $directory ) . '.htaccess';
-		if ( ! file_exists( $rules ) && false === file_put_contents( $rules, "Options -Indexes\n<FilesMatch \"\\.php$\">\nRequire all denied\n</FilesMatch>\n" ) ) {
+		if ( ! self::filesystem()->exists( $rules ) && false === self::filesystem()->write( $rules, "Options -Indexes\n<FilesMatch \"\\.php$\">\nRequire all denied\n</FilesMatch>\n" ) ) {
 			throw new RuntimeException( 'The event image directory access rules could not be written.' );
 		}
 	}
@@ -102,7 +129,7 @@ final class MRSA_Bonus {
 		return $columns;
 	}
 
-	private static function normalize_rows( $header, $rows ) {
+	public static function normalize_rows( $header, $rows ) {
 		$columns = self::columns( $header );
 		if ( count( $rows ) > self::MAX_RECORDS ) {
 			throw new RuntimeException( 'The spreadsheet exceeds the limit of ' . self::MAX_RECORDS . ' bonus listings.' );
@@ -152,192 +179,16 @@ final class MRSA_Bonus {
 		return $normalized;
 	}
 
-	private static function read_csv( $path, $raw = false ) {
-		$handle = fopen( $path, 'rb' );
-		if ( ! $handle ) {
-			throw new RuntimeException( 'The CSV file could not be opened.' );
-		}
-		$header = fgetcsv( $handle, 0, ',', '"', '\\' );
-		if ( ! is_array( $header ) ) {
-			fclose( $handle );
-			throw new RuntimeException( 'The CSV file is empty or unreadable.' );
-		}
-		$rows = array();
-		while ( false !== ( $row = fgetcsv( $handle, 0, ',', '"', '\\' ) ) ) {
-			$rows[] = $row;
-			if ( count( $rows ) > self::MAX_RECORDS ) {
-				fclose( $handle );
-				throw new RuntimeException( 'The spreadsheet exceeds the limit of ' . self::MAX_RECORDS . ' bonus listings.' );
-			}
-		}
-		fclose( $handle );
-		return $raw ? array( $header, $rows ) : self::normalize_rows( $header, $rows );
-	}
-
-	private static function extract_zip_entry( $archive, $name, $list, $max_size ) {
-		foreach ( $list as $entry ) {
-			if ( isset( $entry['filename'] ) && $name === $entry['filename'] ) {
-				if ( (int) $entry['size'] > $max_size ) {
-					throw new RuntimeException( 'The XLSX file contains an oversized worksheet component.' );
-				}
-				$extracted = $archive->extract( PCLZIP_OPT_BY_NAME, $name, PCLZIP_OPT_EXTRACT_AS_STRING );
-				if ( ! is_array( $extracted ) || ! isset( $extracted[0]['content'] ) ) {
-					throw new RuntimeException( 'A worksheet component could not be read from the XLSX file.' );
-				}
-				return $extracted[0]['content'];
-			}
-		}
-		return '';
-	}
-
-	private static function parse_xml( $xml ) {
-		if ( preg_match( '/<!DOCTYPE|<!ENTITY|<\?(?:php\b|=)|<script\b/i', $xml ) ) {
-			throw new RuntimeException( 'XLSX XML with entities or executable content is not allowed.' );
-		}
-		$previous = libxml_use_internal_errors( true );
-		$parsed   = simplexml_load_string( $xml, 'SimpleXMLElement', LIBXML_NONET | LIBXML_NOBLANKS );
-		libxml_clear_errors();
-		libxml_use_internal_errors( $previous );
-		if ( false === $parsed ) {
-			throw new RuntimeException( 'The XLSX file contains invalid XML.' );
-		}
-		return $parsed;
-	}
-
-	private static function read_xlsx( $path, $raw = false ) {
-		if ( ! class_exists( 'PclZip' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
-		}
-		if ( ! class_exists( 'PclZip' ) || ! function_exists( 'simplexml_load_string' ) ) {
-			throw new RuntimeException( 'This server cannot read XLSX files. Save the workbook as CSV and import it instead.' );
-		}
-		$archive = new PclZip( $path );
-		$list    = $archive->listContent();
-		if ( ! is_array( $list ) ) {
-			throw new RuntimeException( 'The XLSX file is not a valid workbook archive.' );
-		}
-		$total_size = 0;
-		foreach ( $list as $entry ) {
-			if ( ! empty( $entry['filename'] ) && preg_match( '#(?:vbaProject|(?:^|/)(?:embeddings|activeX|externalLinks)/|\.(?:exe|dll|php|js|vbs|ps1|bat|cmd|com)$)#i', $entry['filename'] ) ) {
-				throw new RuntimeException( 'The workbook contains macros, executable files, embedded objects, or external links.' );
-			}
-			if ( empty( $entry['folder'] ) && ! preg_match( '/\.(?:xml|rels)$/i', $entry['filename'] ) ) {
-				throw new RuntimeException( 'Use a data-only XLSX workbook without embedded files or images.' );
-			}
-			$total_size += isset( $entry['size'] ) ? (int) $entry['size'] : 0;
-			if ( $total_size > self::MAX_ARCHIVE_SIZE * 4 ) {
-				throw new RuntimeException( 'The XLSX workbook expands beyond the allowed size.' );
-			}
-		}
-		$workbook_xml = self::extract_zip_entry( $archive, 'xl/workbook.xml', $list, 1048576 );
-		if ( '' === $workbook_xml ) {
-			throw new RuntimeException( 'The XLSX workbook is missing its workbook definition.' );
-		}
-		$workbook = self::parse_xml( $workbook_xml );
-		$sheets   = $workbook->xpath('//*[local-name()="sheet"]');
-		if ( ! $sheets || ! isset( $sheets[0] ) ) {
-			throw new RuntimeException( 'The XLSX workbook does not contain a worksheet.' );
-		}
-		$sheet_ns = $sheets[0]->getNameSpaces( true );
-		$sheet_at = $sheet_ns && isset( $sheet_ns['r'] ) ? $sheets[0]->attributes( $sheet_ns['r'] ) : $sheets[0]->attributes();
-		$rel_id   = isset( $sheet_at['id'] ) ? (string) $sheet_at['id'] : '';
-		if ( '' === $rel_id ) {
-			throw new RuntimeException( 'The first XLSX worksheet has no relationship identifier.' );
-		}
-		$rels_xml = self::extract_zip_entry( $archive, 'xl/_rels/workbook.xml.rels', $list, 1048576 );
-		$rels     = '' !== $rels_xml ? self::parse_xml( $rels_xml ) : null;
-		$target   = '';
-		if ( $rels ) {
-			foreach ( $rels->xpath('//*[local-name()="Relationship"]') as $relationship ) {
-				$attributes = $relationship->attributes();
-				if ( isset( $attributes['Id'] ) && (string) $attributes['Id'] === $rel_id && isset( $attributes['Target'] ) ) {
-					$target = (string) $attributes['Target'];
-					break;
-				}
-			}
-		}
-		if ( '' === $target || false !== strpos( $target, '..' ) ) {
-			throw new RuntimeException( 'The first XLSX worksheet could not be resolved safely.' );
-		}
-		$sheet_path = 0 === strpos( $target, '/' ) ? ltrim( $target, '/' ) : 'xl/' . $target;
-		$sheet_xml  = self::extract_zip_entry( $archive, $sheet_path, $list, self::MAX_SHEET_SIZE );
-		if ( '' === $sheet_xml ) {
-			throw new RuntimeException( 'The first XLSX worksheet is missing.' );
-		}
-		$shared     = array();
-		$shared_xml = self::extract_zip_entry( $archive, 'xl/sharedStrings.xml', $list, self::MAX_SHEET_SIZE );
-		if ( '' !== $shared_xml ) {
-			$shared_sheet = self::parse_xml( $shared_xml );
-			foreach ( $shared_sheet->xpath('//*[local-name()="sst"]/*[local-name()="si"]') as $item ) {
-				$text = '';
-				foreach ( $item->xpath('.//*[local-name()="t"]') as $segment ) {
-					$text .= (string) $segment;
-				}
-				$shared[] = $text;
-			}
-		}
-		$sheet = self::parse_xml( $sheet_xml );
-		$rows  = array();
-		foreach ( $sheet->xpath('//*[local-name()="sheetData"]/*[local-name()="row"]') as $xml_row ) {
-			$row = array();
-			foreach ( $xml_row->xpath('./*[local-name()="c"]') as $cell ) {
-				$attributes = $cell->attributes();
-				$reference  = isset( $attributes['r'] ) ? (string) $attributes['r'] : '';
-				if ( ! preg_match( '/^([A-Z]+)/i', $reference, $column_match ) ) {
-					continue;
-				}
-				$column = 0;
-				foreach ( str_split( strtoupper( $column_match[1] ) ) as $letter ) {
-					$column = ( $column * 26 ) + ord( $letter ) - 64;
-				}
-				$type  = isset( $attributes['t'] ) ? (string) $attributes['t'] : '';
-				if ( $cell->xpath('./*[local-name()="f"]') ) {
-					throw new RuntimeException( 'Spreadsheet formulas are not allowed. Export a values-only workbook or CSV.' );
-				}
-				$value = '';
-				if ( 'inlineStr' === $type ) {
-					foreach ( $cell->xpath('.//*[local-name()="t"]') as $segment ) {
-						$value .= (string) $segment;
-					}
-				} else {
-					$values = $cell->xpath('./*[local-name()="v"]');
-					$value  = $values && isset( $values[0] ) ? (string) $values[0] : '';
-					if ( 's' === $type && '' !== $value && isset( $shared[ (int) $value ] ) ) {
-						$value = $shared[ (int) $value ];
-					}
-				}
-				$row[ $column - 1 ] = $value;
-			}
-			if ( $row ) {
-				ksort( $row );
-				$rows[] = $row;
-				if ( count( $rows ) > self::MAX_RECORDS + 1 ) {
-					throw new RuntimeException( 'The spreadsheet exceeds the limit of ' . self::MAX_RECORDS . ' bonus listings.' );
-				}
-			}
-		}
-		if ( ! $rows ) {
-			throw new RuntimeException( 'The XLSX worksheet is empty.' );
-		}
-		$header = array_shift( $rows );
-		return $raw ? array( $header, $rows ) : self::normalize_rows( $header, $rows );
-	}
-
 	public static function read_spreadsheet( $path, $extension ) {
-		if ( 'csv' === $extension ) {
-			return self::read_csv( $path, true );
-		}
-		if ( 'xlsx' === $extension ) {
-			return self::read_xlsx( $path, true );
-		}
-		throw new RuntimeException( 'Choose a CSV or XLSX file.' );
+		return MRSA_Spreadsheet_Reader::read( $path, $extension );
 	}
 
-	private static function upload_file( $key, $multiple = false ) {
-		if ( ! isset( $_FILES[ $key ] ) || ! is_array( $_FILES[ $key ] ) ) {
+	private static function upload_file( $key, $multiple = false, $files = null ) {
+		$files = null === $files ? $_FILES : $files;
+		if ( ! isset( $files[ $key ] ) || ! is_array( $files[ $key ] ) ) {
 			return array();
 		}
-		$file = $_FILES[ $key ];
+		$file = $files[ $key ];
 		$fields = array( 'name', 'type', 'tmp_name', 'error', 'size' );
 		if ( $multiple ) {
 			$files = array();
@@ -381,9 +232,9 @@ final class MRSA_Bonus {
 		return $id;
 	}
 
-	private static function stage_image( $path, $name, $stage_dir, &$images, &$total_size ) {
+	private static function stage_image( $path, $name, $stage_dir, &$images, &$total_size, $scan_session ) {
 		$id   = self::image_id( $name );
-		$size = filesize( $path );
+		$size = self::filesystem()->size( $path );
 		if ( false === $size || 0 === $size || $size > self::MAX_IMAGE_SIZE ) {
 			throw new RuntimeException( 'Each image must be non-empty and no larger than 10 MB.' );
 		}
@@ -408,10 +259,10 @@ final class MRSA_Bonus {
 			throw new RuntimeException( 'More than one image was provided for Bonus ID "' . $id . '".' );
 		}
 		$staged_path = trailingslashit( $stage_dir ) . $id . '.' . $extension;
-		if ( ! copy( $path, $staged_path ) ) {
+		if ( ! self::filesystem()->copy( $path, $staged_path ) ) {
 			throw new RuntimeException( 'An image could not be staged for import.' );
 		}
-		MRSA_File_Scan::scan( $staged_path, $name );
+		$scan_session->scan( $staged_path, $name );
 		$handle = fopen( $staged_path, 'rb' );
 		if ( ! $handle ) {
 			throw new RuntimeException( 'The staged image could not be checked for appended content.' );
@@ -450,12 +301,12 @@ final class MRSA_Bonus {
 		}
 	}
 
-	private static function upload_images( $stage_dir, &$images, &$total_size, &$errors ) {
-		foreach ( self::upload_file( 'bonus_images', true ) as $file ) {
+	private static function upload_images( $stage_dir, &$images, &$total_size, &$errors, $scan_session, $files ) {
+		foreach ( $files as $file ) {
 			if ( UPLOAD_ERR_NO_FILE === (int) $file['error'] ) {
 				continue;
 			}
-			self::image_attempt( $file['name'], static function () use ( $file, $stage_dir, &$images, &$total_size ) {
+			self::image_attempt( $file['name'], static function () use ( $file, $stage_dir, &$images, &$total_size, $scan_session ) {
 				$upload_errors = array(
 					UPLOAD_ERR_INI_SIZE   => 'The image exceeds the server upload_max_filesize limit.',
 					UPLOAD_ERR_FORM_SIZE  => 'The image exceeds the form upload size limit.',
@@ -470,7 +321,7 @@ final class MRSA_Bonus {
 				if ( ! is_uploaded_file( $file['tmp_name'] ) ) {
 					throw new RuntimeException( 'The uploaded image temporary file is unavailable.' );
 				}
-				self::stage_image( $file['tmp_name'], $file['name'], $stage_dir, $images, $total_size );
+				self::stage_image( $file['tmp_name'], $file['name'], $stage_dir, $images, $total_size, $scan_session );
 			}, $errors );
 		}
 	}
@@ -494,7 +345,7 @@ final class MRSA_Bonus {
 		return $response;
 	}
 
-	private static function stage_remote( $url, $stage_dir, &$images, &$total_size, &$errors, $allow_listing = true ) {
+	private static function stage_remote( $url, $stage_dir, &$images, &$total_size, &$errors, $scan_session, $allow_listing = true ) {
 		$response = self::remote_get( $url, self::MAX_IMAGE_TOTAL );
 		$body     = wp_remote_retrieve_body( $response );
 		if ( strlen( $body ) > self::MAX_ARCHIVE_SIZE ) {
@@ -505,21 +356,21 @@ final class MRSA_Bonus {
 		$type = strtolower( (string) wp_remote_retrieve_header( $response, 'content-type' ) );
 		if ( preg_match( '/\.(?:jpe?g|png|gif|webp)$/i', $name ) ) {
 			$temp = trailingslashit( $stage_dir ) . '.remote-' . wp_generate_password( 12, false, false );
-			if ( false === file_put_contents( $temp, $body ) ) {
+			if ( false === self::filesystem()->write( $temp, $body ) ) {
 				throw new RuntimeException( 'A remote image could not be staged.' );
 			}
-			self::stage_image( $temp, $name, $stage_dir, $images, $total_size );
-			unlink( $temp );
+			self::stage_image( $temp, $name, $stage_dir, $images, $total_size, $scan_session );
+			self::filesystem()->remove_file( $temp );
 			return;
 		}
 		if ( preg_match( '/\.zip$/i', $name ) || false !== strpos( $type, 'application/zip' ) || false !== strpos( $type, 'application/x-zip' ) ) {
 			$temp = trailingslashit( $stage_dir ) . '.remote-' . wp_generate_password( 12, false, false ) . '.zip';
-			if ( false === file_put_contents( $temp, $body ) ) {
+			if ( false === self::filesystem()->write( $temp, $body ) ) {
 				throw new RuntimeException( 'The public ZIP archive could not be staged.' );
 			}
-			MRSA_File_Scan::scan( $temp, $name ? $name : 'Remote ZIP archive' );
-			self::stage_zip_images( $temp, $stage_dir, $images, $total_size, $errors );
-			unlink( $temp );
+			$scan_session->scan( $temp, $name ? $name : 'Remote ZIP archive' );
+			self::stage_zip_images( $temp, $stage_dir, $images, $total_size, $errors, $scan_session );
+			self::filesystem()->remove_file( $temp );
 			return;
 		}
 		if ( false === strpos( $type, 'text/html' ) && false === strpos( $type, 'text/plain' ) ) {
@@ -553,14 +404,14 @@ final class MRSA_Bonus {
 			throw new RuntimeException( 'No direct image or ZIP links were found. Use a public ZIP download or a standard web-server directory listing.' );
 		}
 		foreach ( array_unique( $links ) as $link ) {
-			self::image_attempt( $link, static function () use ( $link, $stage_dir, &$images, &$total_size, &$errors ) {
-				self::stage_remote( $link, $stage_dir, $images, $total_size, $errors, false );
+			self::image_attempt( $link, static function () use ( $link, $stage_dir, &$images, &$total_size, &$errors, $scan_session ) {
+				self::stage_remote( $link, $stage_dir, $images, $total_size, $errors, $scan_session, false );
 			}, $errors );
 		}
 	}
 
-	private static function stage_zip_images( $path, $stage_dir, &$images, &$total_size, &$errors ) {
-		$archive_size = filesize( $path );
+	private static function stage_zip_images( $path, $stage_dir, &$images, &$total_size, &$errors, $scan_session ) {
+		$archive_size = self::filesystem()->size( $path );
 		if ( false === $archive_size || $archive_size > self::MAX_ARCHIVE_SIZE ) {
 			throw new RuntimeException( 'The ZIP archive must be no larger than 50 MB.' );
 		}
@@ -592,11 +443,11 @@ final class MRSA_Bonus {
 					throw new RuntimeException( 'The image could not be extracted from the ZIP archive.' );
 				}
 				$temp = trailingslashit( $stage_dir ) . '.zip-image-' . wp_generate_password( 12, false, false );
-				if ( false === file_put_contents( $temp, $contents[0]['content'] ) ) {
+				if ( false === self::filesystem()->write( $temp, $contents[0]['content'] ) ) {
 					throw new RuntimeException( 'The extracted image could not be staged.' );
 				}
-				self::stage_image( $temp, basename( $entry_name ), $stage_dir, $images, $total_size );
-				unlink( $temp );
+				self::stage_image( $temp, basename( $entry_name ), $stage_dir, $images, $total_size, $scan_session );
+				self::filesystem()->remove_file( $temp );
 			}, $errors );
 		}
 	}
@@ -615,10 +466,14 @@ final class MRSA_Bonus {
 			}
 		}
 		$stage_dir = trailingslashit( $root ) . 'mrsa-bonus-' . wp_generate_password( 32, false, false );
-		if ( ! mkdir( $stage_dir, 0700 ) ) {
+		if ( ! self::filesystem()->make_directory( $stage_dir, 0700 ) ) {
 			throw new RuntimeException( 'A temporary image staging directory could not be created.' );
 		}
 		return $stage_dir;
+	}
+
+	public static function create_stage_directory() {
+		return self::make_stage_dir();
 	}
 
 	private static function pending_key( $token ) {
@@ -630,8 +485,8 @@ final class MRSA_Bonus {
 
 	public static function check_staging() {
 		try {
-			$directory = self::make_stage_dir();
-			if ( ! rmdir( $directory ) ) {
+			$directory = self::create_stage_directory();
+			if ( ! self::filesystem()->remove_empty_directory( $directory ) ) {
 				throw new RuntimeException( 'The empty diagnostic staging directory could not be removed.' );
 			}
 			return array( 'passed' => true, 'message' => 'A private staging directory was created and removed successfully.' );
@@ -641,23 +496,11 @@ final class MRSA_Bonus {
 	}
 
 	public static function bypass_enabled() {
-		global $wpdb;
-		return 'bypass_enabled' === $wpdb->get_var( $wpdb->prepare(
-			'SELECT action FROM ' . MRSA::table( 'import_audit' ) . " WHERE user_id=%d AND action IN ('bypass_enabled','bypass_disabled') ORDER BY id DESC LIMIT 1",
-			get_current_user_id()
-		) );
+		return self::audit_service()->bypass_enabled();
 	}
 
 	private static function audit( $event_id, $action, $detail ) {
-		global $wpdb;
-		$user = wp_get_current_user();
-		if ( ! $user->ID || false === $wpdb->insert( MRSA::table( 'import_audit' ), array(
-			'user_id' => $user->ID, 'username' => $user->user_login,
-			'occurred_at' => gmdate( 'Y-m-d H:i:s' ), 'event_id' => $event_id,
-			'action' => $action, 'detail' => $detail,
-		) ) ) {
-			throw new RuntimeException( 'The audit record could not be saved. Deletions and unscanned imports cannot proceed without an audit record.' );
-		}
+		self::audit_service()->record( $event_id, $action, $detail );
 	}
 
 	public static function revoke_bypass( $event_id ) {
@@ -668,33 +511,33 @@ final class MRSA_Bonus {
 		self::audit( $event_id, $operation, $detail );
 	}
 
-	public static function enable_bypass( $event_id ) {
-		if ( '1' !== MRSA_Admin::posted( 'bypass_confirmation' ) ) {
-			throw new RuntimeException( 'Confirm the risk of importing without antivirus scanning before enabling the override.' );
+	public static function enable_bypass( $event_id, $confirmed = null ) {
+		if ( null === $confirmed ) {
+			$confirmed = '1' === MRSA_Admin::posted( 'bypass_confirmation' );
 		}
-		self::audit( $event_id, 'bypass_enabled', 'Administrator explicitly enabled the unavailable-ClamAV override from Step 0 for their account on this site.' );
+		self::audit_service()->enable_bypass( $event_id, true === $confirmed || '1' === $confirmed );
 	}
 
 	public static function pending( $event_id, $token ) {
-		$pending = get_transient( self::pending_key( $token ) );
+		$pending = self::pending_store()->get( self::pending_key( $token ) );
 		if ( ! $pending || (int) $pending['event_id'] !== (int) $event_id || $pending['expires'] <= time() ) {
 			throw new RuntimeException( 'This import review expired or belongs to another user/event. Scan the files again.' );
 		}
 		return $pending;
 	}
 
-	private static function prepare( $event_id, $rows, $images, $stage_dir, $errors, $partial ) {
+	public static function prepare_review( $event_id, $rows, $images, $stage_dir, $errors, $partial, $scan_session, $step ) {
 		$token = wp_generate_password( 32, false, false );
 		$hashes = array();
 		foreach ( $images as $image ) {
-			$hash = hash_file( 'sha256', $image['stage_path'] );
+			$hash = self::filesystem()->hash( 'sha256', $image['stage_path'] );
 			if ( false === $hash ) {
 				throw new RuntimeException( 'A staged image could not be fingerprinted. Import is blocked.' );
 			}
 			$hashes[ $image['stage_path'] ] = $hash;
 		}
-		foreach ( glob( trailingslashit( $stage_dir ) . '.listing-*' ) as $path ) {
-			$hash = hash_file( 'sha256', $path );
+		foreach ( self::filesystem()->files( trailingslashit( $stage_dir ) . '.listing-*' ) as $path ) {
+			$hash = self::filesystem()->hash( 'sha256', $path );
 			if ( false === $hash ) {
 				throw new RuntimeException( 'The staged listing could not be fingerprinted. Import is blocked.' );
 			}
@@ -703,18 +546,18 @@ final class MRSA_Bonus {
 		$pending = array(
 			'event_id' => $event_id, 'rows' => $rows, 'images' => $images,
 			'stage_dir' => $stage_dir, 'hashes' => $hashes, 'errors' => $errors,
-			'partial' => $partial, 'scans' => MRSA_File_Scan::results(),
-			'import_step' => 'listing' === MRSA_Admin::posted( 'import_step' ) ? 'listing' : 'images',
-			'unscanned' => MRSA_File_Scan::skipped(),
-			'can_approve' => ! MRSA_File_Scan::failed() && ( $rows || $images ) && ( $partial || ! $errors ),
+			'partial' => $partial, 'scans' => $scan_session->results(),
+			'import_step' => 'listing' === $step ? 'listing' : 'images',
+			'unscanned' => $scan_session->skipped(),
+			'can_approve' => ! $scan_session->failed() && ( $rows || $images ) && ( $partial || ! $errors ),
 			'expires' => time() + 15 * MINUTE_IN_SECONDS,
 		);
-		if ( ! set_transient( self::pending_key( $token ), $pending, 15 * MINUTE_IN_SECONDS ) ) {
+		if ( ! self::pending_store()->put( self::pending_key( $token ), $pending, $pending['expires'] ) ) {
 			throw new RuntimeException( 'The import scan report could not be stored. No data was imported.' );
 		}
-		$scheduled = wp_schedule_single_event( $pending['expires'], 'mrsa_bonus_expire', array( get_current_user_id(), $token, $stage_dir ), true );
+		$scheduled = self::scheduler()->schedule( $pending['expires'], 'mrsa_bonus_expire', array( get_current_user_id(), $token, $stage_dir ) );
 		if ( is_wp_error( $scheduled ) || false === $scheduled ) {
-			delete_transient( self::pending_key( $token ) );
+			self::pending_store()->remove( self::pending_key( $token ) );
 			throw new RuntimeException( 'Private import cleanup could not be scheduled. No data was imported.' );
 		}
 		return array( 'message' => $pending['unscanned'] ? 'ClamAV is unavailable. No antivirus security scan was performed. Review the validation results and confirm the bypass before importing.' : 'Scan complete. Review the results and approve before importing. No event data has been changed.', 'errors' => array(), 'pending_token' => $token );
@@ -724,14 +567,14 @@ final class MRSA_Bonus {
 		if ( ! preg_match( '/^[A-Za-z0-9]{32}$/D', $token ) || ! preg_match( '/^mrsa-bonus-[A-Za-z0-9]{32}$/D', basename( $stage_dir ) ) ) {
 			throw new RuntimeException( 'Invalid private import cleanup target.' );
 		}
-		if ( is_dir( $stage_dir ) ) {
-			if ( glob( trailingslashit( $stage_dir ) . '.backup-*' ) ) {
+		if ( self::filesystem()->is_dir( $stage_dir ) ) {
+			if ( self::filesystem()->files( trailingslashit( $stage_dir ) . '.backup-*' ) ) {
 				error_log( 'MRSA: import recovery backups retained in ' . $stage_dir );
 				return;
 			}
 			$lock = trailingslashit( $stage_dir ) . '.approval-lock';
-			if ( is_file( $lock ) && filemtime( $lock ) > time() - 300 ) {
-				$scheduled = wp_schedule_single_event( time() + 300, 'mrsa_bonus_expire', array( $user_id, $token, $stage_dir ), true );
+			if ( self::filesystem()->is_file( $lock ) && self::filesystem()->modified_time( $lock ) > time() - 300 ) {
+				$scheduled = self::scheduler()->schedule( time() + 300, 'mrsa_bonus_expire', array( $user_id, $token, $stage_dir ) );
 				if ( is_wp_error( $scheduled ) || false === $scheduled ) {
 					error_log( 'MRSA: cleanup rescheduling failed for active import ' . $stage_dir );
 				}
@@ -739,7 +582,7 @@ final class MRSA_Bonus {
 			}
 			self::remove_directory( $stage_dir );
 		}
-		delete_transient( 'mrsa_bonus_pending_' . absint( $user_id ) . '_' . $token );
+		self::pending_store()->remove( 'mrsa_bonus_pending_' . absint( $user_id ) . '_' . $token );
 	}
 
 	public static function approve( $event_id, $token, $cancel = false, $confirm_bypass = false ) {
@@ -753,7 +596,7 @@ final class MRSA_Bonus {
 			throw new RuntimeException( 'This import is already processing or has been consumed. Refresh the gallery.' );
 		}
 		fclose( $handle );
-		delete_transient( self::pending_key( $token ) );
+		self::pending_store()->remove( self::pending_key( $token ) );
 		if ( $cancel ) {
 			self::remove_directory( $pending['stage_dir'] );
 			return array( 'message' => 'Import cancelled. Staged files were removed; no event data was changed.', 'errors' => array() );
@@ -765,7 +608,7 @@ final class MRSA_Bonus {
 		$imported = 0;
 		try {
 			foreach ( $pending['hashes'] as $path => $hash ) {
-				if ( ! is_file( $path ) || is_link( $path ) || ! hash_equals( $hash, (string) hash_file( 'sha256', $path ) ) ) {
+				if ( ! self::filesystem()->is_file( $path ) || self::filesystem()->is_link( $path ) || ! hash_equals( $hash, (string) self::filesystem()->hash( 'sha256', $path ) ) ) {
 					throw new RuntimeException( 'A staged file changed after scanning. Import is blocked; scan again.' );
 				}
 				if ( ! empty( $pending['unscanned'] ) ) {
@@ -799,7 +642,7 @@ final class MRSA_Bonus {
 				$imported = count( $pending['images'] );
 			}
 		} catch ( RuntimeException $exception ) {
-			if ( ! ( $exception instanceof MRSA_Bonus_Recovery_Exception ) && is_dir( $pending['stage_dir'] ) ) {
+			if ( ! ( $exception instanceof MRSA_Bonus_Recovery_Exception ) && self::filesystem()->is_dir( $pending['stage_dir'] ) ) {
 				self::remove_directory( $pending['stage_dir'] );
 			}
 			$message = $imported . ' images saved before stopping. ' . $exception->getMessage();
@@ -864,16 +707,16 @@ final class MRSA_Bonus {
 						throw new RuntimeException( 'An existing gallery image name is invalid; no import was saved.' );
 					}
 					$old_path = trailingslashit( $event_dir ) . $file_name;
-					if ( is_file( $old_path ) ) {
+					if ( self::filesystem()->is_file( $old_path ) ) {
 						$backup_path = trailingslashit( $stage_dir ) . '.backup-' . $index++;
-						if ( ! rename( $old_path, $backup_path ) ) {
+						if ( ! self::filesystem()->move( $old_path, $backup_path ) ) {
 							throw new RuntimeException( 'An existing gallery image could not be backed up before replacement.' );
 						}
 						$backups[ $old_path ] = $backup_path;
 					}
 				}
 				$destination = trailingslashit( $event_dir ) . $new_file;
-				if ( ! rename( $image['stage_path'], $destination ) ) {
+				if ( ! self::filesystem()->move( $image['stage_path'], $destination ) ) {
 					throw new RuntimeException( $image['image_file'] . ': The image could not be installed in the event gallery.' );
 				}
 				$installed[] = $destination;
@@ -887,12 +730,12 @@ final class MRSA_Bonus {
 				throw new MRSA_Bonus_Recovery_Exception( 'The import failed and the database rollback failed. Gallery backups have been retained for recovery.' );
 			}
 			foreach ( $installed as $path ) {
-				if ( is_file( $path ) && ! unlink( $path ) ) {
+				if ( self::filesystem()->is_file( $path ) && ! self::filesystem()->remove_file( $path ) ) {
 					throw new MRSA_Bonus_Recovery_Exception( 'The import failed and a newly installed image could not be removed: ' . basename( $path ) );
 				}
 			}
 			foreach ( $backups as $original => $backup ) {
-				if ( is_file( $backup ) && ! rename( $backup, $original ) ) {
+				if ( self::filesystem()->is_file( $backup ) && ! self::filesystem()->move( $backup, $original ) ) {
 					throw new MRSA_Bonus_Recovery_Exception( 'The import failed and a previous gallery image could not be restored: ' . basename( $original ) );
 				}
 			}
@@ -902,7 +745,7 @@ final class MRSA_Bonus {
 			throw $exception;
 		}
 		foreach ( $backups as $backup ) {
-			if ( is_file( $backup ) && ! unlink( $backup ) ) {
+			if ( self::filesystem()->is_file( $backup ) && ! self::filesystem()->remove_file( $backup ) ) {
 				throw new MRSA_Bonus_Recovery_Exception( 'The import completed, but an old replaced image could not be removed from staging.' );
 			}
 		}
@@ -913,7 +756,11 @@ final class MRSA_Bonus {
 	}
 
 	public static function import( $event_id ) {
-		$result = self::prepare_import( $event_id );
+		return self::import_with_input( $event_id, self::legacy_import_input() );
+	}
+
+	public static function import_with_input( $event_id, $input ) {
+		$result = self::prepare_import( $event_id, $input );
 		$pending = self::pending( $event_id, $result['pending_token'] );
 		if ( ! empty( $pending['unscanned'] ) && $pending['can_approve'] && self::bypass_enabled() ) {
 			return self::approve( $event_id, $result['pending_token'] );
@@ -921,17 +768,38 @@ final class MRSA_Bonus {
 		return $result;
 	}
 
-	private static function prepare_import( $event_id ) {
-		MRSA_File_Scan::reset( true );
-		$step = MRSA_Admin::posted( 'import_step' );
+	private static function legacy_save_input() {
+		$keys = array( 'new_bonus_id', 'description', 'category', 'points', 'locations', 'remove_image' );
+		$input = array( 'files' => $_FILES );
+		foreach ( $keys as $key ) {
+			$input[ $key ] = MRSA_Admin::posted( $key );
+		}
+		return $input;
+	}
+
+	private static function legacy_import_input() {
+		$input = array(
+			'import_step' => MRSA_Admin::posted( 'import_step' ),
+			'gallery_url' => MRSA_Admin::posted( 'gallery_url' ),
+			'image_source' => MRSA_Admin::posted( 'image_source' ),
+			'allow_partial_images' => MRSA_Admin::posted( 'allow_partial_images' ),
+			'files' => $_FILES,
+		);
+		return $input;
+	}
+
+	private static function prepare_import( $event_id, $input = null ) {
+		$input = null === $input ? self::legacy_import_input() : $input;
+		$scan_session = new MRSA_Scan_Session( true );
+		$step = (string) ( $input['import_step'] ?? '' );
 		if ( ! in_array( $step, array( 'listing', 'images' ), true ) ) {
 			throw new RuntimeException( 'Choose step 1 to import listings or step 2 to import images.' );
 		}
-		$sheet_files = self::upload_file( 'bonus_file' );
+		$sheet_files = self::upload_file( 'bonus_file', false, $input['files'] ?? array() );
 		$sheet = $sheet_files ? $sheet_files[0] : null;
-		$remote_url = trim( MRSA_Admin::posted( 'gallery_url' ) );
-		$uploaded = 'images' === $step && 'url' === MRSA_Admin::posted( 'image_source' ) ? array() : self::upload_file( 'bonus_images', true );
-		if ( 'images' === $step && 'url' === MRSA_Admin::posted( 'image_source' ) ) {
+		$remote_url = trim( (string) ( $input['gallery_url'] ?? '' ) );
+		$uploaded = 'images' === $step && 'url' === ( $input['image_source'] ?? '' ) ? array() : self::upload_file( 'bonus_images', true, $input['files'] ?? array() );
+		if ( 'images' === $step && 'url' === ( $input['image_source'] ?? '' ) ) {
 			if ( '' === $remote_url ) {
 				throw new RuntimeException( 'Enter a public HTTPS image, ZIP, or directory-listing URL before choosing Load via URL.' );
 			}
@@ -958,27 +826,22 @@ final class MRSA_Bonus {
 			if ( (int) $sheet['size'] > self::MAX_SHEET_SIZE ) {
 				throw new RuntimeException( 'The CSV or XLSX file must be no larger than 10 MB.' );
 			}
-			$stage_dir = self::make_stage_dir();
+			$stage_dir = self::create_stage_directory();
 			$extension = strtolower( pathinfo( $sheet['name'], PATHINFO_EXTENSION ) );
 			$sheet_path = trailingslashit( $stage_dir ) . '.listing-input';
 			try {
-				if ( ! copy( $sheet['tmp_name'], $sheet_path ) ) {
+				if ( ! self::filesystem()->copy( $sheet['tmp_name'], $sheet_path ) ) {
 					throw new RuntimeException( 'The listing could not be placed in private staging.' );
 				}
-				MRSA_File_Scan::scan( $sheet_path, $sheet['name'] );
-				if ( 'csv' === $extension ) {
-					$rows = self::read_csv( $sheet_path );
-				} elseif ( 'xlsx' === $extension ) {
-					$rows = self::read_xlsx( $sheet_path );
-				} else {
-					throw new RuntimeException( 'Choose a .csv or .xlsx file.' );
-				}
+				$scan_session->scan( $sheet_path, $sheet['name'] );
+				list( $header, $sheet_rows ) = MRSA_Spreadsheet_Reader::read( $sheet_path, $extension );
+				$rows = self::normalize_rows( $header, $sheet_rows );
 				if ( ! $rows ) {
 					throw new RuntimeException( 'The listing contains no bonus rows. Add bonus data and scan again.' );
 				}
 			} catch ( RuntimeException $exception ) {
 				try {
-					return self::prepare( $event_id, array(), array(), $stage_dir, array( $sheet['name'] . ': ' . $exception->getMessage() ), false );
+					return self::prepare_review( $event_id, array(), array(), $stage_dir, array( $sheet['name'] . ': ' . $exception->getMessage() ), false, $scan_session, $step );
 				} catch ( RuntimeException $prepare_exception ) {
 					self::remove_directory( $stage_dir );
 					throw $prepare_exception;
@@ -996,41 +859,42 @@ final class MRSA_Bonus {
 				throw new RuntimeException( 'Step 1 requires a non-empty CSV/XLSX listing only. Import images separately in step 2.' );
 			}
 			try {
-				return self::prepare( $event_id, $rows, array(), $stage_dir, array(), false );
+				return self::prepare_review( $event_id, $rows, array(), $stage_dir, array(), false, $scan_session, $step );
 			} catch ( RuntimeException $exception ) {
 				self::remove_directory( $stage_dir );
 				throw $exception;
 			}
 		}
-		$stage_dir = $has_uploads || '' !== $remote_url ? self::make_stage_dir() : '';
+		$stage_dir = $has_uploads || '' !== $remote_url ? self::create_stage_directory() : '';
 		$images = array();
 		$total_size = 0;
-		$partial = '1' === MRSA_Admin::posted( 'allow_partial_images' );
+		$partial = '1' === ( $input['allow_partial_images'] ?? '' );
 		$errors = array();
 		try {
-			if ( 'url' !== MRSA_Admin::posted( 'image_source' ) ) {
-				self::upload_images( $stage_dir, $images, $total_size, $errors );
+			if ( 'url' !== ( $input['image_source'] ?? '' ) ) {
+				self::upload_images( $stage_dir, $images, $total_size, $errors, $scan_session, $uploaded );
 			}
 			if ( '' !== $remote_url ) {
-				self::image_attempt( $remote_url, static function () use ( $remote_url, $stage_dir, &$images, &$total_size, &$errors ) {
-					self::stage_remote( $remote_url, $stage_dir, $images, $total_size, $errors );
+				self::image_attempt( $remote_url, static function () use ( $remote_url, $stage_dir, &$images, &$total_size, &$errors, $scan_session ) {
+					self::stage_remote( $remote_url, $stage_dir, $images, $total_size, $errors, $scan_session );
 				}, $errors );
 			}
 			if ( ! $images && ! $errors ) {
 				$errors[] = 'No supported images were found in the selected source.';
 			}
-			return self::prepare( $event_id, array(), $images, $stage_dir, $errors, $partial );
+			return self::prepare_review( $event_id, array(), $images, $stage_dir, $errors, $partial, $scan_session, $step );
 		} catch ( RuntimeException $exception ) {
-			if ( $stage_dir && is_dir( $stage_dir ) ) {
+			if ( $stage_dir && self::filesystem()->is_dir( $stage_dir ) ) {
 				self::remove_directory( $stage_dir );
 			}
 			throw $exception;
 		}
 	}
 
-	public static function save( $event_id, $bonus_id ) {
+	public static function save( $event_id, $bonus_id, $input = null ) {
 		global $wpdb;
-		MRSA_File_Scan::reset();
+		$input = null === $input ? self::legacy_save_input() : $input;
+		$scan_session = new MRSA_Scan_Session();
 		if ( ! self::valid_id( $bonus_id ) ) {
 			throw new RuntimeException( 'The Bonus ID is invalid.' );
 		}
@@ -1038,7 +902,7 @@ final class MRSA_Bonus {
 		if ( ! $existing ) {
 			throw new RuntimeException( 'The selected bonus listing no longer exists.' );
 		}
-		$new_bonus_id = MRSA_Admin::text( MRSA_Admin::posted( 'new_bonus_id' ), 64, true );
+		$new_bonus_id = MRSA_Admin::text( $input['new_bonus_id'] ?? '', 64, true );
 		if ( ! self::valid_id( $new_bonus_id ) ) {
 			throw new RuntimeException( 'Bonus ID must use 1–64 letters, numbers, hyphens, or underscores.' );
 		}
@@ -1046,12 +910,12 @@ final class MRSA_Bonus {
 		if ( $duplicate ) {
 			throw new RuntimeException( 'Another bonus listing already uses that Bonus ID in this event.' );
 		}
-		$description = sanitize_textarea_field( MRSA_Admin::text( MRSA_Admin::posted( 'description' ), 5000 ) );
-		$category    = MRSA_Admin::text( MRSA_Admin::posted( 'category' ), 120 );
-		$points      = MRSA_Admin::integer( MRSA_Admin::posted( 'points' ), 0, self::MAX_BONUS_POINTS );
-		$locations   = self::validate_location( MRSA_Admin::text( MRSA_Admin::posted( 'locations' ), 80 ) );
-		$remove_image = '1' === MRSA_Admin::posted( 'remove_image' );
-		$image_files = self::upload_file( 'bonus_image' );
+		$description = sanitize_textarea_field( MRSA_Admin::text( $input['description'] ?? '', 5000 ) );
+		$category    = MRSA_Admin::text( $input['category'] ?? '', 120 );
+		$points      = MRSA_Admin::integer( $input['points'] ?? '', 0, self::MAX_BONUS_POINTS );
+		$locations   = self::validate_location( MRSA_Admin::text( $input['locations'] ?? '', 80 ) );
+		$remove_image = '1' === ( $input['remove_image'] ?? '' );
+		$image_files = self::upload_file( 'bonus_image', false, $input['files'] ?? array() );
 		$image_file  = $image_files ? $image_files[0] : null;
 		$has_image   = $image_file && UPLOAD_ERR_NO_FILE !== (int) $image_file['error'];
 		if ( $has_image && $remove_image ) {
@@ -1068,9 +932,9 @@ final class MRSA_Bonus {
 			if ( strtolower( $image_id ) !== strtolower( $new_bonus_id ) ) {
 				throw new RuntimeException( 'The image file name must match Bonus ID "' . $new_bonus_id . '".' );
 			}
-			$stage_dir = self::make_stage_dir();
+			$stage_dir = self::create_stage_directory();
 			try {
-				self::stage_image( $image_file['tmp_name'], $image_file['name'], $stage_dir, $images, $total_size );
+				self::stage_image( $image_file['tmp_name'], $image_file['name'], $stage_dir, $images, $total_size, $scan_session );
 			} catch ( RuntimeException $exception ) {
 				self::remove_directory( $stage_dir );
 				throw $exception;
@@ -1085,7 +949,7 @@ final class MRSA_Bonus {
 			$data['image_file'] = $new_bonus_id . '.' . $extension;
 		}
 		if ( $existing['image_file'] && ! self::valid_image_file( $existing['image_file'] ) ) {
-			if ( $stage_dir && is_dir( $stage_dir ) ) {
+			if ( $stage_dir && self::filesystem()->is_dir( $stage_dir ) ) {
 				self::remove_directory( $stage_dir );
 			}
 			throw new RuntimeException( 'The existing bonus image name is invalid and cannot be edited safely.' );
@@ -1093,8 +957,8 @@ final class MRSA_Bonus {
 		$event_dir = $existing['image_file'] || $has_image ? self::event_dir( $event_id ) : '';
 		$old_file = $existing['image_file'];
 		$old_path = $old_file ? trailingslashit( $event_dir ) . $old_file : '';
-		if ( $old_file && ! $remove_image && ! $has_image && $new_bonus_id !== $bonus_id && ! is_file( $old_path ) ) {
-			if ( $stage_dir && is_dir( $stage_dir ) ) {
+		if ( $old_file && ! $remove_image && ! $has_image && $new_bonus_id !== $bonus_id && ! self::filesystem()->is_file( $old_path ) ) {
+			if ( $stage_dir && self::filesystem()->is_dir( $stage_dir ) ) {
 				self::remove_directory( $stage_dir );
 			}
 			throw new RuntimeException( 'The existing gallery image is missing. Upload a replacement or remove the image before renaming this Bonus ID.' );
@@ -1105,29 +969,29 @@ final class MRSA_Bonus {
 		try {
 			if ( $has_image || ( $old_file && ! $remove_image && $new_bonus_id !== $bonus_id ) ) {
 				if ( ! $stage_dir ) {
-					$stage_dir = self::make_stage_dir();
+					$stage_dir = self::create_stage_directory();
 				}
 				self::ensure_directory( $event_dir );
 				$new_file = $has_image
 					? $new_bonus_id . '.' . pathinfo( reset( $images )['image_file'], PATHINFO_EXTENSION )
 					: $data['image_file'];
 				$destination = trailingslashit( $event_dir ) . $new_file;
-				if ( $old_path && is_file( $old_path ) ) {
+				if ( $old_path && self::filesystem()->is_file( $old_path ) ) {
 					$backup = trailingslashit( $stage_dir ) . '.backup';
-					if ( ! rename( $old_path, $backup ) ) {
+					if ( ! self::filesystem()->move( $old_path, $backup ) ) {
 						throw new RuntimeException( 'The existing bonus image could not be backed up for replacement.' );
 					}
 				}
 				if ( $has_image ) {
 					$image = reset( $images );
 					$image['image_file'] = $new_bonus_id . '.' . pathinfo( $image['image_file'], PATHINFO_EXTENSION );
-					if ( ! rename( $image['stage_path'], $destination ) ) {
+					if ( ! self::filesystem()->move( $image['stage_path'], $destination ) ) {
 						throw new RuntimeException( 'The replacement image could not be installed.' );
 					}
 					$installed = true;
 					$data['image_file'] = $image['image_file'];
 				} elseif ( $backup ) {
-					if ( ! copy( $backup, $destination ) ) {
+					if ( ! self::filesystem()->copy( $backup, $destination ) ) {
 						throw new RuntimeException( 'The existing bonus image could not be renamed.' );
 					}
 					$installed = true;
@@ -1140,65 +1004,46 @@ final class MRSA_Bonus {
 			MRSA::commit_transaction();
 		} catch ( RuntimeException $exception ) {
 			MRSA::rollback_transaction();
-			if ( $installed && is_file( $destination ) ) {
+			if ( $installed && self::filesystem()->is_file( $destination ) ) {
 				if ( $backup ) {
-					if ( ! unlink( $destination ) || ! rename( $backup, $old_path ) ) {
+					if ( ! self::filesystem()->remove_file( $destination ) || ! self::filesystem()->move( $backup, $old_path ) ) {
 						throw new RuntimeException( 'The bonus edit failed and its previous image could not be restored.' );
 					}
-				} elseif ( ! $has_image || ! unlink( $destination ) ) {
+				} elseif ( ! $has_image || ! self::filesystem()->remove_file( $destination ) ) {
 					throw new RuntimeException( 'The bonus edit failed and its replacement image could not be removed.' );
 				}
-			} elseif ( $backup && is_file( $backup ) && ! rename( $backup, $old_path ) ) {
+			} elseif ( $backup && self::filesystem()->is_file( $backup ) && ! self::filesystem()->move( $backup, $old_path ) ) {
 				throw new RuntimeException( 'The bonus edit failed and its previous image could not be restored.' );
 			}
-			if ( $stage_dir && is_dir( $stage_dir ) ) {
+			if ( $stage_dir && self::filesystem()->is_dir( $stage_dir ) ) {
 				self::remove_directory( $stage_dir );
 			}
 			throw $exception;
 		}
-		if ( $old_path && ! $backup && is_file( $old_path ) && $remove_image ) {
-			if ( ! unlink( $old_path ) ) {
+		if ( $old_path && ! $backup && self::filesystem()->is_file( $old_path ) && $remove_image ) {
+			if ( ! self::filesystem()->remove_file( $old_path ) ) {
 				throw new RuntimeException( 'The bonus listing was saved, but its previous image could not be removed.' );
 			}
 		}
-		if ( $has_image && $backup && is_file( $backup ) && ! unlink( $backup ) ) {
+		if ( $has_image && $backup && self::filesystem()->is_file( $backup ) && ! self::filesystem()->remove_file( $backup ) ) {
 			throw new RuntimeException( 'The bonus listing was saved, but its replaced image could not be removed from staging.' );
 		}
-		if ( $stage_dir && is_dir( $stage_dir ) ) {
+		if ( $stage_dir && self::filesystem()->is_dir( $stage_dir ) ) {
 			self::remove_directory( $stage_dir );
 		}
 	}
 
 	private static function remove_directory( $directory ) {
-		if ( is_link( $directory ) ) {
-			throw new RuntimeException( 'Gallery/import cleanup refused a symbolic-link directory.' );
-		}
-		if ( ! is_dir( $directory ) ) {
-			return;
-		}
-		$iterator = new RecursiveIteratorIterator(
-			new RecursiveDirectoryIterator( $directory, FilesystemIterator::SKIP_DOTS ),
-			RecursiveIteratorIterator::CHILD_FIRST
-		);
-		foreach ( $iterator as $entry ) {
-			$path = $entry->getPathname();
-			$removed = $entry->isDir() && ! $entry->isLink() ? rmdir( $path ) : unlink( $path );
-			if ( ! $removed ) {
-				throw new RuntimeException( 'An event gallery file could not be removed: ' . basename( $path ) );
-			}
-		}
-		if ( ! rmdir( $directory ) ) {
-			throw new RuntimeException( 'The event gallery directory could not be removed.' );
-		}
+		self::filesystem()->remove_directory( $directory );
 	}
 
 	public static function stage_event_storage_removal( $event_id ) {
 		$directory = self::event_dir( $event_id );
-		if ( ! is_dir( $directory ) ) {
+		if ( ! self::filesystem()->is_dir( $directory ) ) {
 			return '';
 		}
 		$staged = $directory . '.deleting-' . wp_generate_password( 12, false, false );
-		if ( ! rename( $directory, $staged ) ) {
+		if ( ! self::filesystem()->move( $directory, $staged ) ) {
 			throw new RuntimeException( 'The selected event gallery could not be safely staged for deletion.' );
 		}
 		return $staged;
@@ -1206,32 +1051,32 @@ final class MRSA_Bonus {
 
 	public static function stage_all_storage_removal() {
 		$directory = self::storage_root();
-		if ( ! is_dir( $directory ) ) {
+		if ( ! self::filesystem()->is_dir( $directory ) ) {
 			return '';
 		}
 		$staged = $directory . '.deleting-' . wp_generate_password( 12, false, false );
-		if ( ! rename( $directory, $staged ) ) {
+		if ( ! self::filesystem()->move( $directory, $staged ) ) {
 			throw new RuntimeException( 'The event galleries could not be safely staged for deletion.' );
 		}
 		return $staged;
 	}
 
 	public static function restore_event_storage( $event_id, $staged ) {
-		if ( ! $staged || ! is_dir( $staged ) ) {
+		if ( ! $staged || ! self::filesystem()->is_dir( $staged ) ) {
 			return;
 		}
 		$directory = self::event_dir( $event_id );
-		if ( file_exists( $directory ) || ! rename( $staged, $directory ) ) {
+		if ( self::filesystem()->exists( $directory ) || ! self::filesystem()->move( $staged, $directory ) ) {
 			throw new RuntimeException( 'The selected event gallery could not be restored after the deletion failed.' );
 		}
 	}
 
 	public static function restore_all_storage( $staged ) {
-		if ( ! $staged || ! is_dir( $staged ) ) {
+		if ( ! $staged || ! self::filesystem()->is_dir( $staged ) ) {
 			return;
 		}
 		$directory = self::storage_root();
-		if ( file_exists( $directory ) || ! rename( $staged, $directory ) ) {
+		if ( self::filesystem()->exists( $directory ) || ! self::filesystem()->move( $staged, $directory ) ) {
 			throw new RuntimeException( 'The event galleries could not be restored after the deletion failed.' );
 		}
 	}

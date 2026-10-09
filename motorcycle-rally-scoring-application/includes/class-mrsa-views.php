@@ -1,6 +1,8 @@
 <?php
 /** Escaped server-rendered administration views with optional local enhancement. */
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mrsa-results.php';
+require_once __DIR__ . '/class-mrsa-queries.php';
 
 final class MRSA_Views {
 	private static function h( $value ) {
@@ -11,11 +13,9 @@ final class MRSA_Views {
 		return (int) $value ? (string) $value : 'Unspecified';
 	}
 
-	private static function effective_status( $row, $minimum ) {
-		if ( ! empty( $row['status_manual'] ) ) {
-			return $row['status'];
-		}
-		return (int) $row['score'] > (int) $minimum ? 'Preliminary Finisher' : 'Registered';
+	private static function queries() {
+		global $wpdb;
+		return new MRSA_Queries( $wpdb );
 	}
 
 	private static function link( $label, $tab, $extra = array() ) {
@@ -81,15 +81,7 @@ final class MRSA_Views {
 	}
 
 	private static function events( $rider_id = 0 ) {
-		global $wpdb;
-		$registration_join = $rider_id ? ' JOIN ' . MRSA::table( 'registrations' ) . ' reg ON reg.event_id=e.id AND reg.rider_id=%d' : '';
-		if ( MRSA::global_access() ) {
-			$sql = 'SELECT e.* FROM ' . MRSA::table( 'events' ) . ' e' . $registration_join . ' ORDER BY e.event_date DESC,e.id DESC';
-			return $wpdb->get_results( $rider_id ? $wpdb->prepare( $sql, $rider_id ) : $sql, ARRAY_A );
-		}
-		$sql = 'SELECT e.* FROM ' . MRSA::table( 'events' ) . ' e' . $registration_join . ' JOIN ' . MRSA::table( 'event_admins' ) . ' a ON a.event_id=e.id WHERE a.user_id=%d ORDER BY e.event_date DESC,e.id DESC';
-		$args = $rider_id ? array( $rider_id, get_current_user_id() ) : array( get_current_user_id() );
-		return $wpdb->get_results( $wpdb->prepare( $sql, $args ), ARRAY_A );
+		return self::queries()->events( $rider_id, MRSA::global_access(), get_current_user_id() );
 	}
 
 	private static function users_select( $selected = 0 ) {
@@ -160,12 +152,10 @@ final class MRSA_Views {
 		echo '</div>';
 	}
 
-	private static function list_page( $tab, $sql, $args, $count_sql ) {
-		global $wpdb;
-		$page = max( 1, min( 1000000, (int) MRSA_Admin::query( 'list_page', '1' ) ) );
-		$count = (int) $wpdb->get_var( $args ? $wpdb->prepare( $count_sql, $args ) : $count_sql );
-		$page = min( $page, max( 1, (int) ceil( $count / 100 ) ) );
-		$rows = $wpdb->get_results( $wpdb->prepare( $sql . ' LIMIT %d OFFSET %d', array_merge( $args, array( 100, ( $page - 1 ) * 100 ) ) ), ARRAY_A );
+	private static function list_page( $tab, array $data ) {
+		$page = $data['page'];
+		$count = $data['count'];
+		$rows = $data['rows'];
 		echo '<form method="get" class="mrsa-server-search"><input type="hidden" name="page" value="mrsa"><input type="hidden" name="tab" value="' . esc_attr( $tab ) . '"><label>Search all records <input type="search" name="q" value="' . esc_attr( MRSA_Admin::query( 'q' ) ) . '" maxlength="100"></label> <button class="button">Search</button></form>';
 		echo '<p>' . esc_html( $count . ' matching records; server page ' . $page . ' of ' . max( 1, (int) ceil( $count / 100 ) ) ) . '. Local filters and sorting apply to this page (up to 100 records). ';
 		if ( $page > 1 ) {
@@ -180,7 +170,6 @@ final class MRSA_Views {
 	}
 
 	private static function bike_setup() {
-		global $wpdb;
 		echo '<h2>Motorcycle catalog</h2>';
 		$id = absint( MRSA_Admin::query( 'bike_id', '0' ) );
 		$bike = $id ? MRSA::row( 'bikes', $id ) : array();
@@ -201,10 +190,7 @@ final class MRSA_Views {
 		self::button( 'Import motorcycle models' );
 		echo '</div><label><input type="checkbox" name="source_consent" value="1" required> I understand that this sends the entered make to NHTSA and imports only models independently confirmed as Motorcycles.</label>';
 		echo '</form></div>';
-		$q = substr( MRSA_Admin::query( 'q' ), 0, 100 );
-		$where = $q ? ' WHERE make LIKE %s OR model LIKE %s' : '';
-		$args = $q ? array_fill( 0, 2, '%' . $wpdb->esc_like( $q ) . '%' ) : array();
-		$rows = self::list_page( 'bikes', 'SELECT * FROM ' . MRSA::table( 'bikes' ) . $where . ' ORDER BY make,model,id', $args, 'SELECT COUNT(*) FROM ' . MRSA::table( 'bikes' ) . $where );
+		$rows = self::list_page( 'bikes', self::queries()->bike_page( MRSA_Admin::query( 'q' ), MRSA_Admin::query( 'list_page', '1' ) ) );
 		echo '<p><label><input type="checkbox" class="mrsa-select-all-bikes"> Select all motorcycle records loaded on this server page</label></p>';
 		self::table( array( 'Select', 'ID', 'Make', 'Model', 'Source', 'Actions' ), array( 2 ) );
 		foreach ( $rows as $row ) {
@@ -225,12 +211,11 @@ final class MRSA_Views {
 	}
 
 	private static function rider_setup() {
-		global $wpdb;
 		echo '<h2>Registered riders</h2>';
 		$id = absint( MRSA_Admin::query( 'rider_id', '0' ) );
 		$global = MRSA::global_access();
 		if ( ! $global && $id ) {
-			$visible = $wpdb->get_var( $wpdb->prepare( 'SELECT r.id FROM ' . MRSA::table( 'registrations' ) . ' r JOIN ' . MRSA::table( 'event_admins' ) . ' a ON a.event_id=r.event_id WHERE a.user_id=%d AND r.rider_id=%d LIMIT 1', get_current_user_id(), $id ) );
+			$visible = self::queries()->rider_visible( $id, get_current_user_id() );
 			if ( ! $visible ) {
 				wp_die( esc_html( 'Rider not registered in your assigned events.' ), '', array( 'response' => 403 ) );
 			}
@@ -255,14 +240,7 @@ final class MRSA_Views {
 		if ( $id && ! $global ) {
 			self::rider_events( $id );
 		}
-		$q = substr( MRSA_Admin::query( 'q' ), 0, 100 );
-		$where = $q ? ' WHERE (r.name LIKE %s OR r.alias LIKE %s OR r.email LIKE %s)' : ' WHERE 1=1';
-		$args = $q ? array_fill( 0, 3, '%' . $wpdb->esc_like( $q ) . '%' ) : array();
-		if ( ! $global ) {
-			$where .= ' AND EXISTS (SELECT 1 FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'event_admins' ) . ' a ON a.event_id=reg.event_id WHERE reg.rider_id=r.id AND a.user_id=%d)';
-			$args[] = get_current_user_id();
-		}
-		$rows = self::list_page( 'riders', 'SELECT r.id,r.name,r.alias,r.email,r.phone FROM ' . MRSA::table( 'riders' ) . ' r' . $where . ' ORDER BY r.name,r.id', $args, 'SELECT COUNT(*) FROM ' . MRSA::table( 'riders' ) . ' r' . $where );
+		$rows = self::list_page( 'riders', self::queries()->rider_page( MRSA_Admin::query( 'q' ), MRSA_Admin::query( 'list_page', '1' ), $global, get_current_user_id() ) );
 		self::table( array( 'Rider ID', 'Name', 'Alias', 'Email', 'Phone', 'Actions' ) );
 		foreach ( $rows as $row ) {
 			echo '<tr>';
@@ -286,7 +264,6 @@ final class MRSA_Views {
 	}
 
 	private static function rider_form( $id, $rider ) {
-		global $wpdb;
 		self::form( 'rider', array( 'id' => $id ), 'mrsa-panel mrsa-edit-form' );
 		echo '<h2>' . ( $id ? 'Edit rider #' . esc_html( $id ) : 'Add Rider' ) . '</h2>';
 		foreach ( array( 'name' => array( 'Name', 160 ), 'alias' => array( 'Alias', 100 ), 'email' => array( 'Email (unique)', 254 ), 'phone' => array( 'Phone', 60 ), 'emergency_name' => array( 'Emergency contact name', 160 ), 'emergency_email' => array( 'Emergency contact email', 254 ), 'emergency_phone' => array( 'Emergency contact phone', 60 ) ) as $key => $config ) {
@@ -295,8 +272,9 @@ final class MRSA_Views {
 		self::field( 'Insurance information (multiline)', 'insurance', $rider['insurance'] ?? '', 'textarea' );
 		self::field( 'Other information (do not store unnecessary sensitive data)', 'other', $rider['other'] ?? '', 'textarea' );
 		echo '<h4>Motorcycles and fuel capacity</h4><p>Choose a catalog make and model, then optionally enter the rider&rsquo;s four-digit model year. The year is not validated against the catalog. Fuel capacity is optional text; include your preferred units. Multiple motorcycles allowed (up to 20). Without JavaScript, use the full catalog dropdown.</p>';
-		$bikes = $wpdb->get_results( 'SELECT id,make,model FROM ' . MRSA::table( 'bikes' ) . ' ORDER BY make,model,id', ARRAY_A );
-		$owned = $id ? $wpdb->get_results( $wpdb->prepare( 'SELECT bike_id,model_year,fuel_capacity FROM ' . MRSA::table( 'rider_bikes' ) . ' WHERE rider_id=%d ORDER BY id', $id ), ARRAY_A ) : array();
+		$motorcycles = self::queries()->rider_bikes( $id );
+		$bikes = $motorcycles['catalog'];
+		$owned = $motorcycles['owned'];
 		if ( ! $owned ) {
 			$owned[] = array( 'bike_id' => '', 'model_year' => '', 'fuel_capacity' => '' );
 		}
@@ -322,8 +300,7 @@ final class MRSA_Views {
 			wp_die( esc_html( 'Rider not found.' ), '', array( 'response' => 404 ) );
 		}
 		if ( ! $global ) {
-			global $wpdb;
-			$visible = $id ? $wpdb->get_var( $wpdb->prepare( 'SELECT reg.rider_id FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'event_admins' ) . ' a ON a.event_id=reg.event_id WHERE a.user_id=%d AND reg.rider_id=%d LIMIT 1', get_current_user_id(), $id ) ) : false;
+			$visible = $id ? self::queries()->rider_visible( $id, get_current_user_id() ) : false;
 			if ( ! $visible ) {
 				wp_die( esc_html( 'Rider not registered in your assigned events.' ), '', array( 'response' => 403 ) );
 			}
@@ -365,15 +342,8 @@ final class MRSA_Views {
 	}
 
 	private static function rider_events( $id ) {
-		global $wpdb;
 		echo '<h3>Registered events (read-only)</h3><p>Result status is automatic unless a manual status was previously recorded. Status is read-only on Results.</p>';
-		$sql = 'SELECT reg.*,e.name,e.min_finisher_points FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'events' ) . ' e ON e.id=reg.event_id WHERE reg.rider_id=%d';
-		$args = array( $id );
-		if ( ! MRSA::global_access() ) {
-			$sql .= ' AND EXISTS (SELECT 1 FROM ' . MRSA::table( 'event_admins' ) . ' a WHERE a.event_id=e.id AND a.user_id=%d)';
-			$args[] = get_current_user_id();
-		}
-		$rows = $wpdb->get_results( $wpdb->prepare( $sql . ' ORDER BY e.event_date DESC', $args ), ARRAY_A );
+		$rows = self::queries()->rider_events( $id, MRSA::global_access(), get_current_user_id() );
 		self::table( array( 'Event ID', 'Event', 'Bib / scoring context', 'Pillion', 'Status', 'Score', 'Overall Placing' ), array( 4 ) );
 		foreach ( $rows as $row ) {
 			echo '<tr><td>';
@@ -385,7 +355,7 @@ final class MRSA_Views {
 			echo '</td><td>';
 			self::h( $row['pillion'] );
 			echo '</td><td>';
-			self::h( self::effective_status( $row, $row['min_finisher_points'] ) );
+			self::h( $row['effective_status'] );
 			echo '</td><td>';
 			self::h( $row['score'] );
 			echo '</td><td>';
@@ -421,7 +391,6 @@ final class MRSA_Views {
 	}
 
 	private static function event_administrators( $event ) {
-		global $wpdb;
 		echo '<h2>Event Administrator Assignments</h2><p>Assigned administrators may configure only their events and edit event bibs and pillion details. Global administrators enroll riders; event administrators cannot browse unenrolled master riders or edit their personal records.</p>';
 		echo '<details class="mrsa-panel"><summary class="button button-primary">Add Administrator</summary>';
 		self::form( 'event_admin', array( 'event_id' => $event['id'] ) );
@@ -429,7 +398,7 @@ final class MRSA_Views {
 		self::button( 'Add Administrator' );
 		echo '</form></details>';
 		self::table( array( 'Username', 'Display name', 'Email', 'User phone', 'Actions' ) );
-		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'event_admins' ) . ' WHERE event_id=%d ORDER BY user_id', $event['id'] ), ARRAY_A );
+		$rows = self::queries()->event_administrators( $event['id'] );
 		foreach ( $rows as $row ) {
 			$user = get_user_by( 'id', $row['user_id'] );
 			echo '<tr><td>';
@@ -561,20 +530,9 @@ final class MRSA_Views {
 	}
 
 	private static function registrations( $event ) {
-		global $wpdb;
 		$id = (int) $event['id'];
 		echo '<p><strong>Event:</strong> ' . esc_html( $event['name'] ) . '. Administrative enrollment is available regardless of the configured registration window. Bibs are unique within this event.</p>';
-		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT reg.rider_id,reg.bib,reg.registration_status,reg.score,r.name,r.email FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=reg.rider_id WHERE reg.event_id=%d ORDER BY reg.bib', $id ), ARRAY_A );
-		$score_counts = array_count_values( array_map( function ( $row ) {
-			return (string) (int) $row['score'];
-		}, $rows ) );
-		krsort( $score_counts, SORT_NUMERIC );
-		$rank_by_score = array();
-		$ranked = 0;
-		foreach ( $score_counts as $score => $count ) {
-			$rank_by_score[ (string) $score ] = $ranked + 1;
-			$ranked += $count;
-		}
+		$rows = self::queries()->roster( $id );
 		self::table( array( 'Rider ID', 'Bib ID', 'Status', 'Name', 'Email', 'Score', 'Overall Placing' ) );
 		$roster_url = MRSA_Admin::url( 'rosters', array( 'event_id' => $id ) );
 		foreach ( $rows as $row ) {
@@ -591,14 +549,13 @@ final class MRSA_Views {
 			echo '</td><td>';
 			self::h( $row['score'] );
 			echo '</td><td>';
-			self::h( $rank_by_score[ (string) (int) $row['score'] ] );
+			self::h( $row['overall_placing'] );
 			echo '</td></tr>';
 		}
 		self::end_table();
 	}
 
 	public static function render_event_enroll() {
-		global $wpdb;
 		if ( ! MRSA::global_access() ) {
 			wp_die( esc_html( 'Only global administrators may add riders to events.' ), '', array( 'response' => 403 ) );
 		}
@@ -606,8 +563,9 @@ final class MRSA_Views {
 		if ( ! MRSA::event_access( $id ) || ! ( $event = MRSA::row( 'events', $id ) ) ) {
 			wp_die( esc_html( 'Event not found.' ), '', array( 'response' => 404 ) );
 		}
-		$available = $wpdb->get_results( $wpdb->prepare( 'SELECT r.id,r.name,r.alias,r.email,r.phone FROM ' . MRSA::table( 'riders' ) . ' r WHERE r.email NOT LIKE %s AND NOT EXISTS (SELECT 1 FROM ' . MRSA::table( 'registrations' ) . ' reg WHERE reg.rider_id=r.id AND reg.event_id=%d) ORDER BY r.name,r.id', 'erased-%@example.invalid', $id ), ARRAY_A );
-		$used = array_fill_keys( array_map( 'intval', $wpdb->get_col( $wpdb->prepare( 'SELECT bib FROM ' . MRSA::table( 'registrations' ) . ' WHERE event_id=%d', $id ) ) ), true );
+		$enrollment = self::queries()->enrollment( $id );
+		$available = $enrollment['available'];
+		$used = $enrollment['used'];
 		echo '<div class="wrap mrsa">';
 		self::header();
 		echo '<h2>Add Rider to Event — ' . esc_html( $event['name'] ) . '</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'rosters', array( 'event_id' => $id ) ) ) . '">Back to Rosters</a></p>';
@@ -682,7 +640,6 @@ final class MRSA_Views {
 	}
 
 	private static function scoring( $event ) {
-		global $wpdb;
 		$tab = MRSA_Admin::query( 'score_tab', 'library' );
 		$tabs = array( 'library' => 'Bonus Point Library', 'pending' => 'Submissions - Pending Review', 'reviewed' => 'Submissions - Reviewed', 'contested' => 'Submissions - Contested' );
 		if ( ! isset( $tabs[ $tab ] ) ) {
@@ -695,7 +652,7 @@ final class MRSA_Views {
 		}
 		echo '</nav><h3>Event Scoring Workspace — ' . esc_html( $event['name'] ) . '</h3>';
 		if ( $rider_id ) {
-			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT reg.bib,reg.status,r.name,r.id FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=reg.rider_id WHERE reg.event_id=%d AND reg.rider_id=%d', $event['id'], $rider_id ), ARRAY_A );
+			$row = self::queries()->scoring_rider( $event['id'], $rider_id );
 			if ( ! $row ) {
 				wp_die( esc_html( 'The selected rider is not registered in this event.' ), '', array( 'response' => 404 ) );
 			}
@@ -710,7 +667,7 @@ final class MRSA_Views {
 			echo '</section>';
 			return;
 		}
-		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT reg.bib,reg.status,reg.status_manual,reg.score,reg.placing,r.id,r.name FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=reg.rider_id WHERE reg.event_id=%d ORDER BY reg.bib', $event['id'] ), ARRAY_A );
+		$rows = self::queries()->scoring( $event['id'], $event['min_finisher_points'] );
 		self::table( array( 'Bib', 'Rider ID', 'Rider', 'Status', 'Score', 'Placing' ), array( 3 ) );
 		foreach ( $rows as $row ) {
 			echo '<tr>';
@@ -720,7 +677,7 @@ final class MRSA_Views {
 				echo '</td>';
 			}
 			echo '<td>';
-			self::h( self::effective_status( $row, $event['min_finisher_points'] ) );
+			self::h( $row['effective_status'] );
 			echo '</td><td>';
 			self::h( $row['score'] );
 			echo '</td><td>';
@@ -805,7 +762,6 @@ final class MRSA_Views {
 	}
 
 	private static function bonus_library( $event ) {
-		global $wpdb;
 		$event_id = (int) $event['id'];
 		echo '<h4>Bulk Import Bonus Listing</h4><ol><li>Validate and import the bonus listing XLSX or CSV.</li><li>Validate and import the bonus images.</li></ol><p>ClamAV scans require review and approval. If the daemon is unavailable, you can explicitly confirm a per-account bypass; later unscanned imports then proceed without another approval prompt and are audited. Scanner errors, detected malware, and unsafe content cannot be bypassed. Re-importing a Bonus ID updates its listing without removing other IDs.</p>';
 		echo '<div class="mrsa-import-header"><div id="mrsa-import-setup">';
@@ -835,7 +791,7 @@ final class MRSA_Views {
 			}
 		}
 		echo '</section><section class="mrsa-panel mrsa-image-queue" hidden data-max-image="' . esc_attr( MRSA_Bonus::MAX_IMAGE_SIZE ) . '" data-max-total="' . esc_attr( MRSA_Bonus::MAX_IMAGE_TOTAL ) . '" data-max-count="' . esc_attr( MRSA_Bonus::MAX_IMAGES ) . '" aria-label="Sequential image upload"><h4>One-at-a-time image import</h4><p class="mrsa-queue-progress" role="status" aria-live="polite"></p><div class="mrsa-queue-review"></div><p><button type="button" class="button mrsa-queue-stop">Stop after current file</button><a class="button" href="' . esc_url( MRSA_Admin::url( 'scoring', array( 'event_id' => $event_id, 'score_tab' => 'library' ) ) ) . '">Refresh event gallery</a></p><ol class="mrsa-queue-log"></ol></section>';
-		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT bonus_id,description,category,points,locations,image_file FROM ' . MRSA::table( 'bonus_points' ) . ' WHERE event_id=%d ORDER BY bonus_id', $event_id ), ARRAY_A );
+		$rows = self::queries()->bonus_gallery( $event_id );
 		echo '<h4>Event Bonus Point Gallery</h4>';
 		if ( ! $rows ) {
 			echo '<p>No bonus listings or images have been added for this event.</p>';
@@ -936,8 +892,7 @@ final class MRSA_Views {
 		if ( ! preg_match( '/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/D', $bonus_id ) ) {
 			wp_die( esc_html( 'Bonus listing not found.' ), '', array( 'response' => 404 ) );
 		}
-		global $wpdb;
-		$bonus = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'bonus_points' ) . ' WHERE event_id=%d AND bonus_id=%s', $event_id, $bonus_id ), ARRAY_A );
+		$bonus = self::queries()->bonus( $event_id, $bonus_id );
 		if ( ! $bonus ) {
 			wp_die( esc_html( 'Bonus listing not found.' ), '', array( 'response' => 404 ) );
 		}
@@ -964,7 +919,6 @@ final class MRSA_Views {
 	}
 
 	private static function overall_results() {
-		global $wpdb;
 		$rider_id = absint( MRSA_Admin::query( 'rider_id', '0' ) );
 		$events = self::events( $rider_id );
 		$id = absint( MRSA_Admin::query( 'event_id', '0' ) );
@@ -990,19 +944,12 @@ final class MRSA_Views {
 			return;
 		}
 		$event = MRSA::row( 'events', $id );
-		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT reg.*,r.name FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=reg.rider_id WHERE reg.event_id=%d ORDER BY reg.score DESC,reg.bib ASC', $id ), ARRAY_A );
+		$rows = self::queries()->results( $id, $event['min_finisher_points'] );
 		echo '<h3>' . esc_html( $event['name'] ) . '</h3><p>Overall placing uses competition ranking by total score: equal scores share a place and the next place is skipped. Automatic status becomes Preliminary Finisher only when total score is greater than the event minimum finish score of ' . esc_html( $event['min_finisher_points'] ) . '.</p>';
 		self::table( array( 'Rider #', 'Rider Name', 'Total Score', 'Status', 'Overall Placing' ) );
-		$position = 0;
-		$rank = 0;
-		$previous_score = null;
 		foreach ( $rows as $row ) {
-			++$position;
-			if ( null === $previous_score || (int) $row['score'] !== $previous_score ) {
-				$rank = $position;
-				$previous_score = (int) $row['score'];
-			}
-			$effective_status = self::effective_status( $row, $event['min_finisher_points'] );
+			$rank = $row['overall_placing'];
+			$effective_status = $row['effective_status'];
 			$score_url = admin_url( 'admin.php?page=mrsa-rider-score&event_id=' . $id . '&rider_id=' . (int) $row['rider_id'] );
 			echo '<tr><td><a href="' . esc_url( $score_url ) . '">' . esc_html( $row['bib'] ) . '</a></td><td>' . esc_html( $row['name'] ) . '</td><td>' . esc_html( $row['score'] ) . '</td><td>' . esc_html( $effective_status ) . '</td><td>' . esc_html( $rank ) . '</td></tr>';
 		}
@@ -1010,18 +957,17 @@ final class MRSA_Views {
 	}
 
 	public static function render_rider_score() {
-		global $wpdb;
 		$event_id = absint( MRSA_Admin::query( 'event_id', '0' ) );
 		$rider_id = absint( MRSA_Admin::query( 'rider_id', '0' ) );
 		if ( ! MRSA::event_access( $event_id ) ) {
 			wp_die( esc_html( 'Event not found or not assigned to you.' ), '', array( 'response' => 403 ) );
 		}
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT reg.*,r.name,e.name event_name,e.min_finisher_points FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=reg.rider_id JOIN ' . MRSA::table( 'events' ) . ' e ON e.id=reg.event_id WHERE reg.event_id=%d AND reg.rider_id=%d', $event_id, $rider_id ), ARRAY_A );
+		$row = self::queries()->rider_score( $event_id, $rider_id );
 		if ( ! $row ) {
 			wp_die( esc_html( 'The selected rider is not registered in this event.' ), '', array( 'response' => 404 ) );
 		}
-		$status = self::effective_status( $row, $row['min_finisher_points'] );
-		$placing = 1 + (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . MRSA::table( 'registrations' ) . ' WHERE event_id=%d AND score>%d', $event_id, $row['score'] ) );
+		$status = $row['effective_status'];
+		$placing = $row['overall_placing'];
 		echo '<div class="wrap mrsa">';
 		self::header();
 		echo '<h2>Rider Overall Event Score Sheet</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'results', array( 'event_id' => $event_id ) ) ) . '">Back to Results</a></p>';
@@ -1033,9 +979,8 @@ final class MRSA_Views {
 		if ( ! MRSA::global_access() ) {
 			wp_die( esc_html( 'Only global administrators may use Diagnostics.' ), '', array( 'response' => 403 ) );
 		}
-		global $wpdb;
-		$events = $wpdb->get_results( 'SELECT id,name,event_date FROM ' . MRSA::table( 'events' ) . ' ORDER BY event_date DESC,id DESC', ARRAY_A );
-		$riders = $wpdb->get_results( 'SELECT id,name,email FROM ' . MRSA::table( 'riders' ) . ' ORDER BY name,id', ARRAY_A );
+		$events = self::queries()->diagnostic_events();
+		$riders = self::queries()->diagnostic_riders();
 		echo '<h2>Diagnostics</h2><p>Export application data, create a restorable database backup, or permanently remove scoped plugin data.</p>';
 		self::configuration_check();
 		echo '<div class="mrsa-grid">';
@@ -1045,7 +990,7 @@ final class MRSA_Views {
 			echo '<button class="button button-primary">Download ' . esc_html( strtoupper( $type ) ) . '</button></form></details>';
 		}
 		echo '</div><details class="mrsa-administrative-audit"><summary><h3>Administrative Audit</h3></summary><p>Latest 100 records, with usernames and timestamps in UTC. Exports and database backups include the full audit table. Ordinary data deletions retain audit history and recorded bypass choices. Deleting virus-scan audit data resets all overrides and leaves a new deletion record.</p>';
-		$audit_rows = $wpdb->get_results( 'SELECT user_id,username,occurred_at,event_id,action,detail FROM ' . MRSA::table( 'import_audit' ) . ' ORDER BY id DESC LIMIT 100', ARRAY_A );
+		$audit_rows = self::queries()->recent_audit();
 		self::table( array( 'User ID', 'Username', 'Date/time (UTC)', 'Event ID', 'Action', 'Details' ) );
 		foreach ( $audit_rows as $audit_row ) {
 			echo '<tr>';
@@ -1080,8 +1025,7 @@ final class MRSA_Views {
 		$state = '';
 		$labels = array( 'passed' => 'Passed', 'failed' => 'Failed', 'review' => 'Manual review' );
 		if ( $has_report ) {
-			$statuses = array_column( $report['rows'], 'status' );
-			$state = in_array( 'failed', $statuses, true ) ? 'failed' : ( in_array( 'review', $statuses, true ) ? 'review' : 'passed' );
+			$state = MRSA_Diagnostic_Report::state( $report['rows'] );
 		} else {
 			$last_state = get_user_option( 'mrsa_configuration_last_state', get_current_user_id() );
 			if ( isset( $labels[ $last_state ] ) ) {

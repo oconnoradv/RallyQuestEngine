@@ -141,6 +141,20 @@ WordPress personal-data export and erasure tools include relevant plugin data. E
 
 The plugin does not include analytics, telemetry, payment processing, remotely hosted JavaScript, or automatic external requests. Use TLS, least-privilege accounts, restricted database access, secure backups, and supported versions of WordPress, PHP, and the database server.
 
+## Development architecture
+
+The plugin uses composition rather than an inheritance framework. WordPress authorization, nonces and redirects belong at the administrative request boundary; import operations receive explicit inputs rather than reading request globals. Database transactions and gallery rollback remain coordinated by the operation that owns the mutation.
+
+`MRSA_Bonus_Application_Service` provides explicit-input import, review, override and editor operations. `MRSA_Roster_Import_Service` owns roster validation and atomic enrollment; `MRSA_Diagnostics_Deletion_Service` owns audited destructive operations and gallery recovery. Bonus and roster imports share `MRSA_Spreadsheet_Reader`, retaining the data-only XLSX protections and size/row limits. `MRSA_Import_Audit` owns audit persistence and per-administrator override lookup.
+
+Each import creates its own `MRSA_Scan_Session`, separating report state and unavailable-scanner policy from `MRSA_ClamAV_Transport` and `MRSA_Executable_Content_Policy`. Pending review storage, cleanup scheduling and gallery filesystem operations use small injectable adapters; audit persistence also accepts a database adapter. Existing static bonus/scanner entry points remain for compatibility, while administrative requests use the explicit application service. Custom adapters must preserve failure reporting, single-use review expiry/locking, private staging and coordinated recovery semantics; they are not a way to bypass scanning or audit requirements.
+
+Administrative screens use `MRSA_Queries` read models for event-scoped lists, searches, pagination, rider visibility and score summaries. Its database adapter is constructor-injected; query failures raise explicit errors rather than appearing as empty lists. Callers still enforce screen authorization, and assigned-administrator queries retain their user/event restrictions. `MRSA_Results` contains the shared pure competition-ranking and automatic/manual status rules, so roster, results and score-sheet screens use the same calculations.
+
+`MRSA_Diagnostics` collects cohesive plugin, runtime, database, upload, storage, scanner and hosting check groups. An explicitly supplied callable list can compose a report without modifying the collector. `MRSA_Diagnostic_Report` validates result rows and applies the shared Failed > Manual review > Passed precedence used by report persistence and rendering. Authorization runs before any check, including supplied checks.
+
+Public-contract regressions cover ranking edge cases, parameterized read models, database failures and diagnostic composition. Run standalone suites with `php tests/<suite>.php`; the release workflow runs these alongside the import, roster, queue and Diagnostics regressions. No additional production dependencies are required.
+
 ## Validation
 
 The **Security checks and ZIP release** GitHub Actions workflow runs on pull requests, branch pushes, version tags, and manual dispatch. It:

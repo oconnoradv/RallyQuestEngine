@@ -4,7 +4,7 @@ Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.1.12
+Stable tag: 0.1.13
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -17,6 +17,14 @@ individual scan review and approval before continuing. Without JavaScript,
 choose one image per import. Previously approved images remain imported if a
 later image fails or the queue is stopped. Current per-file limits still apply.
 Diagnostics checks post capacity against one 10 MB file plus 1 MB overhead.
+
+Development separates administrative request handling from import services,
+uses database-injected read models for screen queries, and shares pure ranking
+and status rules across rosters, results and rider score sheets. Diagnostics
+composes focused check groups with one validated report-state precedence.
+Authorization, scanning, audit requirements and coordinated database/gallery
+rollback remain part of the operation contracts. Standalone PHP regression
+suites exercise these contracts; no new production dependencies are required.
 
 Motorcycle Rally Scoring Application provides administrative tabs for:
 
@@ -238,6 +246,15 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.1.13 =
+* Separated administrative request inputs from bonus import, review, override and edit operations.
+* Extracted shared hardened spreadsheet reading, audit persistence, roster import and audited Diagnostics deletion services.
+* Isolated scanning state per import and separated local ClamAV transport from executable-content policy.
+* Added injectable pending-review, cleanup scheduling, gallery filesystem and database adapters while preserving coordinated recovery.
+* Moved administrative screen queries into read models and centralized competition ranking and result status rules.
+* Composed focused Diagnostics check groups with validated shared report-state precedence.
+* Added public service-contract regressions to the release gates and documented the development architecture.
 
 = 0.1.12 =
 * Rebuilt this release with matching green/orange/red background tints for minimized configuration panels; expanded panels remain neutral.

@@ -51,6 +51,15 @@ final class MRSA_Admin {
 		return isset( $_POST[ $key ] ) && is_scalar( $_POST[ $key ] ) ? wp_unslash( (string) $_POST[ $key ] ) : $default;
 	}
 
+	/** Capture the bonus-import form once at the HTTP boundary, then pass values explicitly. */
+	private static function bonus_input() {
+		$input = array( 'files' => isset( $_FILES ) && is_array( $_FILES ) ? $_FILES : array() );
+		foreach ( array( 'import_step', 'gallery_url', 'image_source', 'allow_partial_images', 'scan_approval', 'bypass_confirmation', 'pending_token', 'new_bonus_id', 'description', 'category', 'points', 'locations', 'remove_image' ) as $key ) {
+			$input[ $key ] = self::posted( $key );
+		}
+		return $input;
+	}
+
 	public static function text( $value, $limit, $required = false ) {
 		if ( ! is_scalar( $value ) ) {
 			throw new RuntimeException( 'Invalid text value.' );
@@ -112,7 +121,7 @@ final class MRSA_Admin {
 		}
 	}
 
-	private static function require_event( $id ) {
+	public static function require_event( $id ) {
 		if ( ! MRSA::event_access( $id ) || ! MRSA::row( 'events', $id ) ) {
 			throw new RuntimeException( 'Event not found or you are not assigned to it.' );
 		}
@@ -124,7 +133,7 @@ final class MRSA_Admin {
 		}
 	}
 
-	private static function checked( $result ) {
+	public static function checked( $result ) {
 		if ( false === $result ) {
 			throw new RuntimeException( 'The record could not be saved. Check for duplicate emails, catalog rows, assigned riders or bibs, then refresh and try again.' );
 		}
@@ -254,21 +263,13 @@ final class MRSA_Admin {
 				case 'bonus_import_approve':
 				case 'bonus_import_bypass':
 				case 'bonus_import_cancel':
+					$service = new MRSA_Bonus_Application_Service();
+					$input = self::bonus_input();
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
-					if ( 'bonus_import' === $op ) {
-						$result = MRSA_Bonus::import( $extra['event_id'] );
-					} else {
-						$pending = MRSA_Bonus::pending( $extra['event_id'], self::posted( 'pending_token' ) );
-						$bonus_step = $pending['import_step'] ?? $bonus_step;
-						if ( 'bonus_import_approve' === $op && '1' !== self::posted( 'scan_approval' ) ) {
-							throw new RuntimeException( 'Review the scan results and explicitly approve the import.' );
-						}
-						if ( 'bonus_import_bypass' === $op && '1' !== self::posted( 'bypass_confirmation' ) ) {
-							throw new RuntimeException( 'Confirm the risk of importing without an antivirus security scan.' );
-						}
-						$result = MRSA_Bonus::approve( $extra['event_id'], self::posted( 'pending_token' ), 'bonus_import_cancel' === $op, 'bonus_import_bypass' === $op );
-					}
+					$action = $service->import_action( $op, $extra['event_id'], $input, $bonus_step );
+					$bonus_step = $action['step'];
+					$result = $action['result'];
 					if ( isset( $result['pending_token'] ) ) {
 						$extra['bonus_pending'] = $result['pending_token'];
 					}
@@ -287,20 +288,18 @@ final class MRSA_Admin {
 				case 'bonus_import_require_scan':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
-					if ( 'bonus_import_disable_scan' === $op ) {
-						MRSA_Bonus::enable_bypass( $extra['event_id'] );
-						$message = 'WARNING: ClamAV override enabled for your account. Imports may proceed without antivirus scanning only when ClamAV is unavailable. Your consent was audited.';
-					} else {
-						MRSA_Bonus::revoke_bypass( $extra['event_id'] );
-						$message = 'ClamAV scanning override removed for your account.';
-					}
+					$message = ( new MRSA_Bonus_Application_Service() )->set_scan_override(
+						$extra['event_id'],
+						'bonus_import_disable_scan' === $op,
+						'1' === self::posted( 'bypass_confirmation' )
+					);
 					$tab = 'scoring';
 					$extra['score_tab'] = 'library';
 					break;
 				case 'bonus_point':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
-					MRSA_Bonus::save( $extra['event_id'], self::text( self::posted( 'bonus_id' ), 64, true ) );
+					( new MRSA_Bonus_Application_Service() )->save( $extra['event_id'], self::text( self::posted( 'bonus_id' ), 64, true ), self::bonus_input() );
 					$tab = 'scoring';
 					$extra['score_tab'] = 'library';
 					break;
@@ -542,121 +541,7 @@ final class MRSA_Admin {
 		return $id;
 	}
 
-	private static function roster_import( $event_id ) {
-		$file = $_FILES['roster_file'] ?? null;
-		if ( ! is_array( $file ) || ! isset( $file['error'], $file['tmp_name'], $file['name'] ) || ! is_scalar( $file['error'] ) || ! is_string( $file['tmp_name'] ) || ! is_string( $file['name'] ) || UPLOAD_ERR_OK !== (int) $file['error'] || ! is_uploaded_file( $file['tmp_name'] ) ) {
-			throw new RuntimeException( 'Choose a successfully uploaded roster CSV or XLSX file.' );
-		}
-		$size = filesize( $file['tmp_name'] );
-		if ( false === $size || $size < 1 || $size > MRSA_Bonus::MAX_SHEET_SIZE ) {
-			throw new RuntimeException( 'Roster files must be nonempty and no larger than 10 MB.' );
-		}
-		$extension = strtolower( pathinfo( $file['name'], PATHINFO_EXTENSION ) );
-		if ( ! in_array( $extension, array( 'csv', 'xlsx' ), true ) ) {
-			throw new RuntimeException( 'Choose a CSV or XLSX file.' );
-		}
-		MRSA_File_Scan::reset();
-		MRSA_File_Scan::scan( $file['tmp_name'], $file['name'] );
-		list( $header, $rows ) = MRSA_Bonus::read_spreadsheet( $file['tmp_name'], $extension );
-		return self::import_roster_rows( $event_id, $header, $rows );
-	}
-
-	private static function import_roster_rows( $event_id, $header, $rows ) {
-		global $wpdb;
-		$columns = array();
-		$allowed = array( 'rider id', 'email', 'bib id', 'status', 'pillion' );
-		foreach ( $header as $index => $value ) {
-			$name = strtolower( trim( preg_replace( '/^\xEF\xBB\xBF/', '', (string) $value ) ) );
-			if ( ! in_array( $name, $allowed, true ) || isset( $columns[ $name ] ) ) {
-				throw new RuntimeException( 'Use the sample columns only, without duplicate headers: Rider ID, Email, Bib ID, Status, Pillion.' );
-			}
-			$columns[ $name ] = $index;
-		}
-		if ( ! isset( $columns['rider id'] ) && ! isset( $columns['email'] ) ) {
-			throw new RuntimeException( 'The roster must have a Rider ID or Email column.' );
-		}
-		if ( count( $rows ) > MRSA_Bonus::MAX_RECORDS ) {
-			throw new RuntimeException( 'Import no more than 5,000 roster rows at once.' );
-		}
-		MRSA::begin_transaction();
-		try {
-			$event = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $event_id ), ARRAY_A );
-			if ( ! $event ) {
-				throw new RuntimeException( 'The selected event no longer exists.' );
-			}
-			$existing = $wpdb->get_results( $wpdb->prepare( 'SELECT rider_id,bib FROM ' . MRSA::table( 'registrations' ) . ' WHERE event_id=%d', $event_id ), ARRAY_A );
-			if ( $wpdb->last_error ) {
-				throw new RuntimeException( 'The existing roster could not be read. No riders were imported.' );
-			}
-			$used = array_fill_keys( array_column( $existing, 'bib' ), true );
-			$enrolled = array_fill_keys( array_column( $existing, 'rider_id' ), true );
-			$records = array();
-			foreach ( $rows as $line => $row ) {
-				if ( ! array_filter( $row, function ( $value ) { return '' !== trim( (string) $value ); } ) ) {
-					continue;
-				}
-				try {
-					foreach ( $row as $index => $value ) {
-						if ( ! array_key_exists( $index, $header ) && '' !== trim( (string) $value ) ) {
-							throw new RuntimeException( 'Unexpected cells outside the header columns.' );
-						}
-						if ( preg_match( '/^\s*[=+@]/', (string) $value ) || preg_match( '/<\?(?:php|=)|<script\b/i', (string) $value ) ) {
-							throw new RuntimeException( 'Formulas or executable cell content are not allowed.' );
-						}
-					}
-					$get = function ( $name ) use ( $columns, $row ) { return isset( $columns[ $name ] ) ? trim( (string) ( $row[ $columns[ $name ] ] ?? '' ) ) : ''; };
-					$id = $get( 'rider id' );
-					$email = $get( 'email' );
-					if ( '' === $id && '' === $email ) {
-						throw new RuntimeException( 'Supply a Rider ID or Email.' );
-					}
-					if ( '' !== $email ) { $email = self::email( $email ); }
-					$rider = '' !== $id ? $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'riders' ) . ' WHERE id=%d FOR UPDATE', self::integer( $id, 1 ) ), ARRAY_A ) :
-						$wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'riders' ) . ' WHERE email=%s FOR UPDATE', $email ), ARRAY_A );
-					if ( $wpdb->last_error || ! $rider || preg_match( '/^erased-\d+@example\.invalid$/', $rider['email'] ) ) {
-						throw new RuntimeException( 'No eligible existing rider matches this identifier.' );
-					}
-					if ( '' !== $email && 0 !== strcasecmp( $email, $rider['email'] ) ) {
-						throw new RuntimeException( 'Rider ID and Email identify different riders.' );
-					}
-					if ( isset( $enrolled[ $rider['id'] ] ) ) {
-						throw new RuntimeException( 'Rider is already enrolled or repeated in this file.' );
-					}
-					$enrolled[ $rider['id'] ] = true;
-					$bib = '' === $get( 'bib id' ) ? null : self::integer( $get( 'bib id' ), 1, (int) $event['max_bib'] );
-					if ( null !== $bib ) {
-						if ( isset( $used[ $bib ] ) ) { throw new RuntimeException( 'Bib ID is already assigned or repeated in this file.' ); }
-						$used[ $bib ] = true;
-					}
-					$status = $get( 'status' ) ?: 'Initial Registration';
-					if ( ! in_array( $status, array( 'Initial Registration', 'Paid', 'Fully Registered', 'Cancelled' ), true ) ) {
-						throw new RuntimeException( 'Unsupported registration Status.' );
-					}
-					$records[] = array( 'event_id' => $event_id, 'rider_id' => (int) $rider['id'], 'bib' => $bib, 'registration_status' => $status, 'pillion' => self::text( $get( 'pillion' ), 160 ) );
-				} catch ( RuntimeException $exception ) {
-					throw new RuntimeException( 'Roster row ' . ( $line + 2 ) . ': ' . $exception->getMessage() . ' No riders were imported.' );
-				}
-			}
-			if ( ! $records ) { throw new RuntimeException( 'The roster file contains no riders.' ); }
-			$next = 1;
-			foreach ( $records as $record ) {
-				if ( null === $record['bib'] ) {
-					while ( isset( $used[ $next ] ) ) { ++$next; }
-					if ( $next > (int) $event['max_bib'] ) { throw new RuntimeException( 'The event has insufficient available bibs. No riders were imported.' ); }
-					$record['bib'] = $next;
-					$used[ $next ] = true;
-				}
-				self::checked( $wpdb->insert( MRSA::table( 'registrations' ), $record ) );
-			}
-			MRSA::commit_transaction();
-		} catch ( RuntimeException $exception ) {
-			if ( ! MRSA::rollback_transaction() ) {
-				throw new RuntimeException( $exception->getMessage() . ' Database rollback failed; inspect the roster before retrying.' );
-			}
-			throw $exception;
-		}
-		return 'Imported ' . count( $records ) . ' riders into the selected event roster.';
-	}
+	private static function roster_import( $event_id ) { return MRSA_Roster_Import_Service::import_uploaded( $event_id, $_FILES['roster_file'] ?? null ); }
 
 	private static function registration( $event_id, $op ) {
 		global $wpdb;
@@ -783,7 +668,8 @@ final class MRSA_Admin {
 			if ( 'images' !== self::posted( 'import_step' ) || self::posted( 'gallery_url' ) || isset( $_FILES['bonus_file'] ) ) {
 				throw new RuntimeException( 'The sequential upload accepts only a local image, not listings or URL sources.' );
 			}
-			$result = MRSA_Bonus::import( $event_id );
+			$input = self::bonus_input();
+			$result = ( new MRSA_Bonus_Application_Service() )->import( $event_id, $input );
 			if ( isset( $result['pending_token'] ) ) {
 				$pending = MRSA_Bonus::pending( $event_id, $result['pending_token'] );
 				return array(
@@ -800,17 +686,13 @@ final class MRSA_Admin {
 			throw new RuntimeException( 'Unsupported sequential image operation.' );
 		}
 		$token = self::posted( 'pending_token' );
-		$pending = MRSA_Bonus::pending( $event_id, $token );
+		$service = new MRSA_Bonus_Application_Service();
+		$pending = $service->pending( $event_id, $token );
 		if ( 'images' !== $pending['import_step'] || count( $pending['images'] ) > 1 || $pending['rows'] ) {
 			throw new RuntimeException( 'This review is not for a single image.' );
 		}
-		if ( 'approve' === $operation && '1' !== self::posted( 'scan_approval' ) ) {
-			throw new RuntimeException( 'Review the scan results and explicitly approve this image.' );
-		}
-		if ( 'bypass' === $operation && '1' !== self::posted( 'bypass_confirmation' ) ) {
-			throw new RuntimeException( 'Confirm the risk of importing this image without antivirus scanning.' );
-		}
-		$result = MRSA_Bonus::approve( $event_id, $token, 'cancel' === $operation, 'bypass' === $operation );
+		$review = $service->review( $event_id, $token, $operation, self::bonus_input() );
+		$result = $review['result'];
 		return array( 'state' => 'cancel' === $operation ? 'cancelled' : 'imported', 'message' => $result['message'], 'errors' => $result['errors'] );
 	}
 
@@ -827,8 +709,7 @@ final class MRSA_Admin {
 		if ( ! set_transient( 'mrsa_configuration_' . get_current_user_id(), $report, 15 * MINUTE_IN_SECONDS ) ) {
 			wp_die( esc_html( 'The configuration report could not be saved. Rerun the check.' ), '', array( 'response' => 500 ) );
 		}
-		$statuses = array_column( $report['rows'], 'status' );
-		$state = in_array( 'failed', $statuses, true ) ? 'failed' : ( in_array( 'review', $statuses, true ) ? 'review' : 'passed' );
+		$state = MRSA_Diagnostic_Report::state( $report['rows'] );
 		// Retain only the last outcome for this administrator/site, not expired diagnostic details.
 		update_user_option( get_current_user_id(), 'mrsa_configuration_last_state', $state );
 		if ( get_user_option( 'mrsa_configuration_last_state', get_current_user_id() ) !== $state ) {
@@ -847,90 +728,9 @@ final class MRSA_Admin {
 	}
 
 	private static function diagnostics_delete( $operation ) {
-		global $wpdb;
-		$staged_gallery = '';
-		$gallery_event_id = 0;
-		$all_galleries = false;
-		$event_id = 0;
-		$audit_detail = '';
-		MRSA::begin_transaction();
-		try {
-			switch ( $operation ) {
-				case 'diagnostics_delete_all':
-					$staged_gallery = MRSA_Bonus::stage_all_storage_removal();
-					$all_galleries = true;
-					self::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( 'bonus_points' ) ) );
-					foreach ( array( 'registrations', 'rider_bikes', 'event_admins', 'events', 'riders', 'bikes', 'global_admins' ) as $table ) {
-						self::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( $table ) ) );
-					}
-					$message = 'All application data was deleted. Audit history and ClamAV overrides were retained.';
-					break;
-				case 'diagnostics_delete_bikes':
-					self::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( 'rider_bikes' ) ) );
-					self::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( 'bikes' ) ) );
-					$message = 'All motorcycle catalog and rider-motorcycle data was deleted.';
-					break;
-				case 'diagnostics_delete_roster':
-					$event_id = self::integer( self::posted( 'event_id' ), 1 );
-					self::require_event( $event_id );
-					self::checked( $wpdb->delete( MRSA::table( 'registrations' ), array( 'event_id' => $event_id ) ) );
-					$message = 'The selected event roster was deleted.';
-					break;
-				case 'diagnostics_delete_bonus_points':
-					$event_id = self::integer( self::posted( 'event_id' ), 1 );
-					self::require_event( $event_id );
-					$staged_gallery = MRSA_Bonus::stage_event_storage_removal( $event_id );
-					$gallery_event_id = $event_id;
-					self::checked( $wpdb->delete( MRSA::table( 'bonus_points' ), array( 'event_id' => $event_id ) ) );
-					$message = 'All bonus listings and gallery images for the selected event were deleted.';
-					break;
-				case 'diagnostics_delete_rider':
-					$rider_id = self::integer( self::posted( 'rider_id' ), 1 );
-					if ( ! MRSA::row( 'riders', $rider_id ) ) {
-						throw new RuntimeException( 'The selected rider no longer exists.' );
-					}
-					self::checked( $wpdb->delete( MRSA::table( 'registrations' ), array( 'rider_id' => $rider_id ) ) );
-					self::checked( $wpdb->delete( MRSA::table( 'rider_bikes' ), array( 'rider_id' => $rider_id ) ) );
-					self::checked( $wpdb->delete( MRSA::table( 'riders' ), array( 'id' => $rider_id ) ) );
-					$message = 'The selected rider and associated plugin data were deleted.';
-					$audit_detail = ' Rider ID: ' . $rider_id . '.';
-					break;
-				case 'diagnostics_delete_audit':
-					self::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( 'import_audit' ) ) );
-					$message = 'Virus-scan audit history was deleted and all remembered ClamAV overrides were reset. This deletion is recorded in the new audit log.';
-					break;
-				default:
-					throw new RuntimeException( 'Unsupported diagnostics deletion.' );
-			}
-			MRSA_Bonus::audit_deletion( $event_id, $operation, $message . $audit_detail );
-			MRSA::commit_transaction();
-		} catch ( RuntimeException $e ) {
-			if ( ! MRSA::rollback_transaction() ) {
-				throw new RuntimeException( $e->getMessage() . ' The database rollback failed; gallery recovery was not attempted.' );
-			}
-			if ( $staged_gallery ) {
-				try {
-					if ( $all_galleries ) {
-						MRSA_Bonus::restore_all_storage( $staged_gallery );
-					} else {
-						MRSA_Bonus::restore_event_storage( $gallery_event_id, $staged_gallery );
-					}
-				} catch ( RuntimeException $restore_exception ) {
-					throw new RuntimeException( $e->getMessage() . ' Gallery restoration also failed: ' . $restore_exception->getMessage() );
-				}
-			}
-			throw $e;
-		}
-		if ( $staged_gallery ) {
-			try {
-				MRSA_Bonus::finish_staged_storage_removal( $staged_gallery );
-			} catch ( RuntimeException $cleanup_exception ) {
-				throw new RuntimeException( 'The database records were deleted, but staged gallery files could not be fully removed: ' . $cleanup_exception->getMessage() );
-			}
-		}
-		return $message;
+		$input = array( 'event_id' => self::posted( 'event_id' ), 'rider_id' => self::posted( 'rider_id' ) );
+		return ( new MRSA_Diagnostics_Deletion_Service() )->delete( $operation, $input );
 	}
-
 	public static function diagnostics_download() {
 		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! MRSA::global_access() ) {
 			wp_die( esc_html( 'Unauthorized request.' ), '', array( 'response' => 403 ) );

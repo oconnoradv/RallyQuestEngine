@@ -17,6 +17,16 @@ final class MRSA_Bonus {
 		return array( 'message' => $cancel ? 'Cancelled.' : 'Imported.', 'errors' => array() );
 	}
 }
+final class MRSA_Bonus_Application_Service {
+	public function import( $event, array $input ) { $GLOBALS['captured_import_input'] = $input; return MRSA_Bonus::import( $event ); }
+	public function pending( $event, $token ) { return MRSA_Bonus::pending( $event, $token ); }
+	public function review( $event, $token, $operation, array $input ) {
+		$pending = $this->pending( $event, $token );
+		if ( 'approve' === $operation && '1' !== ( $input['scan_approval'] ?? '' ) ) { throw new RuntimeException( 'Review required.' ); }
+		if ( 'bypass' === $operation && '1' !== ( $input['bypass_confirmation'] ?? '' ) ) { throw new RuntimeException( 'Confirm risk.' ); }
+		return array( 'pending' => $pending, 'result' => MRSA_Bonus::approve( $event, $token, 'cancel' === $operation, 'bypass' === $operation ) );
+	}
+}
 function wp_unslash( $value ) { return $value; }
 function sanitize_text_field( $value ) { return $value; }
 function check_admin_referer( $action ) {
@@ -57,6 +67,7 @@ $GLOBALS['result'] = array( 'pending_token' => $token, 'message' => 'Review.', '
 $GLOBALS['pending'] = array( 'import_step' => 'images', 'rows' => array(), 'images' => array( array() ), 'scans' => array( array( 'status' => 'Passed' ) ), 'errors' => array(), 'can_approve' => true, 'unscanned' => false );
 $response = operation( 'upload' );
 check( $response->success && $response->data['state'] === 'review' && $response->data['token'] === $token && ! isset( $GLOBALS['approved'] ), 'one-image upload returns scan review without approving or persisting' );
+check( 'images' === $GLOBALS['captured_import_input']['import_step'] && isset( $GLOBALS['captured_import_input']['files']['bonus_images'] ), 'controller passes captured HTTP fields and uploaded files explicitly to the application service' );
 $_POST['pending_token'] = $token;
 check( ! operation( 'approve' )->success && ! isset( $GLOBALS['approved'] ), 'approval requires explicit scan consent' );
 $_POST['scan_approval'] = '1';

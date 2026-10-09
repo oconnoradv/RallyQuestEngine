@@ -116,21 +116,29 @@ function sanitize_textarea_field( $value ) { return $value; }
 function sanitize_text_field( $value ) { return $value; }
 
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-file-scan.php';
+require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-spreadsheet-reader.php';
+require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-import-audit.php';
+require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-import-adapters.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-bonus.php';
+require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-bonus-application-service.php';
+
+final class Bonus_Tracking_Pending_Store {
+	public $values = array();
+	public $calls = array();
+	public function get( $key ) { $this->calls[] = 'get'; return $this->values[ $key ] ?? false; }
+	public function put( $key, $value, $expires ) { $this->calls[] = 'put'; $this->values[ $key ] = $value; return true; }
+	public function remove( $key ) { $this->calls[] = 'remove'; unset( $this->values[ $key ] ); return true; }
+}
+final class Bonus_Tracking_Scheduler {
+	public $calls = array();
+	public function schedule( $when, $hook, $args ) { $this->calls[] = array( $when, $hook, $args ); return true; }
+}
 
 function check( $condition, $label ) {
 	if ( ! $condition ) {
 		throw new RuntimeException( 'FAIL: ' . $label );
 	}
 	echo 'PASS: ' . $label . PHP_EOL;
-}
-
-function bonus_method( $name ) {
-	$method = new ReflectionMethod( 'MRSA_Bonus', $name );
-	if ( PHP_VERSION_ID < 80100 ) {
-		$method->setAccessible( true );
-	}
-	return $method;
 }
 
 function reviewed_import( $event_id ) {
@@ -162,6 +170,7 @@ $GLOBALS['responses'] = array(
 );
 $_FILES = array();
 $_POST = array( 'import_step' => 'images', 'gallery_url' => 'https://example.com/gallery/', 'allow_partial_images' => '1' );
+$original_post = $_POST;
 try {
 	$_POST['image_source'] = 'url';
 	$_POST['gallery_url'] = '';
@@ -178,6 +187,24 @@ try {
 	check( $pending['can_approve'] && 1 === count( $pending['images'] ) && ! $pending['errors'], 'Load via URL uses remote source only and retains scan approval' );
 	MRSA_Bonus::approve( 7, $prepared['pending_token'], true );
 	$_FILES = array();
+	$pending_store = new Bonus_Tracking_Pending_Store();
+	$scheduler = new Bonus_Tracking_Scheduler();
+	MRSA_Bonus::configure_adapters( $pending_store, $scheduler );
+	$_POST = array( 'import_step' => 'listing', 'image_source' => 'invalid', 'gallery_url' => '' );
+	$explicit = array(
+		'import_step' => 'images',
+		'image_source' => 'url',
+		'gallery_url' => 'https://example.com/gallery/GOOD.png',
+		'allow_partial_images' => '',
+		'files' => array(),
+	);
+	$prepared = ( new MRSA_Bonus_Application_Service() )->import( 7, $explicit );
+	$pending = MRSA_Bonus::pending( 7, $prepared['pending_token'] );
+	check( 'images' === $pending['import_step'] && in_array( 'put', $pending_store->calls, true ), 'application service consumes explicit form data and injected pending-review persistence' );
+	check( 'mrsa_bonus_expire' === $scheduler->calls[0][1], 'actual bonus import schedules cleanup through injected scheduler' );
+	MRSA_Bonus::approve( 7, $prepared['pending_token'], true );
+	MRSA_Bonus::configure_adapters();
+	$_POST = $original_post;
 	unset( $_POST['image_source'] );
 	$_POST['gallery_url'] = 'https://example.com/gallery/';
 	$connection = MRSA_File_Scan::check_connection();
@@ -188,7 +215,7 @@ try {
 		check( ! $connection['passed'] && array() === $wpdb->rows, 'Step 0 connection check rejects scanner response without importing data: ' . $mode );
 	}
 	file_put_contents( $check_control, '' );
-	bonus_method( 'audit' )->invoke( null, 7, 'bypass_enabled', 'Test consent' );
+	( new MRSA_Import_Audit( $wpdb ) )->record( 7, 'bypass_enabled', 'Test consent' );
 	$prepared = MRSA_Bonus::import( 7 );
 	$pending = MRSA_Bonus::pending( 7, $prepared['pending_token'] );
 	check( empty( $pending['unscanned'] ) && $pending['can_approve'], 'remembered bypass still requires scan review when ClamAV is available' );
@@ -309,17 +336,16 @@ try {
 		MRSA_Bonus::approve( 27, $prepared['pending_token'], true );
 	}
 
-	$create_stage = bonus_method( 'make_stage_dir' );
-	$stage_dir = $create_stage->invoke( null );
+	$application = new MRSA_Bonus_Application_Service();
+	$stage_dir = $application->create_stage_directory();
 	$sheet_path = $stage_dir . '/.listing-input';
 	file_put_contents( $sheet_path, "Bonus ID,Bonus Description,Bonus Category,Bonus Points,Bonus Locations\nB100,Example,Test,10,\"1,2\"\n" );
-	MRSA_File_Scan::reset();
-	MRSA_File_Scan::scan( $sheet_path, 'bonuses.csv' );
-	$read_csv = bonus_method( 'read_csv' );
-	$rows = $read_csv->invoke( null, $sheet_path );
-	$prepare = bonus_method( 'prepare' );
+	$scan_session = new MRSA_Scan_Session();
+	$scan_session->scan( $sheet_path, 'bonuses.csv' );
+	list( $header, $raw_rows ) = MRSA_Spreadsheet_Reader::read( $sheet_path, 'csv' );
+	$rows = ( new MRSA_Bonus_Application_Service() )->normalize_listing( $header, $raw_rows );
 	$before = $wpdb->rows;
-	$prepared = $prepare->invoke( null, 28, $rows, array(), $stage_dir, array(), false );
+	$prepared = $application->prepare_review( 28, $rows, array(), $stage_dir, array(), false, $scan_session, 'listing' );
 	check( $before === $wpdb->rows, 'listing scan and preparation leave event records untouched' );
 	$pending = MRSA_Bonus::pending( 28, $prepared['pending_token'] );
 	check( count( $pending['hashes'] ) === 1 && $pending['can_approve'], 'listing report fingerprints the scanned spreadsheet' );
@@ -350,10 +376,10 @@ try {
 		check( strpos( $exception->getMessage(), 'expired' ) !== false, 'expired scans require rescanning' );
 	}
 
-	$method = bonus_method( 'normalize_rows' );
+	$application = new MRSA_Bonus_Application_Service();
 	$header = array( 'Bonus ID', 'Bonus Description', 'Bonus Category', 'Bonus Points', 'Bonus Locations' );
 	try {
-		$method->invoke( null, $header, array( array( 'B1', '=DANGEROUS()', 'Test', '10', '1,2' ) ) );
+		$application->normalize_listing( $header, array( array( 'B1', '=DANGEROUS()', 'Test', '10', '1,2' ) ) );
 		throw new RuntimeException( 'Formula unexpectedly accepted' );
 	} catch ( RuntimeException $exception ) {
 		check( strpos( $exception->getMessage(), 'formulas' ) !== false, 'CSV formula cells rejected' );
@@ -383,22 +409,28 @@ try {
 	check( strpos( $result['message'], 'without an antivirus security scan' ) !== false && 'import_completed' === end( $wpdb->audit_rows )['action'], 'unscanned import emits warning and persistent completion audit' );
 	$result = MRSA_Bonus::import( 28 );
 	check( ! isset( $result['pending_token'] ) && strpos( $result['message'], 'without an antivirus security scan' ) !== false, 'remembered bypass automatically imports validated images without another approval prompt' );
-	$stage_dir = $create_stage->invoke( null );
+	$stage_dir = $application->create_stage_directory();
 	$sheet_path = $stage_dir . '/.listing-input';
 	file_put_contents( $sheet_path, "Bonus ID,Bonus Description,Bonus Category,Bonus Points,Bonus Locations\nB101,Unscanned example,Test,20,\"1,2\"\n" );
 	MRSA_File_Scan::reset( true );
 	MRSA_File_Scan::scan( $sheet_path, 'bonuses.csv' );
-	$rows = $read_csv->invoke( null, $sheet_path );
-	$prepared = bonus_method( 'prepare' )->invoke( null, 28, $rows, array(), $stage_dir, array(), false );
+	list( $header, $raw_rows ) = MRSA_Spreadsheet_Reader::read( $sheet_path, 'csv' );
+	$rows = ( new MRSA_Bonus_Application_Service() )->normalize_listing( $header, $raw_rows );
+	$scan_session = new MRSA_Scan_Session( true );
+	$scan_session->scan( $sheet_path, 'bonuses.csv' );
+	$prepared = $application->prepare_review( 28, $rows, array(), $stage_dir, array(), false, $scan_session, 'listing' );
 	$result = MRSA_Bonus::approve( 28, $prepared['pending_token'] );
 	check( strpos( $result['message'], '1 bonus listings' ) !== false && strpos( $result['message'], 'without an antivirus security scan' ) !== false, 'listing imports retain parsing and persist an unscanned warning and audit' );
-	$stage_dir = $create_stage->invoke( null );
+	$stage_dir = $application->create_stage_directory();
 	$sheet_path = $stage_dir . '/.listing-input';
 	file_put_contents( $sheet_path, "Bonus ID,Bonus Description,Bonus Category,Bonus Points,Bonus Locations\nB102,Unscanned example,Test,20,\"1,2\"\n" );
 	MRSA_File_Scan::reset( true );
 	MRSA_File_Scan::scan( $sheet_path, 'bonuses.csv' );
-	$rows = $read_csv->invoke( null, $sheet_path );
-	$prepared = bonus_method( 'prepare' )->invoke( null, 28, $rows, array(), $stage_dir, array(), false );
+	list( $header, $raw_rows ) = MRSA_Spreadsheet_Reader::read( $sheet_path, 'csv' );
+	$rows = ( new MRSA_Bonus_Application_Service() )->normalize_listing( $header, $raw_rows );
+	$scan_session = new MRSA_Scan_Session( true );
+	$scan_session->scan( $sheet_path, 'bonuses.csv' );
+	$prepared = $application->prepare_review( 28, $rows, array(), $stage_dir, array(), false, $scan_session, 'listing' );
 	file_put_contents( $sheet_path, 'changed after validation' );
 	$before = $wpdb->rows;
 	try {

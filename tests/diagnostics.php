@@ -103,9 +103,12 @@ final class MRSA_File_Scan {
 	}
 }
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-admin.php';
+require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-import-audit.php';
+require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-import-adapters.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-bonus.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-views.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-diagnostics.php';
+require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-diagnostics-deletion-service.php';
 function invoke_method( $class, $name, ...$args ) {
 	$method = new ReflectionMethod( $class, $name );
 	if ( PHP_VERSION_ID < 80100 ) { $method->setAccessible( true ); }
@@ -155,16 +158,18 @@ foreach ( $operations as $suffix ) {
 	);
 	$_POST = array( 'event_id' => '7', 'rider_id' => '9', 'verification_code' => 'AB12CD34', 'verification_hash' => MRSA_Admin::diagnostics_hash( $operation, 'AB12CD34' ) );
 	invoke_method( 'MRSA_Admin', 'verify_diagnostics', $operation );
+	$deletion = new MRSA_Diagnostics_Deletion_Service();
+	$input = array( 'event_id' => '7', 'rider_id' => '9' );
 	$before = $wpdb->tables;
 	$wpdb->fail_audit = true;
 	try {
-		invoke_method( 'MRSA_Admin', 'diagnostics_delete', $operation );
+		$deletion->delete( $operation, $input );
 		throw new RuntimeException( 'Unaudited deletion unexpectedly succeeded.' );
 	} catch ( RuntimeException $exception ) {
 		check( strpos( $exception->getMessage(), 'audit' ) !== false && $before === $wpdb->tables, $suffix . ': audit failure rolls back all deletions and overrides' );
 	}
 	$wpdb->fail_audit = false;
-	invoke_method( 'MRSA_Admin', 'diagnostics_delete', $operation );
+	$deletion->delete( $operation, $input );
 	$audit = end( $wpdb->tables['import_audit'] );
 	check( $audit['action'] === $operation && $audit['username'] === 'admin-1' && preg_match( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/D', $audit['occurred_at'] ), $suffix . ': deletion records actor, operation and UTC timestamp' );
 	check( $audit['event_id'] === ( in_array( $suffix, array( 'roster', 'bonus_points' ), true ) ? 7 : 0 ), $suffix . ': audit records event scope or site-wide scope' );
