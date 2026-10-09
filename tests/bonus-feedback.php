@@ -72,7 +72,8 @@ if ( in_array( '--preview', $argv ?? array(), true ) ) {
 }
 check( false !== strpos( $html, 'mrsa-image-queue' ) && false !== strpos( $html, 'data-max-image="10485760"' ) && false === strpos( $html, 'multiple webkitdirectory' ), 'sequential image queue uses server limits and falls back to a single uploaded image without JavaScript' );
 check( strpos( $html, 'samples/bonus-listing.xlsx' ) !== false && strpos( $html, 'Download sample bonus listing XLSX' ) < strpos( $html, 'Validate and Import Bonus Listing' ), 'Step 1 links the downloadable sample XLSX before import controls' );
-check( strpos( $html, 'Load via URL' ) < strpos( $html, 'name="allow_partial_images"' ) && strpos( $html, 'name="bonus_images[]"' ) < strpos( $html, 'name="allow_partial_images"' ), 'partial-image checkbox follows both file chooser and URL load button' );
+check( strpos( $html, 'Load by URL' ) < strpos( $html, 'name="allow_partial_images"' ) && strpos( $html, 'name="bonus_images[]"' ) < strpos( $html, 'name="allow_partial_images"' ), 'partial-image checkbox follows both file chooser and URL load button' );
+check( false === strpos( $html, 'Load via URL' ) && 1 === preg_match( '/<button type="button" class="button mrsa-url-open" hidden>Load by URL<\/button>/', $html ) && false !== strpos( $html, 'name="image_source" value="url">Load by URL' ), 'Load by URL opens a prompt with JavaScript and keeps a direct URL fallback without it' );
 $images_start = strpos( $html, 'id="mrsa-import-images"' );
 $help_start = strpos( $html, '<details class="mrsa-url-help">', $images_start );
 $help_end = strpos( $html, '</details>', $help_start );

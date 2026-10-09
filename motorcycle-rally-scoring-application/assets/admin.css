@@ -108,6 +108,13 @@
 .mrsa .mrsa-clamav-unconfigured h4:first-child { color: #8a2424; }
 .mrsa .mrsa-import-header h4:first-child { margin-top: 0; }
 .mrsa .mrsa-url-actions { display: flex; align-items: center; gap: 8px; margin: 12px 0 16px; }
+.mrsa .mrsa-url-source > .mrsa-url-open { margin: 8px 0 16px; }
+.mrsa .mrsa-url-dialog { width: 520px; max-width: calc(100vw - 48px); max-height: calc(100vh - 48px); overflow-y: auto; box-sizing: border-box; padding: 18px; border: 1px solid #c3c4c7; color: #1d2327; background: #fff; }
+.mrsa .mrsa-url-dialog:not([open]) { display: none; }
+.mrsa .mrsa-url-dialog::backdrop { background: rgba(0, 0, 0, .7); }
+.mrsa .mrsa-url-dialog h4 { margin-top: 0; }
+.mrsa .mrsa-url-dialog .mrsa-field input { width: 100%; }
+.mrsa .mrsa-url-dialog .mrsa-url-actions { justify-content: flex-end; margin-bottom: 0; }
 .mrsa .mrsa-url-help { position: relative; }
 .mrsa .mrsa-url-help > summary { color: #135e96; text-decoration: underline; padding: 6px; }
 .mrsa .mrsa-url-help-content { display: none; position: absolute; z-index: 10; right: 0; top: 100%; width: 280px; max-width: calc(100vw - 64px); padding: 12px; border: 1px solid #8c8f94; background: #fff; color: #1d2327; box-shadow: 0 4px 12px rgba(0, 0, 0, .15); }

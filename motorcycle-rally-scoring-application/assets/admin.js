@@ -111,7 +111,7 @@
 			log.replaceChildren();
 			review.replaceChildren();
 			if (imageForm.querySelector('[name="gallery_url"]').value.trim()) {
-				progress.textContent = 'For one-at-a-time local uploads, clear the URL first. Use Load via URL separately.';
+				progress.textContent = 'For one-at-a-time local uploads, clear the URL first. Use Load by URL separately.';
 				return;
 			}
 			const partial = imageForm.querySelector('[name="allow_partial_images"]').checked;
@@ -212,6 +212,32 @@
 			action.focus();
 		});
 	});
+	const urlSource = root.querySelector('.mrsa-url-source');
+	const urlDialog = document.createElement('dialog');
+	if (urlSource && typeof urlDialog.showModal === 'function') {
+		// Like Choose Files: one button that prompts; the URL field stays in the form so it submits normally.
+		const opener = urlSource.querySelector('.mrsa-url-open');
+		const prompt = urlSource.querySelector('.mrsa-url-prompt');
+		const input = prompt.querySelector('[name="gallery_url"]');
+		urlDialog.className = 'mrsa-url-dialog';
+		urlDialog.setAttribute('aria-labelledby', 'mrsa-url-prompt-title');
+		prompt.querySelectorAll('[hidden]').forEach(element => { element.hidden = false; });
+		prompt.querySelector('.mrsa-url-submit').textContent = 'Load Images';
+		urlDialog.append(prompt);
+		urlSource.append(urlDialog);
+		opener.hidden = false;
+		opener.addEventListener('click', () => {
+			input.required = true;
+			urlDialog.showModal();
+			input.focus();
+		});
+		prompt.querySelector('.mrsa-url-cancel').addEventListener('click', () => urlDialog.close());
+		urlDialog.addEventListener('close', () => {
+			input.value = '';
+			input.required = false;
+			opener.focus();
+		});
+	}
 	root.querySelectorAll('.mrsa-url-help').forEach(help => {
 		help.addEventListener('mouseenter', () => { help.open = true; });
 		help.addEventListener('mouseleave', () => { help.open = false; });

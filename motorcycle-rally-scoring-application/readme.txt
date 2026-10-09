@@ -266,6 +266,7 @@ No. Rider and pillion prices are event configuration values only.
 == Changelog ==
 
 = Unreleased =
+* Replaced the image-import URL field and Load via URL button with a single Load by URL button that prompts for the URL.
 * Fixed rejection of JPEG, PNG, GIF and WebP images with appended gain-map, multi-picture, editor/vendor trailer, motion-photo or padding data; only the validated primary image is scanned and stored.
 
 = 0.1.14 =

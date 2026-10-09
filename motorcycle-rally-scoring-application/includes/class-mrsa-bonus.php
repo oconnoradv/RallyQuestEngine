@@ -812,7 +812,7 @@ final class MRSA_Bonus {
 		$uploaded = 'images' === $step && 'url' === ( $input['image_source'] ?? '' ) ? array() : self::upload_file( 'bonus_images', true, $input['files'] ?? array() );
 		if ( 'images' === $step && 'url' === ( $input['image_source'] ?? '' ) ) {
 			if ( '' === $remote_url ) {
-				throw new RuntimeException( 'Enter a public HTTPS image, ZIP, or directory-listing URL before choosing Load via URL.' );
+				throw new RuntimeException( 'Enter a public HTTPS image, ZIP, or directory-listing URL before choosing Load by URL.' );
 			}
 			$uploaded = array();
 		}
