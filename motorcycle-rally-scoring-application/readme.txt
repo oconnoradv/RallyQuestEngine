@@ -19,14 +19,19 @@ Motorcycle Rally Scoring Application provides administrative tabs for:
 * Event Setup: event configuration and per-event administrator assignments.
 * Event Rosters: event selection, complete registered-rider details, dedicated enrollment, new-rider recovery, pillion information, and unique per-event bib numbers.
 * Scoring: event selection, roster scoring summaries, and the reserved scoring workspace tabs.
+* Overall Results: score ordering, computed overall placing, automatic or manual result status, and rider score-sheet placeholders.
+* Diagnostics: JSON export, restorable SQL backup, and verification-string-protected scoped deletion.
 * About: version, licensing, attribution, and scope.
 
 The Scoring tab has Bonus Point Library, Submissions - Pending Review,
 Submissions - Reviewed, and Submissions - Contested tabs. Their requirements
 have not yet been defined. These tabs are intentionally placeholders, not
 a working scoring engine. Bib links provide event/rider context; this
-release does not create bonus records, calculate scores, or determine placing.
-New registrations have status Registered, score 0, and unset placing.
+release does not create or calculate bonus records. Overall Results orders
+existing total scores using competition ranking and derives Preliminary
+Finisher when a score is greater than the event minimum; event administrators
+can override result status. New registrations have lifecycle status Initial
+Registration, result status Registered, score 0, and unset stored placing.
 
 WordPress administrators can bootstrap setup. Assigned global administrators
 manage plugin data. Assigned event administrators are restricted to their
@@ -51,8 +56,10 @@ attribute per row. Enrolled rider details remain read-only outside explicit
 registration controls.
 
 Successful forms return to their originating form or tab. If Event Rosters has
-no unenrolled rider to select, Add Rider to Event can open the Add Rider form
-and return to enrollment after the new rider is saved.
+no unenrolled rider to select, Add Rider to Event can open the Add Rider form,
+automatically enroll the new rider with the lowest available bib, and return
+to the selected roster. Roster registration status can be Initial Registration,
+Paid, Fully Registered, or Cancelled without changing scoring-result status.
 
 Use MySQL 8.0+ or MariaDB 10.6+ with InnoDB tables. Atomic rider updates,
 catalog deletion, and event-capacity changes rely on transaction and row-lock
@@ -139,6 +146,12 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= Unreleased =
+* Added rider-filtered roster/results navigation, computed overall results, automatic and manual result statuses, and an authorized rider score-sheet placeholder.
+* Added automatic event enrollment after creating a rider from a full enrollment workflow.
+* Added editable registration lifecycle statuses and renamed Event Placing to Overall Placing on Event Rosters.
+* Added JSON export, SQL database backup, and randomized-string-verified destructive Diagnostics operations.
 
 = 0.1.4 =
 * Limit motorcycle catalog imports and manual catalog entries to make and model.

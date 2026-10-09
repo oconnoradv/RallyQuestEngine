@@ -7,6 +7,7 @@ final class MRSA_Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'admin_post_mrsa_save', array( __CLASS__, 'save' ) );
+		add_action( 'admin_post_mrsa_diagnostics_download', array( __CLASS__, 'diagnostics_download' ) );
 	}
 
 	public static function menu() {
@@ -17,11 +18,12 @@ final class MRSA_Admin {
 			add_submenu_page( null, 'Edit Event', 'Edit Event', 'read', 'mrsa-event-edit', array( 'MRSA_Views', 'render_event_edit' ) );
 			add_submenu_page( null, 'Event Roster', 'Event Roster', 'read', 'mrsa-event-roster', array( 'MRSA_Views', 'render_event_roster' ) );
 			add_submenu_page( null, 'Add Rider to Event', 'Add Rider to Event', 'read', 'mrsa-event-enroll', array( 'MRSA_Views', 'render_event_enroll' ) );
+			add_submenu_page( null, 'Rider Overall Event Score Sheet', 'Rider Overall Event Score Sheet', 'read', 'mrsa-rider-score', array( 'MRSA_Views', 'render_rider_score' ) );
 		}
 	}
 
 	public static function assets( $hook ) {
-		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'rally-scoring_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit', 'admin_page_mrsa-event-roster', 'admin_page_mrsa-event-enroll' ), true ) || ! MRSA::access() ) {
+		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'admin_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit', 'admin_page_mrsa-event-roster', 'admin_page_mrsa-event-enroll', 'admin_page_mrsa-rider-score' ), true ) || ! MRSA::access() ) {
 			return;
 		}
 		$asset_version = MRSA_VERSION . '.' . MRSA_DB_VERSION;
@@ -89,7 +91,7 @@ final class MRSA_Admin {
 	}
 
 	public static function url( $tab, $extra = array() ) {
-		if ( in_array( $tab, array( 'rider-edit', 'event-edit', 'event-roster', 'event-enroll' ), true ) ) {
+		if ( in_array( $tab, array( 'rider-edit', 'event-edit', 'event-roster', 'event-enroll', 'rider-score' ), true ) ) {
 			return add_query_arg( array_merge( array( 'page' => 'mrsa-' . $tab ), $extra ), admin_url( 'admin.php' ) );
 		}
 		return add_query_arg( array_merge( array( 'page' => 'mrsa', 'tab' => $tab ), $extra ), admin_url( 'admin.php' ) );
@@ -185,7 +187,15 @@ final class MRSA_Admin {
 					break;
 				case 'rider':
 					self::require_global();
+					$is_new = 0 === self::integer( self::posted( 'id', '0' ) );
 					$extra['rider_id'] = self::rider();
+					$enroll_event_id = self::posted( 'enroll_event_id' );
+					if ( $is_new && '' !== $enroll_event_id ) {
+						$enroll_event_id = self::integer( $enroll_event_id, 1 );
+						self::require_event( $enroll_event_id );
+						self::enroll_new_rider( $enroll_event_id, $extra['rider_id'] );
+						$message = 'Rider saved and added to the event with the next available bib.';
+					}
 					$tab = 'rider-edit';
 					break;
 				case 'event':
@@ -199,6 +209,27 @@ final class MRSA_Admin {
 					self::require_event( $extra['event_id'] );
 					self::registration( $extra['event_id'], $op );
 					$tab = 'rosters';
+					break;
+				case 'registration_status':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					self::require_event( $extra['event_id'] );
+					self::registration_status( $extra['event_id'] );
+					$tab = 'results';
+					break;
+				case 'registration_lifecycle':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					self::require_event( $extra['event_id'] );
+					self::registration_lifecycle( $extra['event_id'] );
+					$tab = 'rosters';
+					break;
+				case 'diagnostics_delete_all':
+				case 'diagnostics_delete_bikes':
+				case 'diagnostics_delete_roster':
+				case 'diagnostics_delete_rider':
+					self::require_global();
+					self::verify_diagnostics( $op );
+					$message = self::diagnostics_delete( $op );
+					$tab = 'diagnostics';
 					break;
 				default:
 					throw new RuntimeException( 'Unknown operation.' );
@@ -448,5 +479,178 @@ final class MRSA_Admin {
 			MRSA::rollback_transaction();
 			throw $e;
 		}
+	}
+
+	private static function enroll_new_rider( $event_id, $rider_id ) {
+		global $wpdb;
+		MRSA::begin_transaction();
+		try {
+			$event = $wpdb->get_row( $wpdb->prepare( 'SELECT id,max_bib FROM ' . MRSA::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $event_id ), ARRAY_A );
+			if ( ! $event ) {
+				throw new RuntimeException( 'The event no longer exists. The rider was saved but could not be enrolled.' );
+			}
+			$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'registrations' ) . ' WHERE event_id=%d AND rider_id=%d', $event_id, $rider_id ) );
+			if ( $exists ) {
+				throw new RuntimeException( 'The rider was saved and is already registered for this event.' );
+			}
+			$used = array_fill_keys( array_map( 'intval', $wpdb->get_col( $wpdb->prepare( 'SELECT bib FROM ' . MRSA::table( 'registrations' ) . ' WHERE event_id=%d', $event_id ) ) ), true );
+			$bib = 0;
+			for ( $candidate = 1; $candidate <= (int) $event['max_bib']; ++$candidate ) {
+				if ( ! isset( $used[ $candidate ] ) ) {
+					$bib = $candidate;
+					break;
+				}
+			}
+			if ( ! $bib ) {
+				throw new RuntimeException( 'The rider was saved, but every event bib is assigned. Increase the maximum bib before enrolling the rider.' );
+			}
+			self::checked( $wpdb->insert( MRSA::table( 'registrations' ), array( 'event_id' => $event_id, 'rider_id' => $rider_id, 'bib' => $bib, 'pillion' => '' ) ) );
+			MRSA::commit_transaction();
+		} catch ( RuntimeException $e ) {
+			MRSA::rollback_transaction();
+			throw $e;
+		}
+	}
+
+	private static function registration_status( $event_id ) {
+		global $wpdb;
+		$id = self::integer( self::posted( 'id' ), 1 );
+		$row = MRSA::row( 'registrations', $id );
+		if ( ! $row || (int) $row['event_id'] !== $event_id ) {
+			throw new RuntimeException( 'Registration not found in the selected event.' );
+		}
+		$status = self::text( self::posted( 'status' ), 20, true );
+		$allowed = array( 'Automatic', 'Registered', 'Preliminary Finisher', 'Finisher', 'DNF', 'DNS' );
+		if ( ! in_array( $status, $allowed, true ) ) {
+			throw new RuntimeException( 'Select a supported rider status.' );
+		}
+		$data = 'Automatic' === $status ? array( 'status' => 'Registered', 'status_manual' => 0 ) : array( 'status' => $status, 'status_manual' => 1 );
+		self::checked( $wpdb->update( MRSA::table( 'registrations' ), $data, array( 'id' => $id, 'event_id' => $event_id ) ) );
+	}
+
+	private static function registration_lifecycle( $event_id ) {
+		global $wpdb;
+		$id = self::integer( self::posted( 'id' ), 1 );
+		$row = MRSA::row( 'registrations', $id );
+		if ( ! $row || (int) $row['event_id'] !== $event_id ) {
+			throw new RuntimeException( 'Registration not found in the selected event.' );
+		}
+		$status = self::text( self::posted( 'registration_status' ), 20, true );
+		if ( ! in_array( $status, array( 'Initial Registration', 'Paid', 'Fully Registered', 'Cancelled' ), true ) ) {
+			throw new RuntimeException( 'Select a supported registration status.' );
+		}
+		self::checked( $wpdb->update( MRSA::table( 'registrations' ), array( 'registration_status' => $status ), array( 'id' => $id, 'event_id' => $event_id ) ) );
+	}
+
+	public static function diagnostics_hash( $operation, $code ) {
+		return wp_hash( get_current_user_id() . '|' . $operation . '|' . $code );
+	}
+
+	private static function verify_diagnostics( $operation ) {
+		$code = self::text( self::posted( 'verification_code' ), 32, true );
+		$expected = self::text( self::posted( 'verification_hash' ), 100, true );
+		if ( ! hash_equals( $expected, self::diagnostics_hash( $operation, $code ) ) ) {
+			throw new RuntimeException( 'The randomized verification string did not match. No data was deleted.' );
+		}
+	}
+
+	private static function diagnostics_delete( $operation ) {
+		global $wpdb;
+		MRSA::begin_transaction();
+		try {
+			switch ( $operation ) {
+				case 'diagnostics_delete_all':
+					foreach ( array( 'registrations', 'rider_bikes', 'event_admins', 'events', 'riders', 'bikes', 'global_admins' ) as $table ) {
+						self::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( $table ) ) );
+					}
+					$message = 'All plugin data was deleted.';
+					break;
+				case 'diagnostics_delete_bikes':
+					self::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( 'rider_bikes' ) ) );
+					self::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( 'bikes' ) ) );
+					$message = 'All motorcycle catalog and rider-motorcycle data was deleted.';
+					break;
+				case 'diagnostics_delete_roster':
+					$event_id = self::integer( self::posted( 'event_id' ), 1 );
+					self::require_event( $event_id );
+					self::checked( $wpdb->delete( MRSA::table( 'registrations' ), array( 'event_id' => $event_id ) ) );
+					$message = 'The selected event roster was deleted.';
+					break;
+				case 'diagnostics_delete_rider':
+					$rider_id = self::integer( self::posted( 'rider_id' ), 1 );
+					if ( ! MRSA::row( 'riders', $rider_id ) ) {
+						throw new RuntimeException( 'The selected rider no longer exists.' );
+					}
+					self::checked( $wpdb->delete( MRSA::table( 'registrations' ), array( 'rider_id' => $rider_id ) ) );
+					self::checked( $wpdb->delete( MRSA::table( 'rider_bikes' ), array( 'rider_id' => $rider_id ) ) );
+					self::checked( $wpdb->delete( MRSA::table( 'riders' ), array( 'id' => $rider_id ) ) );
+					$message = 'The selected rider and associated plugin data were deleted.';
+					break;
+				default:
+					throw new RuntimeException( 'Unsupported diagnostics deletion.' );
+			}
+			MRSA::commit_transaction();
+			return $message;
+		} catch ( RuntimeException $e ) {
+			MRSA::rollback_transaction();
+			throw $e;
+		}
+	}
+
+	public static function diagnostics_download() {
+		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! MRSA::global_access() ) {
+			wp_die( esc_html( 'Unauthorized request.' ), '', array( 'response' => 403 ) );
+		}
+		check_admin_referer( 'mrsa_diagnostics_download' );
+		$type = self::posted( 'download_type' );
+		if ( ! in_array( $type, array( 'json', 'sql' ), true ) ) {
+			wp_die( esc_html( 'Unsupported diagnostics download.' ), '', array( 'response' => 400 ) );
+		}
+		global $wpdb;
+		$tables = array( 'global_admins', 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations' );
+		$stamp = gmdate( 'Ymd-His' );
+		nocache_headers();
+		if ( 'json' === $type ) {
+			$data = array( 'generated_at' => gmdate( 'c' ), 'site' => site_url(), 'plugin_version' => MRSA_VERSION, 'tables' => array() );
+			foreach ( $tables as $name ) {
+				$data['tables'][ $name ] = $wpdb->get_results( 'SELECT * FROM ' . MRSA::table( $name ), ARRAY_A );
+			}
+			header( 'Content-Type: application/json; charset=utf-8' );
+			header( 'Content-Disposition: attachment; filename="mrsa-export-' . $stamp . '.json"' );
+			echo wp_json_encode( $data, JSON_PRETTY_PRINT );
+			exit;
+		}
+		header( 'Content-Type: application/sql; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="mrsa-backup-' . $stamp . '.sql"' );
+		echo "-- Motorcycle Rally Scoring Application database backup\n";
+		echo '-- Generated: ' . esc_sql( gmdate( 'c' ) ) . " UTC\n\n";
+		foreach ( $tables as $name ) {
+			$table = MRSA::table( $name );
+			$create = $wpdb->get_row( 'SHOW CREATE TABLE ' . $table, ARRAY_N );
+			if ( ! $create || ! isset( $create[1] ) ) {
+				wp_die( esc_html( 'Unable to read a plugin table definition.' ), '', array( 'response' => 500 ) );
+			}
+			echo 'DROP TABLE IF EXISTS `' . esc_sql( $table ) . "`;\n" . $create[1] . ";\n";
+			foreach ( $wpdb->get_results( 'SELECT * FROM ' . $table, ARRAY_A ) as $row ) {
+				$columns = array_map( function ( $column ) {
+					return '`' . str_replace( '`', '``', $column ) . '`';
+				}, array_keys( $row ) );
+				$values = array_map( array( __CLASS__, 'sql_backup_value' ), array_values( $row ) );
+				echo 'INSERT INTO `' . esc_sql( $table ) . '` (' . implode( ',', $columns ) . ') VALUES (' . implode( ',', $values ) . ");\n";
+			}
+			echo "\n";
+		}
+		exit;
+	}
+
+	private static function sql_backup_value( $value ) {
+		if ( null === $value ) {
+			return 'NULL';
+		}
+		return "'" . str_replace(
+			array( '\\', "\0", "\n", "\r", "\x1a", "'" ),
+			array( '\\\\', '\\0', '\\n', '\\r', '\\Z', "\\'" ),
+			(string) $value
+		) . "'";
 	}
 }

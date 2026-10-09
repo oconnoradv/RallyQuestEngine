@@ -114,7 +114,9 @@ final class MRSA {
 			rider_id bigint(20) unsigned NOT NULL,
 			bib int(10) unsigned NOT NULL,
 			pillion varchar(160) NOT NULL DEFAULT '',
+			registration_status varchar(20) NOT NULL DEFAULT 'Initial Registration',
 			status varchar(20) NOT NULL DEFAULT 'Registered',
+			status_manual tinyint(1) unsigned NOT NULL DEFAULT 0,
 			score bigint(20) NOT NULL DEFAULT 0,
 			placing int(10) unsigned DEFAULT NULL,
 			PRIMARY KEY  (id),
@@ -205,9 +207,10 @@ final class MRSA {
 				$fields[] = array( 'name' => 'Motorcycle', 'value' => $bike['make'] . ' / ' . $bike['model'] . ' / ' . ( (int) $bike['model_year'] ? $bike['model_year'] : 'Unspecified year' ) );
 				$fields[] = array( 'name' => 'Fuel capacity', 'value' => $bike['fuel_capacity'] );
 			}
-			$events = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,r.bib,r.pillion,r.status,r.score,r.placing FROM ' . self::table( 'registrations' ) . ' r JOIN ' . self::table( 'events' ) . ' e ON e.id=r.event_id WHERE r.rider_id=%d', $rider['id'] ), ARRAY_A );
+			$events = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,r.bib,r.pillion,r.registration_status,r.status,r.status_manual,r.score,r.placing,e.min_finisher_points FROM ' . self::table( 'registrations' ) . ' r JOIN ' . self::table( 'events' ) . ' e ON e.id=r.event_id WHERE r.rider_id=%d', $rider['id'] ), ARRAY_A );
 			foreach ( $events as $event ) {
-				$fields[] = array( 'name' => 'Event / bib / pillion / status / score / placing', 'value' => implode( ' / ', $event ) );
+				$result_status = $event['status_manual'] ? $event['status'] : ( (int) $event['score'] > (int) $event['min_finisher_points'] ? 'Preliminary Finisher' : 'Registered' );
+				$fields[] = array( 'name' => 'Event / bib / pillion / registration status / result status / score / placing', 'value' => implode( ' / ', array( $event['name'], $event['bib'], $event['pillion'], $event['registration_status'], $result_status, $event['score'], $event['placing'] ) ) );
 			}
 			$data[] = array( 'group_id' => 'mrsa', 'group_label' => 'Rally registrations', 'item_id' => 'mrsa-rider-' . $rider['id'], 'data' => $fields );
 		}
