@@ -1,8 +1,187 @@
-/* Local UI enhancements only; WordPress core handles media. */
+/* Admin UI and sequential event-gallery uploads; files remain outside the WordPress media library. */
 (function () {
 	'use strict';
 	const root = document.querySelector('.mrsa');
 	if (!root) return;
+	const imageForm = root.querySelector('#mrsa-import-images form');
+	const queue = root.querySelector('.mrsa-image-queue');
+	if (imageForm && queue && typeof window.fetch === 'function') {
+		const chooser = imageForm.querySelector('[name="bonus_images[]"]');
+		const progress = queue.querySelector('.mrsa-queue-progress');
+		const review = queue.querySelector('.mrsa-queue-review');
+		const log = queue.querySelector('.mrsa-queue-log');
+		const stop = queue.querySelector('.mrsa-queue-stop');
+		const galleryLink = queue.querySelector('a');
+		const galleryUrl = galleryLink.href;
+		chooser.multiple = true;
+		chooser.setAttribute('webkitdirectory', '');
+		let running = false;
+		let stopping = false;
+		let resolveReview;
+		const node = (tag, text, parent) => {
+			const element = document.createElement(tag);
+			element.textContent = text;
+			if (parent) parent.append(element);
+			return element;
+		};
+		const request = async (operation, file, token, unscanned) => {
+			// Never reuse the multipart form: it would send every selected image.
+			const data = new FormData();
+			data.set('action', 'mrsa_image_queue');
+			data.set('_wpnonce', imageForm.querySelector('[name="_wpnonce"]').value);
+			data.set('event_id', imageForm.querySelector('[name="event_id"]').value);
+			data.set('import_step', 'images');
+			data.set('queue_operation', operation);
+			if (file) data.append('bonus_images[]', file, file.name);
+			if (token) data.set('pending_token', token);
+			if (operation === 'approve') data.set('scan_approval', '1');
+			if (operation === 'bypass' && unscanned) data.set('bypass_confirmation', '1');
+			let response;
+			try {
+				response = await fetch(imageForm.action, { method: 'POST', credentials: 'same-origin', body: data });
+			} catch (error) {
+				throw new Error('Connection lost. The last request may have completed. Check the event gallery or saved scan review before retrying.');
+			}
+			let payload;
+			try {
+				payload = await response.json();
+			} catch (error) {
+				throw new Error('No valid upload response was received (HTTP ' + response.status + '). Check server per-file/post limits and your login, then inspect the gallery before retrying.');
+			}
+			if (!response.ok || !payload.success) {
+				throw new Error(payload.data && payload.data.message ? payload.data.message : 'Upload request failed (HTTP ' + response.status + ').');
+			}
+			return payload.data;
+		};
+		const decision = report => new Promise(resolve => {
+			review.replaceChildren();
+			node('h4', 'Review this image before importing', review);
+			node('p', report.message + ' Review expires after 15 minutes.', review);
+			report.scans.forEach(scan => node('p', scan.file + ': ' + scan.status + ' — ' + scan.detail, review));
+			report.errors.forEach(error => node('p', error, review));
+			const controls = node('form', '', review);
+			let consent;
+			if (report.can_approve) {
+				const label = node('label', '', controls);
+				consent = document.createElement('input');
+				consent.type = 'checkbox';
+				consent.required = true;
+				label.append(consent, document.createTextNode(report.unscanned ?
+					' I accept importing this image without antivirus scanning. Record my consent and remember the unavailable-scanner override for my account.' :
+					' I have reviewed the scan results and approve importing this image.'));
+				const approve = node('button', report.unscanned ? 'Confirm Bypass and Import Image' : 'Approve and Import Image', controls);
+				approve.type = 'submit';
+				approve.className = 'button';
+				controls.addEventListener('submit', event => {
+					event.preventDefault();
+					if (consent.checked) finish(report.unscanned ? 'bypass' : 'approve');
+				});
+			}
+			const skip = node('button', 'Skip Image and Remove Staged File', controls);
+			skip.type = 'button';
+			skip.className = 'button';
+			const finish = operation => {
+				resolveReview = null;
+				controls.querySelectorAll('button, input').forEach(control => { control.disabled = true; });
+				resolve(operation);
+			};
+			skip.addEventListener('click', () => finish('cancel'));
+			resolveReview = () => finish('cancel');
+			skip.focus();
+		});
+		stop.addEventListener('click', () => {
+			stopping = true;
+			progress.textContent = 'Stopping after the current request; earlier imports are retained.';
+			if (resolveReview) resolveReview();
+		});
+		window.addEventListener('beforeunload', event => {
+			if (running) { event.preventDefault(); event.returnValue = ''; }
+		});
+		imageForm.addEventListener('submit', async event => {
+			if (event.submitter && event.submitter.value === 'url') {
+				chooser.disabled = true;
+				setTimeout(() => { if (!running) chooser.disabled = false; }, 0);
+				return;
+			}
+			const files = Array.from(chooser.files);
+			if (!files.length) return;
+			event.preventDefault();
+			if (running) return;
+			queue.hidden = false;
+			log.replaceChildren();
+			review.replaceChildren();
+			if (imageForm.querySelector('[name="gallery_url"]').value.trim()) {
+				progress.textContent = 'For one-at-a-time local uploads, clear the URL first. Use Load via URL separately.';
+				return;
+			}
+			const partial = imageForm.querySelector('[name="allow_partial_images"]').checked;
+			const maxImage = Number(queue.dataset.maxImage);
+			if (files.length > Number(queue.dataset.maxCount) || files.reduce((total, file) => total + file.size, 0) > Number(queue.dataset.maxTotal)) {
+				progress.textContent = 'Choose no more than 200 images totaling 100 MB per queue.';
+				return;
+			}
+			if (!partial && files.some(file => file.size === 0 || file.size > maxImage)) {
+				progress.textContent = 'Each image must be nonempty and no larger than 10 MB. No files were uploaded.';
+				return;
+			}
+			running = true;
+			stopping = false;
+			stop.disabled = false;
+			let imported = 0;
+			const controls = Array.from(root.querySelectorAll('.mrsa-import-header input, .mrsa-import-header button'));
+			const originalDisabled = controls.map(control => control.disabled);
+			controls.forEach(control => { control.disabled = true; });
+			try {
+				for (let index = 0; index < files.length && !stopping; index++) {
+					const file = files[index];
+					if (file.size === 0 || file.size > maxImage) {
+						node('li', file.name + ': skipped; image is empty or exceeds 10 MB.', log);
+						continue;
+					}
+					progress.textContent = 'Uploading and scanning ' + (index + 1) + ' of ' + files.length + ': ' + file.name;
+					let result = await request('upload', file);
+					if (result.state === 'review') {
+						// Keep recovery available until the approval response confirms its outcome.
+						const recovery = new URL(galleryUrl);
+						recovery.searchParams.set('bonus_pending', result.token);
+						galleryLink.href = recovery.href + '#mrsa-import-feedback';
+						galleryLink.textContent = 'Open saved scan review / check gallery';
+						const report = result;
+						let operation;
+						if (stopping || !report.can_approve) {
+							report.scans.forEach(scan => node('li', file.name + ': ' + scan.status + ' — ' + scan.detail, log));
+							report.errors.forEach(error => node('li', file.name + ': ' + error, log));
+							operation = 'cancel';
+							if (!partial || report.scanner_error) stopping = true;
+						} else {
+							progress.textContent = 'Awaiting approval for ' + (index + 1) + ' of ' + files.length + ': ' + file.name;
+							operation = await decision(report);
+							if (operation === 'cancel' && !partial) stopping = true;
+						}
+						result = await request(operation, null, report.token, report.unscanned);
+					}
+					if (result.state === 'imported') imported++;
+					const entry = node('li', file.name + ': ' + result.message, log);
+					if (result.state === 'imported') {
+						entry.className = result.message.includes('WARNING:') ? 'mrsa-queue-warning' : 'mrsa-queue-success';
+					}
+					(result.errors || []).forEach(error => node('li', file.name + ': ' + error, log));
+					review.replaceChildren();
+					galleryLink.href = galleryUrl;
+					galleryLink.textContent = 'Refresh event gallery';
+				}
+				progress.textContent = (stopping ? 'Queue stopped. ' : 'Queue complete. ') + imported + ' images imported. Refresh the gallery to view saved images.';
+			} catch (error) {
+				node('p', error.message, review).className = 'notice notice-error inline';
+				progress.textContent = 'Queue stopped after an error. ' + imported + ' confirmed image imports; check the gallery before retrying.';
+			} finally {
+				running = false;
+				resolveReview = null;
+				stop.disabled = true;
+				controls.forEach((control, index) => { control.disabled = originalDisabled[index]; });
+			}
+		});
+	}
 	root.querySelectorAll('.mrsa-destructive-action').forEach(section => {
 		const form = section.querySelector('form');
 		const verification = form.querySelector('.mrsa-delete-verification');

@@ -40,6 +40,7 @@ jobs:
           php tests/bonus-feedback.php
           php tests/diagnostics.php
           php tests/configuration-check.php
+          php tests/image-queue.php
           php tests/roster-import.php
 
       - name: Install static security scanner

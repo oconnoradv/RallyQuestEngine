@@ -79,6 +79,11 @@
 .mrsa .mrsa-gallery-dialog h3 { margin: 0; }
 .mrsa .mrsa-gallery-full-image { display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 160px); object-fit: contain; }
 .mrsa .mrsa-import-errors { overflow-wrap: anywhere; }
+.mrsa .mrsa-image-queue { overflow-wrap: anywhere; }
+.mrsa .mrsa-queue-review form { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.mrsa .mrsa-queue-review form label { flex-basis: 100%; }
+.mrsa .mrsa-queue-success { color: #004d16; background: #edfaef; padding: 8px; }
+.mrsa .mrsa-queue-warning { color: #924500; background: #fff4e5; padding: 8px; }
 .mrsa .mrsa-import-header { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: start; margin: 16px 0; }
 .mrsa .mrsa-import-header > div { min-width: 0; overflow-wrap: anywhere; }
 .mrsa .mrsa-import-header .mrsa-panel { margin: 0; max-width: none; min-width: 0; }

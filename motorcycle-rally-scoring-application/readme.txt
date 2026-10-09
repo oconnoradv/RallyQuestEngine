@@ -12,6 +12,12 @@ Manage motorcycle rally administrators, motorcycles, riders, and event registrat
 
 == Description ==
 
+Local scoring bonus images upload one file per request with JavaScript, with
+individual scan review and approval before continuing. Without JavaScript,
+choose one image per import. Previously approved images remain imported if a
+later image fails or the queue is stopped. Current per-file limits still apply.
+Diagnostics checks post capacity against one 10 MB file plus 1 MB overhead.
+
 Motorcycle Rally Scoring Application provides administrative tabs for:
 
 * Riders: rider details, make/model-filtered motorcycles with optional manually entered four-digit years, emergency contacts, insurance information, and registered events.
@@ -61,8 +67,13 @@ MRSA_IMPORT_TEMP_DIR can override the temporary directory. Reviews expire in
 Cancellation deletes staged files; WordPress cron cleans expired imports.
 Formulas, macros, embedded files, script markers, and appended image data
 are rejected. A passed scan is not a guarantee that a file is harmless.
-Image imports are all-or-nothing by default; optionally import all
-successful images and skip failed images, with filename/source-specific errors.
+URL image imports are all-or-nothing by default. Local folder imports use
+one-image requests with individual approval and persistence; a later failure
+does not undo earlier approved images. Optionally skip invalid images with
+filename/source-specific errors. Scanner errors stop further uploads.
+Stop after current file finishes an in-flight request or cancels a pending
+review, then stops the queue. Network failures stop without automatic retries:
+inspect the gallery or saved scan review before retrying an uncertain result.
 Error reports are private to the importing administrator and expire after
 15 minutes. Recovery failures stop the import. Click gallery images to open
 a larger overlay preview; Close image, Escape, or clicking outside the preview
@@ -199,6 +210,9 @@ No. Rider and pillion prices are event configuration values only.
 == Changelog ==
 
 = 0.1.10 =
+* Rebuilt this release with one-at-a-time local scoring image uploads, individual scan review/approval, progress, stop/skip controls and saved-review recovery links.
+* Retained earlier approved imports if a later file fails; preserved audited unavailable-scanner overrides and mandatory available-scanner review.
+* Reduced diagnostic post-size requirements to 11 MB and one uploaded file per request while retaining the 10 MB per-file and 100 MB / 200-image queue safety limits.
 * Added an on-demand Required Plugins and Configuration check above Diagnostics export and backup controls.
 * Declared Action Scheduler as a required plugin and added permission-checked native WordPress installation and activation links; Gallery for SpotWalla remains optional.
 * Checked WordPress/PHP requirements, import functions, database version, InnoDB tables/schema, upload limits, gallery storage, private staging and a live ClamAV scan.

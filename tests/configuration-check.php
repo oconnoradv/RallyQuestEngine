@@ -33,7 +33,7 @@ check( MRSA_Diagnostics::action_scheduler()['ready'], 'installed active dependen
 foreach ( array( '8.0.0' => true, '5.7.44' => false, '10.6.0-MariaDB' => true, '5.5.5-10.11.6-MariaDB' => true, '10.5.28-MariaDB' => false, 'unknown' => false ) as $version => $supported ) {
 	check( MRSA_Diagnostics::database_version_supported( $version ) === $supported, 'database minimum enforced for ' . $version );
 }
-foreach ( array( array( '10M', 10485760, false, 'passed' ), array( '9M', 10485760, false, 'failed' ), array( '101M', 105906176, true, 'passed' ), array( '100M', 105906176, true, 'failed' ), array( '0', 105906176, true, 'passed' ), array( '0', 10485760, false, 'failed' ) ) as $case ) {
+foreach ( array( array( '10M', 10485760, false, 'passed' ), array( '9M', 10485760, false, 'failed' ), array( '11M', 11534336, true, 'passed' ), array( '10M', 11534336, true, 'failed' ), array( '0', 11534336, true, 'passed' ), array( '0', 10485760, false, 'failed' ) ) as $case ) {
 	check( MRSA_Diagnostics::size_check( 'Test setting', $case[0], $case[1], $case[2] )['status'] === $case[3], 'exact size threshold checked: ' . $case[0] );
 }
 $GLOBALS['scanner_ready'] = false;

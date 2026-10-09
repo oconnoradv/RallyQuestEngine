@@ -4,6 +4,7 @@ define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
 final class MRSA_Admin {
 	public static function query( $key, $default = '' ) { return $GLOBALS['query'][ $key ] ?? $default; }
+	public static function url( $tab, $args ) { return '/wp-admin/admin.php?tab=' . $tab . '&' . http_build_query( $args ); }
 }
 final class MRSA {
 	public static function table( $name ) { return $name; }
@@ -12,6 +13,9 @@ final class MRSA_File_Scan {
 	public static function check_connection() { return array( 'passed' => $GLOBALS['scanner_ready'] ?? false ); }
 }
 final class MRSA_Bonus {
+	const MAX_IMAGE_SIZE = 10485760;
+	const MAX_IMAGE_TOTAL = 104857600;
+	const MAX_IMAGES = 200;
 	public static function bypass_enabled() { return $GLOBALS['bypassed'] ?? true; }
 	public static function pending( $event, $token ) {
 		if ( 'expired' === $token ) {
@@ -60,6 +64,11 @@ $GLOBALS['query'] = array( 'bonus_feedback' => $feedback_id, 'clamav_check' => s
 $GLOBALS['transients']['mrsa_bonus_feedback_1_' . $feedback_id] = array( 'event_id' => 7, 'step' => 'setup', 'severity' => 'success', 'message' => 'Check completed.' );
 $GLOBALS['transients']['mrsa_clamav_check_1_' . str_repeat( 'b', 24 )] = array( 'event_id' => 7, 'passed' => false, 'message' => 'ClamAV unavailable.' );
 $html = render_library();
+if ( in_array( '--preview', $argv ?? array(), true ) ) {
+	echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="admin.css"><title>Sequential upload preview</title></head><body><main class="mrsa">' . $html . '</main><script src="admin.js"></script></body></html>';
+	exit;
+}
+check( false !== strpos( $html, 'mrsa-image-queue' ) && false !== strpos( $html, 'data-max-image="10485760"' ) && false === strpos( $html, 'multiple webkitdirectory' ), 'sequential image queue uses server limits and falls back to a single uploaded image without JavaScript' );
 check( strpos( $html, 'Load via URL' ) < strpos( $html, 'name="allow_partial_images"' ) && strpos( $html, 'name="bonus_images[]"' ) < strpos( $html, 'name="allow_partial_images"' ), 'partial-image checkbox follows both file chooser and URL load button' );
 check( false !== strpos( $html, 'value="url">Load via URL</button><details class="mrsa-url-help">' ) && false !== strpos( $html, 'class="mrsa-url-help-content">Public URLs must use HTTPS' ), 'URL requirements live in help immediately to the right of load button' );
 $setup = section( $html, 'setup' );

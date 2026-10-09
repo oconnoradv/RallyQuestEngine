@@ -9,6 +9,7 @@ final class MRSA_Admin {
 		add_action( 'admin_post_mrsa_save', array( __CLASS__, 'save' ) );
 		add_action( 'admin_post_mrsa_diagnostics_download', array( __CLASS__, 'diagnostics_download' ) );
 		add_action( 'admin_post_mrsa_diagnostics_check', array( __CLASS__, 'diagnostics_check' ) );
+		add_action( 'admin_post_mrsa_image_queue', array( __CLASS__, 'image_queue' ) );
 	}
 
 	public static function menu() {
@@ -32,7 +33,8 @@ final class MRSA_Admin {
 		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'admin_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit', 'admin_page_mrsa-event-roster', 'admin_page_mrsa-event-enroll', 'admin_page_mrsa-rider-score', 'admin_page_mrsa-bonus-edit' ), true ) ) {
 			return;
 		}
-		$asset_version = MRSA_VERSION . '.' . MRSA_DB_VERSION;
+		// Rebuilt releases can retain their version; invalidate cached UI assets when their contents change.
+		$asset_version = MRSA_VERSION . '.' . MRSA_DB_VERSION . '.' . substr( hash_file( 'sha256', dirname( MRSA_FILE ) . '/assets/admin.js' ), 0, 12 ) . '.' . substr( hash_file( 'sha256', dirname( MRSA_FILE ) . '/assets/admin.css' ), 0, 12 );
 		wp_enqueue_style( 'mrsa-admin', plugins_url( 'assets/admin.css', MRSA_FILE ), array(), $asset_version );
 		wp_enqueue_script( 'mrsa-admin', plugins_url( 'assets/admin.js', MRSA_FILE ), array(), $asset_version, true );
 		if ( 'admin_page_mrsa-event-edit' === $hook ) {
@@ -753,6 +755,62 @@ final class MRSA_Admin {
 			throw new RuntimeException( 'Select a supported registration status.' );
 		}
 		self::checked( $wpdb->update( MRSA::table( 'registrations' ), array( 'registration_status' => $status ), array( 'id' => $id, 'event_id' => $event_id ) ) );
+	}
+
+	public static function image_queue() {
+		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! MRSA::access() ) {
+			wp_send_json_error( array( 'message' => 'Unauthorized image upload request.' ), 403 );
+		}
+		check_admin_referer( 'mrsa_save' );
+		try {
+			$event_id = self::integer( self::posted( 'event_id' ), 1 );
+			self::require_event( $event_id );
+			$result = self::image_queue_operation( $event_id, self::posted( 'queue_operation' ) );
+			wp_send_json_success( $result );
+		} catch ( RuntimeException $exception ) {
+			wp_send_json_error( array( 'message' => $exception->getMessage() ), 400 );
+		}
+	}
+
+	/** Reuse single-use, user/event-bound scan reviews; never accept a combined file upload. */
+	private static function image_queue_operation( $event_id, $operation ) {
+		if ( 'upload' === $operation ) {
+			$file = $_FILES['bonus_images'] ?? null;
+			if ( ! is_array( $file ) || ! isset( $file['name'] ) || ! is_array( $file['name'] ) || count( $file['name'] ) !== 1 || array_keys( $file['name'] ) !== array( 0 ) ) {
+				throw new RuntimeException( 'Upload exactly one image per request.' );
+			}
+			if ( 'images' !== self::posted( 'import_step' ) || self::posted( 'gallery_url' ) || isset( $_FILES['bonus_file'] ) ) {
+				throw new RuntimeException( 'The sequential upload accepts only a local image, not listings or URL sources.' );
+			}
+			$result = MRSA_Bonus::import( $event_id );
+			if ( isset( $result['pending_token'] ) ) {
+				$pending = MRSA_Bonus::pending( $event_id, $result['pending_token'] );
+				return array(
+					'state' => 'review', 'token' => $result['pending_token'],
+					'message' => $result['message'], 'scans' => $pending['scans'],
+					'errors' => $pending['errors'], 'can_approve' => (bool) $pending['can_approve'],
+					'unscanned' => ! empty( $pending['unscanned'] ),
+					'scanner_error' => in_array( 'Scanner error', array_column( $pending['scans'], 'status' ), true ),
+				);
+			}
+			return array( 'state' => 'imported', 'message' => $result['message'], 'errors' => $result['errors'] );
+		}
+		if ( ! in_array( $operation, array( 'approve', 'bypass', 'cancel' ), true ) ) {
+			throw new RuntimeException( 'Unsupported sequential image operation.' );
+		}
+		$token = self::posted( 'pending_token' );
+		$pending = MRSA_Bonus::pending( $event_id, $token );
+		if ( 'images' !== $pending['import_step'] || count( $pending['images'] ) > 1 || $pending['rows'] ) {
+			throw new RuntimeException( 'This review is not for a single image.' );
+		}
+		if ( 'approve' === $operation && '1' !== self::posted( 'scan_approval' ) ) {
+			throw new RuntimeException( 'Review the scan results and explicitly approve this image.' );
+		}
+		if ( 'bypass' === $operation && '1' !== self::posted( 'bypass_confirmation' ) ) {
+			throw new RuntimeException( 'Confirm the risk of importing this image without antivirus scanning.' );
+		}
+		$result = MRSA_Bonus::approve( $event_id, $token, 'cancel' === $operation, 'bypass' === $operation );
+		return array( 'state' => 'cancel' === $operation ? 'cancelled' : 'imported', 'message' => $result['message'], 'errors' => $result['errors'] );
 	}
 
 	public static function diagnostics_hash( $operation, $code ) {
