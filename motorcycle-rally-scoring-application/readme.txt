@@ -64,7 +64,10 @@ Audit and Destructive operations default to minimized. Failed configuration
 checks keep their section expanded and highlight failed rows red. With no
 failures, Manual review results have an orange outline and all-passed results
 have a green outline; both default to minimized. Failed results use a red
-outline. After a report expires, its last outcome retains the border color
+outline.
+When minimized, the configuration panel also uses a matching pale green,
+orange or red background; expanded panels retain their neutral background.
+After a report expires, its last outcome retains the border color
 and expanded/minimized default; the heading says Last check and Results
 expired. Only the last outcome is retained per administrator/site; expired
 diagnostic details are not retained. Before any check, the section remains
@@ -237,6 +240,7 @@ No. Rider and pillion prices are event configuration values only.
 == Changelog ==
 
 = 0.1.12 =
+* Rebuilt this release with matching green/orange/red background tints for minimized configuration panels; expanded panels remain neutral.
 * Added a downloadable sample bonus-listing XLSX in Scoring Step 1, with the five required headings and a validated example row.
 * Changed unsuccessful ClamAV diagnostic checks to Manual review when the current administrator has an audited scoring-page override; retained Passed for working scanners and unchanged import safeguards.
 * Preserved the last diagnostic outcome's green/orange/red border after report expiration, with explicit Last check / Results expired labeling.
