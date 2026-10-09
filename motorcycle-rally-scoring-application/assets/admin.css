@@ -11,6 +11,7 @@
 .mrsa .mrsa-check-review { color: #924500; }
 .mrsa .mrsa-configuration-passed { border-color: #008a20; }
 .mrsa .mrsa-configuration-review { border-color: #b85c00; }
+.mrsa .mrsa-configuration-failed { border-color: #b32d2e; }
 .mrsa .mrsa-configuration-failed-row > td { background: #fcf0f1; color: #3c1718; }
 .mrsa .mrsa-recommended-plugins { border-color: #008a20; background: #edfaef; color: #004d16; }
 .mrsa .mrsa-recommended-plugins h2 { margin-top: 0; }

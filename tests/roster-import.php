@@ -47,6 +47,7 @@ final class Roster_Test_DB {
 	}
 }
 function sanitize_text_field( $value ) { return $value; }
+function sanitize_textarea_field( $value ) { return $value; }
 function sanitize_email( $value ) { return $value; }
 function is_email( $value ) { return filter_var( $value, FILTER_VALIDATE_EMAIL ); }
 function wp_unslash( $value ) { return $value; }
@@ -153,6 +154,20 @@ catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(),
 PclZip::$entries['xl/vbaProject.bin'] = 'unsafe';
 try { MRSA_Bonus::read_spreadsheet( 'fixture.xlsx', 'xlsx' ); throw new LogicException( 'Macro workbook accepted.' ); }
 catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), 'macros' ) !== false, 'roster XLSX macros rejected' ); }
+
+$sample = new PharData( __DIR__ . '/../motorcycle-rally-scoring-application/samples/bonus-listing.xlsx' );
+PclZip::$entries = array();
+foreach ( new RecursiveIteratorIterator( $sample ) as $entry ) {
+	$path = str_replace( '\\', '/', $entry->getPathname() );
+	$name = substr( $path, strpos( $path, 'bonus-listing.xlsx/' ) + strlen( 'bonus-listing.xlsx/' ) );
+	PclZip::$entries[ $name ] = $entry->getContent();
+}
+list( $header, $rows ) = MRSA_Bonus::read_spreadsheet( 'sample.xlsx', 'xlsx' );
+check( array_values( $header ) === array( 'Bonus ID', 'Bonus Description', 'Bonus Category', 'Bonus Points', 'Bonus Locations (GPS coordinates)' ), 'sample bonus XLSX parses with all five required headings' );
+$normalize = new ReflectionMethod( 'MRSA_Bonus', 'normalize_rows' );
+if ( PHP_VERSION_ID < 80100 ) { $normalize->setAccessible( true ); }
+$bonuses = $normalize->invoke( null, $header, $rows );
+check( count( $bonuses ) === 1 && $bonuses[0]['bonus_id'] === 'B12' && $bonuses[0]['points'] === 100 && $bonuses[0]['locations'] === '47.6205000,-122.3493000', 'sample bonus XLSX example passes importer validation' );
 
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-views.php';
 $_GET = array( 'event_id' => '7' );

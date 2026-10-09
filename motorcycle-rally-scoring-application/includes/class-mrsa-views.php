@@ -814,7 +814,7 @@ final class MRSA_Views {
 		self::form( 'bonus_import', array( 'event_id' => $event_id, 'import_step' => 'listing' ), 'mrsa-panel mrsa-edit-form', '', 'multipart/form-data' );
 		echo '<h4>Step 1: Import the bonus listing</h4>';
 		echo '<label class="mrsa-field"><span>Bonus listing spreadsheet (XLSX or CSV)</span><input type="file" name="bonus_file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label>';
-		echo '<p>Columns: Bonus ID, Bonus Description, Bonus Category, Bonus Points, Bonus Locations (GPS coordinates). Enter locations as latitude,longitude.</p>';
+		echo '<p>Columns: Bonus ID, Bonus Description, Bonus Category, Bonus Points, Bonus Locations (GPS coordinates). Enter locations as latitude,longitude.</p><p><a href="' . esc_url( plugins_url( 'samples/bonus-listing.xlsx', MRSA_FILE ) ) . '" download>Download sample bonus listing XLSX</a>. Replace or remove the example row before importing; keep the column headings on the first worksheet.</p>';
 		self::button( 'Validate and Import Bonus Listing' );
 		echo '</form></div><div id="mrsa-import-images">';
 		self::form( 'bonus_import', array( 'event_id' => $event_id, 'import_step' => 'images' ), 'mrsa-panel mrsa-edit-form', '', 'multipart/form-data' );
@@ -1082,9 +1082,14 @@ final class MRSA_Views {
 		if ( $has_report ) {
 			$statuses = array_column( $report['rows'], 'status' );
 			$state = in_array( 'failed', $statuses, true ) ? 'failed' : ( in_array( 'review', $statuses, true ) ? 'review' : 'passed' );
+		} else {
+			$last_state = get_user_option( 'mrsa_configuration_last_state', get_current_user_id() );
+			if ( isset( $labels[ $last_state ] ) ) {
+				$state = $last_state;
+			}
 		}
-		$expired_pass = ! $has_report && 'passed' === get_user_option( 'mrsa_configuration_last_state', get_current_user_id() );
-		echo '<details class="mrsa-panel mrsa-diagnostics-section' . ( $state ? ' mrsa-configuration-' . esc_attr( $state ) : '' ) . '" id="mrsa-configuration"' . ( ( ! $has_report && ! $expired_pass ) || 'failed' === $state ? ' open' : '' ) . '><summary><h3>Required Plugins and Configuration</h3>' . ( $state ? ' <strong class="mrsa-check-' . esc_attr( $state ) . '">' . esc_html( $labels[ $state ] ) . '</strong>' : ( $expired_pass ? ' <span>Results expired</span>' : '' ) ) . '</summary><p>Check the current WordPress/PHP environment, MRSA database, local ClamAV scanner, storage, and import settings. Action Scheduler is required; Gallery for SpotWalla remains optional.</p><p><strong>MRSA limits:</strong> spreadsheets and individual images: 10 MB; remote downloads/ZIP archives: 50 MB; accepted images per queue: 100 MB / 200 images; spreadsheet rows: 5,000. Server settings are checked against these existing safety limits. Sequential image uploads need at least 11 MB post capacity including overhead for each 10 MB file.</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="mrsa_diagnostics_check">';
+		$status_label = $state ? ( $has_report ? $labels[ $state ] : 'Last check: ' . $labels[ $state ] . ' — Results expired' ) : '';
+		echo '<details class="mrsa-panel mrsa-diagnostics-section' . ( $state ? ' mrsa-configuration-' . esc_attr( $state ) : '' ) . '" id="mrsa-configuration"' . ( ! $state || 'failed' === $state ? ' open' : '' ) . '><summary><h3>Required Plugins and Configuration</h3>' . ( $state ? ' <strong class="mrsa-check-' . esc_attr( $state ) . '">' . esc_html( $status_label ) . '</strong>' : '' ) . '</summary><p>Check the current WordPress/PHP environment, MRSA database, local ClamAV scanner, storage, and import settings. Action Scheduler is required; Gallery for SpotWalla remains optional.</p><p><strong>MRSA limits:</strong> spreadsheets and individual images: 10 MB; remote downloads/ZIP archives: 50 MB; accepted images per queue: 100 MB / 200 images; spreadsheet rows: 5,000. Server settings are checked against these existing safety limits. Sequential image uploads need at least 11 MB post capacity including overhead for each 10 MB file.</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="mrsa_diagnostics_check">';
 		wp_nonce_field( 'mrsa_diagnostics_check' );
 		echo '<button type="submit" class="button button-primary">Check Required Plugins and Configuration</button></form>';
 		$plugin = MRSA_Diagnostics::action_scheduler();

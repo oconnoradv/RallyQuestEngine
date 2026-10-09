@@ -4,7 +4,7 @@ Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.1.11
+Stable tag: 0.1.12
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -32,6 +32,9 @@ Motorcycle Rally Scoring Application provides administrative tabs for:
 
 The Bonus Point Library stores event-specific bonus IDs, descriptions,
 categories, points, one latitude/longitude pair, and matching image files.
+Step 1 offers Download sample bonus listing XLSX with all five required
+column headings and one example row. Replace/remove the example before
+importing and retain the headings on the first worksheet.
 First import the CSV or XLSX listing (step 1), then import images from a local
 directory or public HTTPS image, ZIP, or standard directory-listing URLs
 (step 2). Each step scans files locally with ClamAV, shows the scan report,
@@ -60,16 +63,22 @@ Each Diagnostics section has a native expand/collapse control. Administrative
 Audit and Destructive operations default to minimized. Failed configuration
 checks keep their section expanded and highlight failed rows red. With no
 failures, Manual review results have an orange outline and all-passed results
-have a green outline; both default to minimized. Once an all-passed report
-expires, the section remains minimized without highlighting and says Results
+have a green outline; both default to minimized. Failed results use a red
+outline. After a report expires, its last outcome retains the border color
+and expanded/minimized default; the heading says Last check and Results
 expired. Only the last outcome is retained per administrator/site; expired
-diagnostic details are not retained. Missing reports or expired failed/manual
-review reports remain neutral and expanded so the check can be rerun.
+diagnostic details are not retained. Before any check, the section remains
+neutral and expanded so the check can be run.
 Failed checks include expanded How to fix this requirement instructions;
 Manual review items have expandable How to verify this requirement guidance.
 Instructions cover WordPress/plugin menus, web-serving PHP settings, database
 repair precautions, private storage, ClamAV and hosting/cron configuration.
 Back up and test server changes on staging; rerun the check after repairs.
+An unsuccessful ClamAV live check is Manual review when the current
+administrator has an audited override from the scoring page. A working
+scanner remains Passed. Overrides do not change import safeguards or make
+roster imports available without ClamAV. Rerun Diagnostics after changing
+the override to refresh the report.
 Step 0 on the import screen provides optional setup commands and configuration
 guidance plus a Check ClamAV Connection button. Run installation commands in
 the server terminal with server-administrator access, not WordPress. Existing
@@ -226,6 +235,13 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.1.12 =
+* Added a downloadable sample bonus-listing XLSX in Scoring Step 1, with the five required headings and a validated example row.
+* Changed unsuccessful ClamAV diagnostic checks to Manual review when the current administrator has an audited scoring-page override; retained Passed for working scanners and unchanged import safeguards.
+* Preserved the last diagnostic outcome's green/orange/red border after report expiration, with explicit Last check / Results expired labeling.
+* Retained minimized defaults for passed/manual-review outcomes and expanded defaults for failed outcomes without retaining expired report details.
+* Added regression coverage for the bundled XLSX template, override revocation/account isolation and expired-result presentation.
 
 = 0.1.11 =
 * Added Import Riders beside the renamed Add Rider roster button, opening a dedicated event-specific CSV/XLSX import screen with sample download and return navigation.

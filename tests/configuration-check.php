@@ -65,6 +65,19 @@ foreach ( array(
 	check( strpos( row_named( $report, $name )['remedy'], $instruction ) !== false, 'actionable remediation provided for ' . $name );
 }
 check( row_named( $report, 'ClamAV live scan' )['status'] === 'failed' && row_named( $report, 'ClamAV policies and signatures' )['status'] === 'review', 'unavailable scanner fails while unverified policies require manual review' );
+$audit_before = $wpdb->tables['import_audit'];
+$wpdb->tables['import_audit'][] = array( 'user_id' => get_current_user_id(), 'action' => 'bypass_enabled' );
+$overridden = row_named( MRSA_Diagnostics::check(), 'ClamAV live scan' );
+check( $overridden['status'] === 'review' && strpos( $overridden['detail'], 'override is enabled' ) !== false, 'unavailable scanner with current administrator override requires manual review rather than failing' );
+$GLOBALS['scanner_ready'] = true;
+check( row_named( MRSA_Diagnostics::check(), 'ClamAV live scan' )['status'] === 'passed', 'working scanner remains passed even with override' );
+$GLOBALS['scanner_ready'] = false;
+$wpdb->tables['import_audit'][] = array( 'user_id' => get_current_user_id(), 'action' => 'bypass_disabled' );
+check( row_named( MRSA_Diagnostics::check(), 'ClamAV live scan' )['status'] === 'failed', 'revoked override restores unavailable scanner failure' );
+$wpdb->tables['import_audit'] = $audit_before;
+$wpdb->tables['import_audit'][] = array( 'user_id' => 99, 'action' => 'bypass_enabled' );
+check( row_named( MRSA_Diagnostics::check(), 'ClamAV live scan' )['status'] === 'failed', 'another administrator override does not change current diagnostics' );
+$wpdb->tables['import_audit'] = $audit_before;
 check( row_named( $report, 'MRSA database tables' )['status'] === 'passed', 'all InnoDB tables pass metadata checks' );
 $wpdb->table_engine = 'MyISAM';
 check( row_named( MRSA_Diagnostics::check(), 'MRSA database tables' )['status'] === 'failed', 'nontransactional tables are flagged' );
@@ -101,10 +114,11 @@ check( strpos( render_configuration(), '&lt;unsafe&gt;' ) === false, 'reports ar
 check( strpos( render_configuration(), 'mrsa-diagnostics-section" id="mrsa-configuration" open' ) !== false, 'missing or expired report stays neutral and expanded to run checks' );
 update_user_option( 2, 'mrsa_configuration_last_state', 'passed' );
 $html = render_configuration();
-check( strpos( $html, 'id="mrsa-configuration"><summary>' ) !== false && strpos( $html, 'Results expired' ) !== false && strpos( $html, 'mrsa-configuration-passed' ) === false, 'expired passed report is neutral, minimized and explicitly expired' );
+check( strpos( $html, 'mrsa-configuration-passed" id="mrsa-configuration"><summary>' ) !== false && strpos( $html, 'Last check: Passed' ) !== false && strpos( $html, 'Results expired' ) !== false && strpos( $html, '&lt;unsafe&gt;' ) === false, 'expired passed report retains green border, minimized state and expired label without stale details' );
 foreach ( array( 'failed', 'review' ) as $state ) {
 	update_user_option( 2, 'mrsa_configuration_last_state', $state );
-	check( strpos( render_configuration(), 'id="mrsa-configuration" open' ) !== false, 'expired ' . $state . ' report remains expanded' );
+	$html = render_configuration();
+	check( strpos( $html, 'mrsa-configuration-' . $state . '" id="mrsa-configuration"' . ( 'failed' === $state ? ' open' : '' ) . '><summary>' ) !== false && strpos( $html, 'Results expired' ) !== false, 'expired ' . $state . ' report retains its border and result-based default' );
 }
 $GLOBALS['authorized'] = false;
 try { MRSA_Diagnostics::check(); throw new LogicException( 'Unauthorized check accepted.' ); }
