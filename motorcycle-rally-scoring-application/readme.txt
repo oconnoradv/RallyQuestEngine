@@ -3,7 +3,7 @@ Contributors: oconnoradv
 Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
-Stable tag: 0.1.3
+Stable tag: 0.1.4
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -140,7 +140,7 @@ No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
 
-= Unreleased =
+= 0.1.4 =
 * Limit motorcycle catalog imports and manual catalog entries to make and model.
 * Add transactional bulk selection and deletion for unused motorcycle catalog records.
 * Filter rider motorcycles by make/model and store an optional rider-specific manual year.
