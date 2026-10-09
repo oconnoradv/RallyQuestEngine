@@ -45,7 +45,8 @@ final class MRSA_Views {
 	private static function notice() {
 		$notice = MRSA_Admin::query( 'notice' );
 		if ( $notice ) {
-			echo '<div class="notice notice-success"><p>' . esc_html( $notice ) . '</p></div>';
+			$class = false !== strpos( $notice, 'WARNING: imported without an antivirus security scan' ) ? 'notice-warning' : 'notice-success';
+			echo '<div class="notice ' . esc_attr( $class ) . '"><p>' . esc_html( $notice ) . '</p></div>';
 		}
 	}
 
@@ -113,7 +114,7 @@ final class MRSA_Views {
 		}
 		$global = MRSA::global_access();
 		$tab = MRSA_Admin::query( 'tab', 'events' );
-		$tabs = array( 'bikes' => 'Bike Setup', 'riders' => 'Rider Setup', 'events' => 'Event Setup', 'rosters' => 'Event Rosters', 'scoring' => 'Scoring', 'results' => 'Overall Results', 'diagnostics' => 'Diagnostics', 'about' => 'About' );
+		$tabs = array( 'riders' => 'Riders', 'events' => 'Events', 'rosters' => 'Rosters', 'scoring' => 'Scoring', 'results' => 'Results', 'bikes' => 'Bikes', 'diagnostics' => 'Diagnostics', 'about' => 'About' );
 		if ( ! isset( $tabs[ $tab ] ) || ( ! $global && in_array( $tab, array( 'bikes', 'diagnostics' ), true ) ) ) {
 			wp_die( esc_html( 'This area is restricted to global administrators.' ), '', array( 'response' => 403 ) );
 		}
@@ -186,6 +187,7 @@ final class MRSA_Views {
 		if ( $id && ! $bike ) {
 			wp_die( esc_html( 'Motorcycle not found.' ), '', array( 'response' => 404 ) );
 		}
+		echo '<div class="mrsa-bike-entry">';
 		self::form( 'bike', array( 'id' => $id ), 'mrsa-panel' );
 		echo '<h3>' . ( $id ? 'Edit motorcycle #' . esc_html( $id ) : 'Manual motorcycle entry' ) . '</h3><div class="mrsa-grid">';
 		self::field( 'Make', 'make', $bike['make'] ?? '', 'text', true, array( 'maxlength' => 80 ) );
@@ -193,6 +195,12 @@ final class MRSA_Views {
 		echo '</div>';
 		self::button( $id ? 'Save motorcycle' : 'Add motorcycle' );
 		echo '</form>';
+		self::form( 'source_import', array(), 'mrsa-panel' );
+		echo '<h3>Import motorcycle models for a make</h3><p>Source: <a href="' . esc_url( MRSA_Importer::SOURCE ) . '" target="_blank" rel="noopener noreferrer">NHTSA Product Information Catalog and Vehicle Listing (vPIC) API<span class="screen-reader-text"> (opens in a new tab)</span></a>. Enter one make. Make/model records from Get Models for Make are stored only when the motorcycle-filtered NHTSA response confirms the same model ID. No year is imported. No request is made on activation or page load.</p>';
+		self::field( 'Make', 'import_make', '', 'text', true, array( 'maxlength' => 80, 'placeholder' => 'Honda' ) );
+		echo '<label><input type="checkbox" name="source_consent" value="1" required> I understand that this sends the entered make to NHTSA and imports only models independently confirmed as Motorcycles.</label><p>Two HTTPS requests, each with a 256 KB response limit and no redirects. Unavailable, malformed, unconfirmed, and non-motorcycle results are rejected. Manual motorcycle entry remains available.</p>';
+		self::button( 'Import motorcycle models' );
+		echo '</form></div>';
 		$q = substr( MRSA_Admin::query( 'q' ), 0, 100 );
 		$where = $q ? ' WHERE make LIKE %s OR model LIKE %s' : '';
 		$args = $q ? array_fill( 0, 2, '%' . $wpdb->esc_like( $q ) . '%' ) : array();
@@ -214,12 +222,6 @@ final class MRSA_Views {
 		self::end_table();
 		self::form( 'delete_bikes', array(), 'mrsa-panel', 'mrsa-bulk-delete-bikes' );
 		echo '<p>Select multiple catalog rows above, then delete them together. If any selected motorcycle is assigned to a rider, none are deleted.</p><button type="submit" class="button" data-confirm="Delete all selected motorcycle catalog records?">Delete selected motorcycles</button></form>';
-		echo '<h2>Import motorcycle models for a make</h2><p>Source: <a href="' . esc_url( MRSA_Importer::SOURCE ) . '" target="_blank" rel="noopener noreferrer">NHTSA Product Information Catalog and Vehicle Listing (vPIC) API</a>. Enter one make. Make/model records from Get Models for Make are stored only when the motorcycle-filtered NHTSA response confirms the same model ID. No year is imported. No request is made on activation or page load.</p>';
-		self::form( 'source_import', array(), 'mrsa-panel mrsa-edit-form' );
-		self::field( 'Make', 'import_make', '', 'text', true, array( 'maxlength' => 80, 'placeholder' => 'Honda' ) );
-		echo '<label><input type="checkbox" name="source_consent" value="1" required> I understand that this sends the entered make to NHTSA and imports only models independently confirmed as Motorcycles.</label><p>Two HTTPS requests, each with a 256 KB response limit and no redirects. Unavailable, malformed, unconfirmed, and non-motorcycle results are rejected. Manual motorcycle entry remains available.</p>';
-		self::button( 'Import motorcycle models' );
-		echo '</form>';
 	}
 
 	private static function rider_setup() {
@@ -277,7 +279,7 @@ final class MRSA_Views {
 				echo 'Read only | ';
 			}
 			echo '<a href="' . esc_url( MRSA_Admin::url( 'rosters', array( 'rider_id' => $row['id'] ) ) ) . '">Events</a> | ';
-			echo '<a href="' . esc_url( MRSA_Admin::url( 'results', array( 'rider_id' => $row['id'] ) ) ) . '">Overall Results</a>';
+			echo '<a href="' . esc_url( MRSA_Admin::url( 'results', array( 'rider_id' => $row['id'] ) ) ) . '">Results</a>';
 			echo '</td></tr>';
 		}
 		self::end_table();
@@ -330,7 +332,7 @@ final class MRSA_Views {
 		self::header();
 		$return_url = MRSA_Admin::query( 'return_url' );
 		$back_url = $return_url ? wp_validate_redirect( $return_url, MRSA_Admin::url( 'riders' ) ) : MRSA_Admin::url( 'riders' );
-		echo '<h2>' . esc_html( $global ? ( $id ? 'Edit Rider' : 'Add Rider' ) : 'Rider Details' ) . '</h2><p><a class="button" href="' . esc_url( $back_url ) . '">' . esc_html( $return_url ? 'Back to Event Roster' : 'Back to Rider Setup' ) . '</a></p>';
+		echo '<h2>' . esc_html( $global ? ( $id ? 'Edit Rider' : 'Add Rider' ) : 'Rider Details' ) . '</h2><p><a class="button" href="' . esc_url( $back_url ) . '">' . esc_html( $return_url ? 'Back to Event Roster' : 'Back to Riders' ) . '</a></p>';
 		self::notice();
 		if ( $global ) {
 			self::rider_form( $id, $rider );
@@ -364,7 +366,7 @@ final class MRSA_Views {
 
 	private static function rider_events( $id ) {
 		global $wpdb;
-		echo '<h3>Registered events (read-only)</h3><p>Status is automatic unless an event administrator selects a manual result on Overall Results.</p>';
+		echo '<h3>Registered events (read-only)</h3><p>Result status is automatic unless a manual status was previously recorded. Status is read-only on Results.</p>';
 		$sql = 'SELECT reg.*,e.name,e.min_finisher_points FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'events' ) . ' e ON e.id=reg.event_id WHERE reg.rider_id=%d';
 		$args = array( $id );
 		if ( ! MRSA::global_access() ) {
@@ -410,7 +412,7 @@ final class MRSA_Views {
 			echo '<td>';
 			self::link( 'Configure', 'event-edit', array( 'event_id' => $event['id'] ) );
 			echo ' | ';
-			self::link( 'Registrations', 'rosters', array( 'event_id' => $event['id'] ) );
+			self::link( 'Roster', 'rosters', array( 'event_id' => $event['id'] ) );
 			echo ' | ';
 			self::link( 'Scoring', 'scoring', array( 'event_id' => $event['id'] ) );
 			echo '</td></tr>';
@@ -490,7 +492,7 @@ final class MRSA_Views {
 		}
 		echo '<div class="wrap mrsa">';
 		self::header();
-		echo '<h2>' . esc_html( $id ? 'Edit Event' : 'Add Event' ) . '</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'events' ) ) . '">Back to Event Setup</a></p>';
+		echo '<h2>' . esc_html( $id ? 'Edit Event' : 'Add Event' ) . '</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'events' ) ) . '">Back to Events</a></p>';
 		self::notice();
 		self::event_form( $id, $event );
 		if ( $id && MRSA::global_access() ) {
@@ -589,7 +591,7 @@ final class MRSA_Views {
 		$used = array_fill_keys( array_map( 'intval', $wpdb->get_col( $wpdb->prepare( 'SELECT bib FROM ' . MRSA::table( 'registrations' ) . ' WHERE event_id=%d', $id ) ) ), true );
 		echo '<div class="wrap mrsa">';
 		self::header();
-		echo '<h2>Add Rider to Event — ' . esc_html( $event['name'] ) . '</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'rosters', array( 'event_id' => $id ) ) ) . '">Back to Event Rosters</a></p>';
+		echo '<h2>Add Rider to Event — ' . esc_html( $event['name'] ) . '</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'rosters', array( 'event_id' => $id ) ) ) . '">Back to Rosters</a></p>';
 		if ( $available && count( $used ) < (int) $event['max_bib'] ) {
 			self::form( 'registration', array( 'event_id' => $id ), 'mrsa-panel mrsa-edit-form' );
 			echo '<label class="mrsa-field"><span>Rider not already associated with this event</span><select name="rider_id" required><option value="">Choose a rider</option>';
@@ -713,14 +715,83 @@ final class MRSA_Views {
 	private static function bonus_library( $event ) {
 		global $wpdb;
 		$event_id = (int) $event['id'];
-		echo '<p>Import bonus listings from CSV or XLSX and add images from a local folder or public image URL. Image filenames must be the Bonus ID plus an image extension. Re-importing an ID updates its listing without removing other IDs.</p>';
-		self::form( 'bonus_import', array( 'event_id' => $event_id ), 'mrsa-panel mrsa-edit-form', '', 'multipart/form-data' );
-		echo '<h4>Import bonus listings and gallery images</h4>';
-		echo '<label class="mrsa-field"><span>Bonus listing spreadsheet (CSV or XLSX)</span><input type="file" name="bonus_file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>';
+		$pending_token = MRSA_Admin::query( 'bonus_pending' );
+		if ( $pending_token ) {
+			try {
+				$pending = MRSA_Bonus::pending( $event_id, $pending_token );
+			} catch ( RuntimeException $exception ) {
+				$pending = null;
+				echo '<div class="notice notice-warning inline"><p>' . esc_html( $exception->getMessage() ) . '</p></div>';
+			}
+			if ( $pending ) {
+				echo '<section class="mrsa-panel"><h3>Review security scan results</h3><p>No listings or images have been imported yet. This review expires after 15 minutes. A passed scan means no threat was detected, not a guarantee that a file is harmless.</p>';
+				echo '<p>' . esc_html( count( $pending['rows'] ) . ' bonus listings and ' . count( $pending['images'] ) . ' validated images ready for approval.' ) . '</p>';
+				self::table( array( 'File', 'Scan status', 'Result' ) );
+				foreach ( $pending['scans'] as $scan ) {
+					echo '<tr><td>' . esc_html( $scan['file'] ) . '</td><td>' . esc_html( $scan['status'] ) . '</td><td>' . esc_html( $scan['detail'] ) . '</td></tr>';
+				}
+				self::end_table();
+				if ( $pending['errors'] ) {
+					echo '<h4>Excluded files and source/validation errors</h4><ul class="ul-disc mrsa-import-errors">';
+					foreach ( $pending['errors'] as $error ) {
+						echo '<li>' . esc_html( $error ) . '</li>';
+					}
+					echo '</ul>';
+				}
+				if ( $pending['can_approve'] ) {
+					if ( ! empty( $pending['unscanned'] ) ) {
+						echo '<div class="notice notice-warning inline"><p><strong>No antivirus security scan was performed.</strong> ClamAV is unavailable. Format and executable-content checks do not replace virus scanning. Your username, UTC date/time, event, and unscanned import activity will be recorded in the audit table.</p></div>';
+						self::form( 'bonus_import_bypass', array( 'event_id' => $event_id, 'pending_token' => $pending_token ) );
+						echo '<label><input type="checkbox" name="bypass_confirmation" value="1" required> I accept the risk and confirm importing these validated files without antivirus scanning. Remember this choice for my account on this site and import without further approval prompts only while ClamAV is unavailable.</label><p>';
+						self::button( 'Confirm Bypass and Import' );
+					} else {
+						self::form( 'bonus_import_approve', array( 'event_id' => $event_id, 'pending_token' => $pending_token ) );
+						echo '<label><input type="checkbox" name="scan_approval" value="1" required> I have reviewed the scan results and approve importing only the validated listings/images into this event.</label><p>';
+						self::button( 'Approve and Import' );
+					}
+					echo '</p></form>';
+				} else {
+					echo '<div class="notice notice-error inline"><p>Import approval is blocked. Resolve scanner or file errors and try again. Scanner errors always block the batch; the unavailable-ClamAV bypass cannot override a malware detection or validation failure.</p></div>';
+				}
+				self::form( 'bonus_import_cancel', array( 'event_id' => $event_id, 'pending_token' => $pending_token ) );
+				self::button( 'Cancel and Remove Staged Files' );
+				echo '</form></section>';
+			}
+		}
+		$report_id = MRSA_Admin::query( 'bonus_report' );
+		if ( preg_match( '/^[A-Za-z0-9]{24}$/D', $report_id ) ) {
+			$report = get_transient( 'mrsa_bonus_report_' . get_current_user_id() . '_' . $report_id );
+			if ( $report && (int) $report['event_id'] === $event_id ) {
+				echo '<div class="notice notice-warning inline"><h4>Bonus image import errors</h4><p>See the import summary above for the number of images saved. Correct the following image/source errors and retry those files.</p><ul class="ul-disc mrsa-import-errors">';
+				foreach ( $report['errors'] as $error ) {
+					echo '<li>' . esc_html( $error ) . '</li>';
+				}
+				echo '</ul></div>';
+			} else {
+				echo '<div class="notice notice-warning inline"><p>The image import report has expired or is unavailable for this event. Reports remain available for 15 minutes.</p></div>';
+			}
+		}
+		echo '<h4>Bulk Import Bonus Listing</h4><ol><li>Validate and import the bonus listing XLSX or CSV.</li><li>Validate and import the bonus images.</li></ol><p>ClamAV scans require review and approval. If the daemon is unavailable, you can explicitly confirm a per-account bypass; later unscanned imports then proceed without another approval prompt and are audited. Scanner errors, detected malware, and unsafe content cannot be bypassed. Re-importing a Bonus ID updates its listing without removing other IDs.</p>';
+		self::clamav_setup( $event_id );
+		if ( MRSA_Bonus::bypass_enabled() ) {
+			echo '<div class="notice notice-warning inline"><p><strong>Your ClamAV bypass is enabled on this site.</strong> When ClamAV is unavailable, valid imports run without an approval prompt and without an antivirus security scan. Each import is logged with your username and UTC date/time. When ClamAV is available, scanning and approval remain required.</p>';
+			self::form( 'bonus_import_require_scan', array( 'event_id' => $event_id ) );
+			self::button( 'Restore Mandatory ClamAV Scanning' );
+			echo '</form></div>';
+		}
+		self::form( 'bonus_import', array( 'event_id' => $event_id, 'import_step' => 'listing' ), 'mrsa-panel mrsa-edit-form', '', 'multipart/form-data' );
+		echo '<h4>Step 1: Import the bonus listing</h4>';
+		echo '<label class="mrsa-field"><span>Bonus listing spreadsheet (XLSX or CSV)</span><input type="file" name="bonus_file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label>';
+		echo '<p>Columns: Bonus ID, Bonus Description, Bonus Category, Bonus Points, Bonus Locations (GPS coordinates). Enter locations as latitude,longitude.</p>';
+		self::button( 'Validate and Import Bonus Listing' );
+		echo '</form>';
+		self::form( 'bonus_import', array( 'event_id' => $event_id, 'import_step' => 'images' ), 'mrsa-panel mrsa-edit-form', '', 'multipart/form-data' );
+		echo '<h4>Step 2: Import the bonus images</h4><p>Image filenames must match Bonus IDs, for example B12.jpg. An image with a new ID creates a listing with empty attributes; import its spreadsheet attributes in step 1.</p>';
 		echo '<label class="mrsa-field"><span>Images from a local folder</span><input type="file" name="bonus_images[]" accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp" multiple webkitdirectory directory><span>Select a folder whose image filenames match Bonus IDs.</span></label>';
 		self::field( 'Public image, ZIP, or directory-listing URL (optional)', 'gallery_url', '', 'url', false, array( 'maxlength' => 2000, 'placeholder' => 'https://example.com/event-images/' ) );
-		echo '<p>Public URLs must use HTTPS and point to an image, a ZIP of images, or a standard web-server directory listing. Google Drive/Dropbox links must provide a public ZIP download or directory listing. CSV/XLSX columns: Bonus ID, Bonus Description, Bonus Category, Bonus Points, Bonus Locations (GPS coordinates). Enter locations as latitude,longitude.</p>';
-		self::button( 'Import into Event Gallery' );
+		echo '<p>Public URLs must use HTTPS and point to an image, a ZIP of images, or a standard web-server directory listing. Google Drive/Dropbox links must provide a public ZIP download or directory listing. Limits: 200 images, 10 MB per image, 100 MB total, and 50 MB per ZIP/download. Server upload limits may be lower.</p>';
+		echo '<label><input type="checkbox" name="allow_partial_images" value="1"> Import all successful images and skip failed images</label><p>When selected, only validated images can be approved; failed images and sources are listed in the review. Otherwise, any image error blocks approval of the entire batch. Scanner errors always block approval.</p>';
+		self::button( 'Validate and Import Bonus Images' );
 		echo '</form>';
 		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT bonus_id,description,category,points,locations,image_file FROM ' . MRSA::table( 'bonus_points' ) . ' WHERE event_id=%d ORDER BY bonus_id', $event_id ), ARRAY_A );
 		echo '<h4>Event Bonus Point Gallery</h4>';
@@ -734,7 +805,8 @@ final class MRSA_Views {
 			self::link( $row['bonus_id'], 'bonus-edit', array( 'event_id' => $event_id, 'bonus_id' => $row['bonus_id'] ) );
 			echo '</td><td>';
 			if ( $row['image_file'] ) {
-				echo '<img class="mrsa-bonus-thumbnail" src="' . esc_url( MRSA_Bonus::image_url( $event_id, $row['image_file'] ) ) . '" alt="' . esc_attr( 'Bonus ' . $row['bonus_id'] ) . '" loading="lazy">';
+				$image_url = MRSA_Bonus::image_url( $event_id, $row['image_file'] );
+				echo '<a class="mrsa-bonus-image-link" href="' . esc_url( $image_url ) . '" target="_blank" rel="noopener noreferrer" aria-label="' . esc_attr( 'View larger image for Bonus ' . $row['bonus_id'] ) . '"><img class="mrsa-bonus-thumbnail" src="' . esc_url( $image_url ) . '" alt="' . esc_attr( 'Bonus ' . $row['bonus_id'] ) . '" loading="lazy"></a>';
 			} else {
 				self::h( 'No image' );
 			}
@@ -749,6 +821,34 @@ final class MRSA_Views {
 			echo '</td></tr>';
 		}
 		self::end_table();
+		echo '<dialog class="mrsa-gallery-dialog" aria-labelledby="mrsa-gallery-title"><div class="mrsa-gallery-dialog-toolbar"><h3 id="mrsa-gallery-title">Bonus image</h3><button type="button" class="button mrsa-gallery-close" autofocus>Close image</button></div><p class="mrsa-gallery-image-error" role="alert" hidden>The image could not be loaded. Close this preview and retry, or replace the image in the bonus editor.</p><img class="mrsa-gallery-full-image" alt=""></dialog>';
+	}
+
+	private static function clamav_setup( $event_id ) {
+		echo '<section class="mrsa-panel mrsa-edit-form" id="mrsa-clamav-setup"><h4>Step 0: Set up or verify ClamAV</h4><p>If ClamAV is already installed using the README instructions, skip installation and check the connection below. Otherwise, follow the setup guide or ask your hosting provider to configure it.</p><p>Installation requires server administrator access. These commands run in your server terminal, not WordPress; this page does not install packages, run privileged commands, or change server configuration.</p>';
+		$check_id = MRSA_Admin::query( 'clamav_check' );
+		if ( preg_match( '/^[A-Za-z0-9]{24}$/D', $check_id ) ) {
+			$check = get_transient( 'mrsa_clamav_check_' . get_current_user_id() . '_' . $check_id );
+			if ( $check && (int) $check['event_id'] === $event_id ) {
+				echo '<div class="notice ' . ( $check['passed'] ? 'notice-success' : 'notice-error' ) . ' inline"><p>' . esc_html( $check['message'] ) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-warning inline"><p>The connection-check result expired or is unavailable for this event. Run the check again.</p></div>';
+			}
+		}
+		echo '<details><summary>ClamAV installation and configuration guide</summary>';
+		echo '<h5>Ubuntu / Debian (systemd)</h5><p>Run these commands on the WordPress server using an account with sudo access:</p>';
+		echo '<pre class="mrsa-setup-commands"><code>' . esc_html( "sudo apt-get update\nsudo apt-get install clamav clamav-daemon\nsudo systemctl enable --now clamav-freshclam" ) . '</code></pre><p>Wait for freshclam to download its signature databases. Configure the following settings in <code>/etc/clamav/clamd.conf</code>, updating existing values rather than adding duplicates:</p>';
+		echo '<pre class="mrsa-setup-commands"><code>' . esc_html( "ScanArchive yes\nScanPE yes\nScanELF yes\nScanOLE2 yes\nAlertExceedsMax yes\nStreamMaxLength 60M\nMaxFileSize 60M\nMaxScanSize 200M" ) . '</code></pre>';
+		echo '<p>Give the PHP service account access to the local clamd socket through its socket group and permissions. Do not make the socket world-writable. If group membership changes, restart the relevant PHP-FPM or web-server service using your host&rsquo;s instructions. Then start or restart the daemon:</p>';
+		echo '<pre class="mrsa-setup-commands"><code>' . esc_html( "sudo systemctl enable --now clamav-daemon\nsudo systemctl restart clamav-daemon\nsudo systemctl status clamav-daemon clamav-freshclam" ) . '</code></pre>';
+		echo '<h5>Other Linux distributions, Windows, or managed hosting</h5><p>Use your distribution&rsquo;s ClamAV packages or the <a href="https://docs.clamav.net/manual/Installing.html" target="_blank" rel="noopener noreferrer">official ClamAV installation guide<span class="screen-reader-text"> (opens in a new tab)</span></a>. Configure clamd and freshclam with equivalent scan settings above. Service names and configuration paths vary. On managed hosting, ask the provider to enable a local clamd endpoint for your PHP process; installing a WordPress plugin alone cannot install the server daemon.</p>';
+		echo '<h5>Connect WordPress</h5><p>The default endpoint is <code>unix:///var/run/clamav/clamd.ctl</code>. If your server uses a different local socket, add <code>MRSA_CLAMAV_SOCKET</code> to <code>wp-config.php</code> before the stop-editing line. Choose one endpoint only:</p>';
+		echo '<pre class="mrsa-setup-commands"><code>' . esc_html( "define( 'MRSA_CLAMAV_SOCKET', 'unix:///var/run/clamav/clamd.ctl' );\n// Alternatively, for a loopback-only clamd TCP listener:\n// define( 'MRSA_CLAMAV_SOCKET', 'tcp://127.0.0.1:3310' );" ) . '</code></pre>';
+		echo '<p>For TCP, bind clamd to <code>127.0.0.1</code> with <code>TCPSocket 3310</code> and <code>TCPAddr 127.0.0.1</code>; never expose its unauthenticated listener to the network. Keep ClamAV and virus signatures current. Ensure private import temporary storage is writable and outside the web root; set <code>MRSA_IMPORT_TEMP_DIR</code> in <code>wp-config.php</code> if needed.</p></details>';
+		self::form( 'bonus_clamav_check', array( 'event_id' => $event_id ) );
+		echo '<p>';
+		self::button( 'Check ClamAV Connection' );
+		echo '</p></form><p>The check streams a small, harmless test file to the configured local daemon. It does not import bonus records or images or enable a bypass. When ClamAV is available, each import requires its own scan and approval.</p></section>';
 	}
 
 	public static function render_bonus_edit() {
@@ -799,7 +899,7 @@ final class MRSA_Views {
 		if ( $id && ! in_array( $id, $allowed_ids, true ) ) {
 			wp_die( esc_html( 'Event not found, not assigned to you, or does not contain the selected rider.' ), '', array( 'response' => 403 ) );
 		}
-		echo '<h2>Overall Results</h2>';
+		echo '<h2>Results</h2>';
 		if ( $rider_id ) {
 			$rider = MRSA::row( 'riders', $rider_id );
 			echo '<p>Showing only accessible events containing <strong>' . esc_html( $rider ? $rider['name'] : 'the selected rider' ) . '</strong>.</p>';
@@ -851,7 +951,7 @@ final class MRSA_Views {
 		$placing = 1 + (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . MRSA::table( 'registrations' ) . ' WHERE event_id=%d AND score>%d', $event_id, $row['score'] ) );
 		echo '<div class="wrap mrsa">';
 		self::header();
-		echo '<h2>Rider Overall Event Score Sheet</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'results', array( 'event_id' => $event_id ) ) ) . '">Back to Overall Results</a></p>';
+		echo '<h2>Rider Overall Event Score Sheet</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'results', array( 'event_id' => $event_id ) ) ) . '">Back to Results</a></p>';
 		echo '<div class="mrsa-panel"><p><strong>Event:</strong> ' . esc_html( $row['event_name'] ) . '</p><p><strong>Rider:</strong> ' . esc_html( $row['name'] ) . ' (bib ' . esc_html( $row['bib'] ) . ')</p><p><strong>Total score:</strong> ' . esc_html( $row['score'] ) . '</p><p><strong>Status:</strong> ' . esc_html( $status ) . '</p><p><strong>Overall placing:</strong> ' . esc_html( $placing ) . '</p></div>';
 		echo '<div class="notice notice-info inline"><p>The bonus-point score-sheet layout and source records have not yet been defined. This authorized page preserves the event and rider context without inventing scoring data.</p></div></div>';
 	}
@@ -870,8 +970,19 @@ final class MRSA_Views {
 			wp_nonce_field( 'mrsa_diagnostics_download' );
 			echo '<button class="button button-primary">Download ' . esc_html( strtoupper( $type ) ) . '</button></form></section>';
 		}
-		echo '</div><h3>Destructive operations</h3><div class="notice notice-error inline"><p>These operations cannot be undone. Download a database backup first. Each operation has its own randomized verification string.</p></div>';
-		self::diagnostics_delete_form( 'diagnostics_delete_all', 'Delete All Data', 'Delete all application data, including administrator assignments.', array() );
+		echo '</div><h3>Virus-scan bypass audit</h3><p>Latest 100 records, with timestamps in UTC. Exports and database backups include the full audit table. Event deletion and Delete All Data retain this audit history and recorded bypass choices.</p>';
+		$audit_rows = $wpdb->get_results( 'SELECT user_id,username,occurred_at,event_id,action,detail FROM ' . MRSA::table( 'import_audit' ) . ' ORDER BY id DESC LIMIT 100', ARRAY_A );
+		self::table( array( 'User ID', 'Username', 'Date/time (UTC)', 'Event ID', 'Action', 'Details' ) );
+		foreach ( $audit_rows as $audit_row ) {
+			echo '<tr>';
+			foreach ( $audit_row as $value ) {
+				echo '<td>' . esc_html( $value ) . '</td>';
+			}
+			echo '</tr>';
+		}
+		self::end_table();
+		echo '<h3>Destructive operations</h3><div class="notice notice-error inline"><p>These operations cannot be undone. Download a database backup first. Each operation has its own randomized verification string.</p></div>';
+		self::diagnostics_delete_form( 'diagnostics_delete_all', 'Delete All Data', 'Delete application data, including administrator assignments. Import audit records and recorded bypass choices are retained.', array() );
 		self::diagnostics_delete_form( 'diagnostics_delete_bikes', 'Delete All Bike Data', 'Delete the motorcycle catalog and every rider-motorcycle assignment.', array() );
 		$event_options = '<option value="">Choose an event</option>';
 		foreach ( $events as $event ) {
@@ -921,7 +1032,7 @@ final class MRSA_Views {
 		echo '</table>';
 		echo '<p>The plugin is free software released under the GNU General Public License, version 3 or (at your option) any later version. The repository and installable package include the license and documentation.</p>';
 		echo '<h2>What this version includes</h2><ul class="ul-disc"><li>Global and per-event administrator assignments based on existing WordPress users.</li><li>Manual and make-based NHTSA motorcycle make/model catalog workflows with bulk deletion.</li><li>Master rider records with emergency, insurance, make/model motorcycle, optional manual year, and fuel-capacity details.</li><li>Event configuration, roster, enrollment, event-scoped bonus listings, and a dedicated bonus image gallery stored outside the WordPress media library.</li><li>Successful forms return to their originating form or tab.</li></ul>';
-		echo '<h2>Recommended plugin</h2><h3>Gallery for SpotWalla (formerly SpotWalla Gallery)</h3>';
+		echo '<h2>Recommended plugin</h2><h3>Gallery for SpotWalla</h3>';
 		echo '<p>Display public SpotWalla tracks, trips, and retrospectives on WordPress pages or posts, individually or in galleries. This optional plugin works independently of Motorcycle Rally Scoring Application; it is not required for scoring or the event bonus image library.</p>';
 		echo '<p><a href="' . esc_url( $recommended_plugin ) . '" target="_blank" rel="noopener noreferrer">View plugin details and documentation<span class="screen-reader-text"> (opens in a new tab)</span></a> &middot; <a href="' . esc_url( $recommended_plugin . '/releases' ) . '" target="_blank" rel="noopener noreferrer">Download from GitHub Releases<span class="screen-reader-text"> (opens in a new tab)</span></a></p>';
 		echo '<p>Installation is optional and manual. Review the plugin&rsquo;s requirements and privacy guidance before installing; embedded maps load content from SpotWalla. This recommendation does not imply endorsement or approval by WordPress.org or SpotWalla.</p>';

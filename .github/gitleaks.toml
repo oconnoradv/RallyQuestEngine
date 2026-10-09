@@ -1,0 +1,14 @@
+title = "MRSA release secret checks"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Fixed transient-key prefix in the import expiry test; not a credential."
+condition = "AND"
+regexTarget = "secret"
+paths = ['''(^|[/\\])tests[/\\]bonus-import\.php$''']
+regexes = ['''^mrsa_bonus_pending_1_$''']

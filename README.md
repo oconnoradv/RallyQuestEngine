@@ -19,12 +19,12 @@ The plugin is an administrator-operated application. It does not expose public r
 
 | Tab | Current function | Access |
 | --- | --- | --- |
-| **Bike Setup** | Add or edit make/model catalog records, import motorcycle models by make from NHTSA, and bulk-delete selected unassigned records. | Global administrators |
-| **Rider Setup** | List riders; open separate **Edit**, rider-filtered **Events**, and **Overall Results** destinations; and manage contact, emergency-contact, insurance, notes, motorcycle, year, and fuel-capacity attributes. | Global administrators can edit; event administrators have read-only access to riders in assigned events |
-| **Event Setup** | Add events and open separate **Configure**, **Registrations**, and **Scoring** destinations. The Configure page also manages that event's administrator assignments. | Global administrators manage all events; event administrators manage assigned events |
-| **Event Rosters** | Select an event and view Rider ID, Bib ID, read-only registration status, name, email, score, and overall placing. Rider IDs open rider details/editing; bibs open the event scoring workspace. | Global and assigned event administrators; only global administrators can enroll riders |
+| **Riders** | List riders; open separate **Edit**, rider-filtered **Events**, and **Results** destinations; and manage contact, emergency-contact, insurance, notes, motorcycle, year, and fuel-capacity attributes. | Global administrators can edit; event administrators have read-only access to riders in assigned events |
+| **Events** | Add events and open separate **Configure**, **Roster**, and **Scoring** destinations. The Configure page also manages that event's administrator assignments. | Global administrators manage all events; event administrators manage assigned events |
+| **Rosters** | Select an event and view Rider ID, Bib ID, read-only registration status, name, email, score, and overall placing. Rider IDs open rider details/editing; bibs open the event scoring workspace. | Global and assigned event administrators; only global administrators can enroll riders |
 | **Scoring** | Select an event, import its bonus listing from CSV/XLSX, manage its bonus image gallery, and view the roster in the remaining scoring workspace tabs. | Global and assigned event administrators |
-| **Overall Results** | Rank event riders by total score, display result status read-only, and open an authorized rider event score-sheet placeholder. | Global and assigned event administrators |
+| **Results** | Rank event riders by total score, display result status read-only, and open an authorized rider event score-sheet placeholder. | Global and assigned event administrators |
+| **Bikes** | Add or edit make/model catalog records, import motorcycle models by make from NHTSA, and bulk-delete selected unassigned records. Manual entry and import appear side by side on wide screens and stack on narrow screens. | Global administrators |
 | **Diagnostics** | Export JSON, download a restorable SQL backup, and perform randomized-string-verified scoped data deletion. | Global administrators |
 | **About** | Show version/environment details, repository and license links, an optional Gallery for SpotWalla recommendation, source attribution, privacy guidance, and reporting instructions. | Global and assigned event administrators |
 
@@ -33,11 +33,11 @@ Global administrators can manage plugin data across all events. Existing global 
 ### Primary workflows
 
 1. **Build the motorcycle catalog:** add make/model records manually or explicitly import a make from NHTSA. Select individual records—or all records loaded on the current server page—to delete them together. Bulk deletion is all-or-nothing and stops if any selected record is assigned to a rider.
-2. **Create riders:** open **Rider Setup > Add Rider**, enter one attribute per row, and attach up to 20 catalog motorcycles. Motorcycle filtering uses make and model only. The optional four-digit year belongs to the rider's motorcycle assignment and is not checked against the catalog.
-3. **Create and configure events:** open **Event Setup > Add Event**, then use **Configure** for event attributes and event-administrator assignments.
-4. **Build event rosters:** choose an event under **Event Rosters**, then use **Add Rider to Event** to select a rider who is not already enrolled and assign an available bib. If no unenrolled riders remain, **Add New Rider** creates the master rider, automatically assigns the event's lowest available bib, and returns to that roster.
-5. **Track registration:** review each roster entry's **Initial Registration**, **Paid**, **Fully Registered**, or **Cancelled** status independently of scoring results. Status is read-only on Event Rosters.
-6. **Review results:** select an event under **Overall Results**. Scores are ordered highest to lowest using competition ranking; equal scores share a place and the next place is skipped. Result status is read-only on this page.
+2. **Create riders:** open **Riders > Add Rider**, enter one attribute per row, and attach up to 20 catalog motorcycles. Motorcycle filtering uses make and model only. The optional four-digit year belongs to the rider's motorcycle assignment and is not checked against the catalog.
+3. **Create and configure events:** open **Events > Add Event**, then use **Configure** for event attributes and event-administrator assignments.
+4. **Build event rosters:** choose an event under **Rosters**, then use **Add Rider to Event** to select a rider who is not already enrolled and assign an available bib. If no unenrolled riders remain, **Add New Rider** creates the master rider, automatically assigns the event's lowest available bib, and returns to that roster.
+5. **Track registration:** review each roster entry's **Initial Registration**, **Paid**, **Fully Registered**, or **Cancelled** status independently of scoring results. Status is read-only on Rosters.
+6. **Review results:** select an event under **Results**. Scores are ordered highest to lowest using competition ranking; equal scores share a place and the next place is skipped. Result status is read-only on this page.
 7. **Export or maintain data:** use **Diagnostics** to download JSON or SQL before any destructive operation. Deletions require the operation's displayed randomized verification string as well as normal authorization and nonce checks.
 
 Successful create, edit, assignment, enrollment, import, and deletion forms return to the form or tab from which they were submitted.
@@ -50,9 +50,27 @@ Event registration open, close, start, and end values use the WordPress site tim
 
 ### Scoring status
 
-The **Bonus Point Library** stores listings separately per event. Import a CSV or XLSX workbook with Bonus ID, Bonus Description, Bonus Category, Bonus Points, and Bonus Locations (GPS coordinates); locations use one `latitude,longitude` pair. Matching IDs are updated on re-import, while other IDs remain. Import images from a local directory or a public HTTPS image URL, ZIP archive, or standard web-server directory listing. Each image filename must be its Bonus ID (for example, `B12.jpg`). Images are stored in the plugin's event-specific upload folder and are not added to the WordPress media library. Bonus scoring calculations and the other submission-review tabs are not implemented.
+The **Bonus Point Library** stores listings separately per event. **Step 1:** validate a CSV or XLSX workbook with Bonus ID, Bonus Description, Bonus Category, Bonus Points, and Bonus Locations (GPS coordinates); normally review the security scan report and approve the listing import. Locations use one `latitude,longitude` pair. Matching IDs are updated on re-import, while other IDs remain. **Step 2:** validate images from a local directory or a public HTTPS image URL, ZIP archive, or standard web-server directory listing, then normally review and approve. Each image filename must be its Bonus ID (for example, `B12.jpg`). By default an image error prevents the entire image batch from being saved. Select **Import all successful images and skip failed images** to import only validated files and receive filename/source-specific errors for the rest. Scanner errors block the entire batch, including partial mode; an unavailable daemon can be explicitly bypassed as described below. Reports are private to the importing administrator and available for 15 minutes. Errors in database rollback or image recovery stop the import rather than risking additional changes.
 
-New event registrations use registration status `Initial Registration`, result status `Registered`, score `0`, and no stored placing. A score strictly greater than the event's minimum finish score produces automatic result status `Preliminary Finisher`. Overall Results displays this status read-only. Rider numbers link to an authorized score-sheet placeholder; submission records and the scoring workflow remain undefined.
+### Import antivirus setup
+
+The import screen includes **Step 0: Set up or verify ClamAV**, with expandable Ubuntu/Debian installation commands, configuration guidance, and links for other platforms. Run the commands on the server with server-administrator permissions, or have your hosting provider complete them; WordPress does not execute installation commands or elevate privileges. **Check ClamAV Connection** performs a small local file-stream scan and displays the result without importing any event data. It does not certify signature freshness or scan-limit configuration. Existing README-based pre-installation remains supported: skip installation and use the connection check.
+
+Bonus imports normally require a **local ClamAV daemon (`clamd`)** with current signatures maintained by `freshclam`. The default endpoint is `unix:///var/run/clamav/clamd.ctl`. If needed, set `MRSA_CLAMAV_SOCKET` in `wp-config.php` to your local Unix socket or `tcp://127.0.0.1:3310` (loopback only). Give the WordPress PHP process permission to access the socket. Never expose clamd's unauthenticated TCP listener to the network.
+
+Enable archive, PE/ELF, and Office scanning in clamd, and set `AlertExceedsMax yes` so scan-limit violations are blocked rather than reported clean. Configure `StreamMaxLength` and `MaxFileSize` to at least 60 MB, and `MaxScanSize` to at least 200 MB for the supported archives. Host administrators must keep the engine and signatures updated; this plugin does not install or configure ClamAV. Timeouts, permission/configuration errors, and scanner errors block approval.
+
+If the local socket is missing or the daemon refuses the connection, bulk imports show **Not scanned** results and require explicit **Confirm Bypass and Import** consent before saving. This cannot distinguish an uninstalled daemon from a stopped daemon. Consent is remembered only for that administrator on that site. Subsequent validated bulk listing/image imports while ClamAV is unavailable proceed without another approval prompt; each post-import notice warns that no antivirus security scan was performed. Available ClamAV is still used and its scan report still requires approval. Malware detections are excluded/blocked, scanner errors block the batch, and format, executable-content, size, and fingerprint checks remain mandatory. Manual editor replacement images do not use this bypass.
+
+Consent, revocation, and unscanned import start/completion/failure records are stored in `{prefix}MRSA_import_audit` with user ID, username snapshot, UTC date/time, event ID, action, and details. Audit insertion must succeed before unscanned files can be imported. **Diagnostics > Virus-scan bypass audit** displays the latest 100 records; JSON exports and SQL backups include all records. Event deletion and Delete All Data preserve this history and remembered choices. **Restore Mandatory ClamAV Scanning** in the import screen revokes your remembered consent and records the change. Opt-in destructive uninstall removes the audit table with the other plugin tables; otherwise it is retained.
+
+Files are streamed to the local scanner, never to a third-party service. CSV formulas, XLSX formulas/macros/embedded files, XML entities, script markers, and appended image content are rejected in addition to format checks. Use values-only XLSX workbooks without embedded images. Local checks and antivirus reduce risk but do not guarantee the absence of malicious content.
+
+Pending files stay in a random, private temporary directory outside the web root and uploads. If the server's default temporary directory is web-accessible, define `MRSA_IMPORT_TEMP_DIR` as an existing writable directory outside the document root, with filesystem permissions restricted to the PHP service account. Approval is user/event-bound, expires after 15 minutes, is single-use, and verifies staged file SHA-256 fingerprints before importing. Cancel removes staged files; abandoned files are removed by WordPress cron after expiry (configure a reliable cron runner on low-traffic sites). Recovery backups are retained with an error log entry when automatic cleanup would risk losing data. Manual replacement images in the bonus editor are also scanned before saving.
+
+Images are stored in the plugin's event-specific upload folder and are not added to the WordPress media library. Click a gallery thumbnail for a larger overlay preview; close it with the Close image button, Escape, or a click outside the preview to return to the listing. Without dialog support, the image link opens in a new tab. Bonus scoring calculations and the other submission-review tabs are not implemented.
+
+New event registrations use registration status `Initial Registration`, result status `Registered`, score `0`, and no stored placing. A score strictly greater than the event's minimum finish score produces automatic result status `Preliminary Finisher`. Results displays this status read-only. Rider numbers link to an authorized score-sheet placeholder; submission records and the scoring workflow remain undefined.
 
 ## Motorcycle catalog source
 
@@ -89,6 +107,7 @@ Activation creates plugin-owned tables using the current site's WordPress databa
 | Events | Schedule, registration window, prices, location, coordinates, logo reference, bib capacity, and minimum-finisher-points configuration |
 | Registrations | Event/rider association, unique event bib, pillion text, registration lifecycle status, automatic/manual result status, score, and placing |
 | Bonus listings | Event-specific bonus IDs, descriptions, categories, points, GPS coordinates, and image filenames |
+| Import audit | Administrator ID and username snapshot, UTC date/time, event ID, bypass consent/revocation and unscanned import activity; retained during Diagnostics deletions |
 
 Rider records can contain names, aliases, email addresses, phone numbers, motorcycle make/model assignments, manually entered model years, fuel capacity, emergency contacts, insurance details, and free-form notes. Registrations link riders to events and store bib, pillion, registration status, result status, score, and placing values. Diagnostics exports contain all plugin database data and SQL backups contain restorable schema and records, so both must be protected as sensitive data. Bonus gallery files are stored under a dedicated `mrsa-event-gallery` uploads directory, outside the WordPress media attachment library; gallery files are not included in database exports or backups and must be backed up separately. Site operators are responsible for participant notices, consent where required, access control, retention, backups, and secure handling of this data.
 
@@ -101,11 +120,16 @@ The plugin does not include analytics, telemetry, payment processing, remotely h
 The **Security checks and ZIP release** GitHub Actions workflow runs on pull requests, branch pushes, version tags, and manual dispatch. It:
 
 - Checks PHP and JavaScript syntax.
-- Scans PHP and JavaScript with Semgrep security rules.
-- Uses Trivy to scan for known dependency vulnerabilities and secrets.
+- Scans PHP and JavaScript with Semgrep security rules covering common exploit patterns, including SQL injection, cross-site scripting, command injection, file inclusion, unsafe deserialization, and server-side request forgery. Supplemental WordPress rules check request data reaching `$wpdb` queries (including unsafe `prepare` templates), HTML output, and unsafe WordPress HTTP calls; vulnerable and safe fixtures verify those rules before each scan.
+- Uses Trivy's vulnerability and secret scanners on the working tree.
+- Runs a separate, version/checksum-pinned Gitleaks CLI check with redacted output against all available Git history and the working tree. Checkout fetches full history so deleted historical secrets are also checked.
 - Blocks packaging when findings or scanner failures occur.
 
 These checks support secure development but do not certify NIST compliance, guarantee the absence of CVEs, or replace penetration testing and manual review. The repository currently has no bundled third-party dependencies or dependency manifests, so dependency scanning cannot assess the deployed WordPress installation, PHP runtime, database server, or other plugins.
+
+All scanners are release gates: findings, invalid rules, failed fixture tests, download/checksum failures, and scanner errors stop packaging and publication. Do not bypass findings to publish; fix exploit findings and revoke/rotate any detected secret, then address exposed history as appropriate. Registry Semgrep rules are updated upstream; the supplemental rules are versioned in `.github/semgrep/wordpress.yml`. Static analysis is not exhaustive, especially across helper/function boundaries or for stored-data flows.
+
+`.github/gitleaks.toml` retains all default Gitleaks rules and allows only the exact non-secret transient-key prefix `mrsa_bonus_pending_1_` in `tests/bonus-import.php` for the generic API-key rule. It does not exclude test files or historical commits from secret scanning.
 
 ## Building and publishing releases
 

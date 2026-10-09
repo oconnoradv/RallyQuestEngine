@@ -3,6 +3,36 @@
 	'use strict';
 	const root = document.querySelector('.mrsa');
 	if (!root) return;
+	const galleryDialog = root.querySelector('.mrsa-gallery-dialog');
+	if (galleryDialog && typeof galleryDialog.showModal === 'function') {
+		const image = galleryDialog.querySelector('.mrsa-gallery-full-image');
+		const title = galleryDialog.querySelector('#mrsa-gallery-title');
+		const imageError = galleryDialog.querySelector('.mrsa-gallery-image-error');
+		let opener;
+		image.addEventListener('error', () => { image.hidden = true; imageError.hidden = false; });
+		root.querySelectorAll('.mrsa-bonus-image-link').forEach(link => {
+			link.addEventListener('click', event => {
+				event.preventDefault();
+				opener = link;
+				imageError.hidden = true;
+				image.hidden = false;
+				image.alt = link.querySelector('img').alt;
+				title.textContent = image.alt;
+				image.src = link.href;
+				galleryDialog.showModal();
+			});
+		});
+		galleryDialog.querySelector('.mrsa-gallery-close').addEventListener('click', () => galleryDialog.close());
+		galleryDialog.addEventListener('click', event => {
+			const bounds = galleryDialog.getBoundingClientRect();
+			if (event.target === galleryDialog && (event.clientX < bounds.left || event.clientX > bounds.right ||
+				event.clientY < bounds.top || event.clientY > bounds.bottom)) galleryDialog.close();
+		});
+		galleryDialog.addEventListener('close', () => {
+			image.removeAttribute('src');
+			if (opener) opener.focus();
+		});
+	}
 	const option = (value, label) => {
 		const node = document.createElement('option');
 		node.value = String(value);

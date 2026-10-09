@@ -3,7 +3,7 @@ Contributors: oconnoradv
 Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
-Stable tag: 0.1.6
+Stable tag: 0.1.7
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -13,24 +13,58 @@ Manage motorcycle rally administrators, motorcycles, riders, and event registrat
 
 Motorcycle Rally Scoring Application provides administrative tabs for:
 
-* Bike Setup: manual or imported motorcycle make/model records plus transactional bulk deletion of unassigned catalog rows.
-* Rider Setup: rider details, make/model-filtered motorcycles with optional manually entered four-digit years, emergency contacts, insurance information, and registered events.
-* Event Setup: event configuration and per-event administrator assignments.
-* Event Rosters: event selection and a read-only roster table with rider ID, bib ID, registration status, name, email, score, and overall placing. Rider IDs open rider details/editing, bibs open event scoring, and enrollment remains a separate screen.
+* Riders: rider details, make/model-filtered motorcycles with optional manually entered four-digit years, emergency contacts, insurance information, and registered events.
+* Events: event configuration, per-event administrator assignments, and Roster links.
+* Rosters: event selection and a read-only roster table with rider ID, bib ID, registration status, name, email, score, and overall placing. Rider IDs open rider details/editing, bibs open event scoring, and enrollment remains a separate screen.
 * Scoring: event-specific Bonus Point Library, CSV/XLSX listing import, local-folder and public-URL image import, and event-roster scoring summaries in the remaining workspace tabs.
-* Overall Results: score ordering, computed overall placing, read-only result status, and rider score-sheet placeholders.
+* Results: score ordering, computed overall placing, read-only result status, and rider score-sheet placeholders.
+* Bikes: side-by-side manual entry and motorcycle make/model import on wide screens, stacked on narrow screens, plus transactional bulk deletion of unassigned catalog rows.
 * Diagnostics: JSON export, restorable SQL backup, and verification-string-protected scoped deletion. Gallery image files are stored separately and are not included in database exports or backups.
 * About: version, licensing, attribution, scope, and an optional Gallery for SpotWalla recommendation with documentation and download links.
 
 The Bonus Point Library stores event-specific bonus IDs, descriptions,
 categories, points, one latitude/longitude pair, and matching image files.
-Import CSV or XLSX listings and images from a local directory or public HTTPS
-image, ZIP, or standard directory-listing URLs. Re-importing an ID updates its
+First import the CSV or XLSX listing (step 1), then import images from a local
+directory or public HTTPS image, ZIP, or standard directory-listing URLs
+(step 2). Each step scans files locally with ClamAV, shows the scan report,
+and normally requires explicit approval before importing. Local clamd with current
+freshclam signatures is recommended; scanner errors always block imports.
+When the local daemon is missing or refuses connections, an administrator can
+explicitly confirm a per-account, per-site bypass. Later validated bulk imports
+while ClamAV is unavailable do not require another approval prompt and display
+an unscanned-import warning. Available scanners are still used; malware,
+scanner errors, and unsafe content cannot be bypassed. Consent and unscanned
+import activity retain user ID, username, UTC timestamp and event in the import
+audit table. Diagnostics displays recent audit records; exports include all
+records. Diagnostics deletions retain the audit and bypass choices. Restore
+Mandatory ClamAV Scanning revokes the choice for your account. Manual image
+replacement still requires ClamAV.
+Step 0 on the import screen provides optional setup commands and configuration
+guidance plus a Check ClamAV Connection button. Run installation commands in
+the server terminal with server-administrator access, not WordPress. Existing
+pre-installed ClamAV is supported. The check scans a harmless local test file
+without importing data; it does not certify signatures or scan configuration.
+The default Unix socket can be overridden with MRSA_CLAMAV_SOCKET in
+wp-config.php (local Unix sockets or loopback TCP only). Configure clamd to
+scan archives and Office/executable formats, enable AlertExceedsMax, and allow
+at least 60 MB streams/files and 200 MB expanded scans. See README for setup.
+Pending files stay outside the web root in private temporary storage.
+MRSA_IMPORT_TEMP_DIR can override the temporary directory. Reviews expire in
+15 minutes, verify fingerprints, and require the original user/event.
+Cancellation deletes staged files; WordPress cron cleans expired imports.
+Formulas, macros, embedded files, script markers, and appended image data
+are rejected. A passed scan is not a guarantee that a file is harmless.
+Image imports are all-or-nothing by default; optionally import all
+successful images and skip failed images, with filename/source-specific errors.
+Error reports are private to the importing administrator and expire after
+15 minutes. Recovery failures stop the import. Click gallery images to open
+a larger overlay preview; Close image, Escape, or clicking outside the preview
+returns to the listing. Re-importing an ID updates its
 listing without removing other event listings. Images are stored in a dedicated
 event folder and are not registered in the WordPress media library. Submissions
 - Pending Review, Submissions - Reviewed, and Submissions - Contested remain
 placeholders. Bib links provide event/rider context; this release does not
-calculate bonus scores. Overall Results orders existing total scores using competition
+calculate bonus scores. Results orders existing total scores using competition
 ranking and displays the automatically derived Preliminary Finisher status
 when a score is greater than the event minimum. Status is read-only on that
 page. New registrations have lifecycle status Initial Registration, result
@@ -55,7 +89,7 @@ collisions between sites. No WordPress core tables or users are replaced.
 2. Upload motorcycle-rally-scoring-application-vX.Y.Z.zip through Plugins > Add New > Upload Plugin.
 3. Activate Motorcycle Rally Scoring Application.
 4. Open the rally administration menu as a WordPress administrator.
-5. Assign administrators, populate Bike Setup, register riders, and configure events.
+5. Assign administrators, populate Bikes, register riders, and configure events.
 6. Enroll riders in an event using an unused bib number.
 
 Event dates are derived from the configured start date/time in the WordPress
@@ -63,9 +97,9 @@ site timezone. Add Rider and Add Event open dedicated edit pages with one
 attribute per row. Enrolled rider details remain read-only outside explicit
 registration controls.
 
-Rider ID and bib links from Event Rosters return to that selected roster through
+Rider ID and bib links from Rosters return to that selected roster through
 the destination page's back link. Successful forms return to their originating
-form or tab. If Event Rosters has
+form or tab. If Rosters has
 no unenrolled rider to select, Add Rider to Event can open the Add Rider form,
 automatically enroll the new rider with the lowest available bib, and return
 to the selected roster. Roster registration status is displayed read-only and
@@ -156,6 +190,16 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.1.7 =
+* Renamed and reordered tabs to Riders, Events, Rosters, Scoring, Results, Bikes, Diagnostics, and About; aligned motorcycle entry and import forms.
+* Separated bonus listing and image imports into two steps, added partial-image imports with detailed errors, and added larger gallery image previews.
+* Added local ClamAV scans, executable-content checks, private staging, expiring user/event-bound review and approval, and staged-file fingerprint verification.
+* Added optional Step 0 server setup instructions and a ClamAV connection check.
+* Added an explicitly confirmed per-administrator bypass only for unavailable ClamAV, persistent username/UTC import audits, unscanned-import warnings, and bypass revocation.
+* Added audit history to Diagnostics and database exports/backups; retained audits during Diagnostics deletions.
+* Added tested WordPress SQL injection, XSS and SSRF release rules, Trivy secret scanning, and dedicated full-history/working-tree Gitleaks release gates.
+* Removed former-name wording from the Gallery for SpotWalla recommendation.
 
 = 0.1.6 =
 * Removed the Administrators tab and controls, preserving existing administrator access, and renamed Rider Registration to Rider Setup.

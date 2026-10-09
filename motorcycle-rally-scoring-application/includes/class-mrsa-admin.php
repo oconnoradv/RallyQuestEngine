@@ -218,10 +218,55 @@ final class MRSA_Admin {
 					self::registration_lifecycle( $extra['event_id'] );
 					$tab = 'rosters';
 					break;
-				case 'bonus_import':
+				case 'bonus_clamav_check':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
-					$message = MRSA_Bonus::import( $extra['event_id'] );
+					$check = MRSA_File_Scan::check_connection();
+					$check_id = wp_generate_password( 24, false, false );
+					if ( ! set_transient( 'mrsa_clamav_check_' . get_current_user_id() . '_' . $check_id, array_merge( $check, array( 'event_id' => $extra['event_id'] ) ), 15 * MINUTE_IN_SECONDS ) ) {
+						throw new RuntimeException( 'The connection-check result could not be stored. ' . $check['message'] );
+					}
+					$extra['clamav_check'] = $check_id;
+					$message = 'ClamAV connection check completed. See Step 0 for the result.';
+					$tab = 'scoring';
+					$extra['score_tab'] = 'library';
+					break;
+				case 'bonus_import':
+				case 'bonus_import_approve':
+				case 'bonus_import_bypass':
+				case 'bonus_import_cancel':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					self::require_event( $extra['event_id'] );
+					if ( 'bonus_import' === $op ) {
+						$result = MRSA_Bonus::import( $extra['event_id'] );
+					} else {
+						if ( 'bonus_import_approve' === $op && '1' !== self::posted( 'scan_approval' ) ) {
+							throw new RuntimeException( 'Review the scan results and explicitly approve the import.' );
+						}
+						if ( 'bonus_import_bypass' === $op && '1' !== self::posted( 'bypass_confirmation' ) ) {
+							throw new RuntimeException( 'Confirm the risk of importing without an antivirus security scan.' );
+						}
+						$result = MRSA_Bonus::approve( $extra['event_id'], self::posted( 'pending_token' ), 'bonus_import_cancel' === $op, 'bonus_import_bypass' === $op );
+					}
+					if ( isset( $result['pending_token'] ) ) {
+						$extra['bonus_pending'] = $result['pending_token'];
+					}
+					$message = $result['message'];
+					if ( $result['errors'] ) {
+						$report_id = wp_generate_password( 24, false, false );
+						if ( ! set_transient( 'mrsa_bonus_report_' . get_current_user_id() . '_' . $report_id, array( 'event_id' => $extra['event_id'], 'errors' => $result['errors'] ), 15 * MINUTE_IN_SECONDS ) ) {
+							throw new RuntimeException( $message . ' The detailed error report could not be stored. Errors: ' . implode( '; ', $result['errors'] ) );
+						}
+						$extra['bonus_report'] = $report_id;
+					}
+					$tab = 'scoring';
+					$extra['score_tab'] = 'library';
+					break;
+				case 'bonus_import_require_scan':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					self::require_event( $extra['event_id'] );
+					MRSA_Bonus::revoke_bypass( $extra['event_id'] );
+					$message = 'Mandatory ClamAV scanning restored for your imports.';
 					$tab = 'scoring';
 					$extra['score_tab'] = 'library';
 					break;
@@ -248,6 +293,15 @@ final class MRSA_Admin {
 			$message = $message ?? 'Saved successfully.';
 			$extra['notice'] = $message;
 			$redirect = $return_url ? add_query_arg( 'notice', $message, remove_query_arg( 'notice', $return_url ) ) : self::url( $tab, $extra );
+			if ( isset( $extra['bonus_report'] ) ) {
+				$redirect = add_query_arg( 'bonus_report', $extra['bonus_report'], $redirect );
+			}
+			if ( isset( $extra['bonus_pending'] ) ) {
+				$redirect = add_query_arg( 'bonus_pending', $extra['bonus_pending'], $redirect );
+			}
+			if ( isset( $extra['clamav_check'] ) ) {
+				$redirect = add_query_arg( 'clamav_check', $extra['clamav_check'], $redirect );
+			}
 			wp_safe_redirect( $redirect );
 			exit;
 		} catch ( RuntimeException $e ) {
@@ -639,7 +693,7 @@ final class MRSA_Admin {
 			wp_die( esc_html( 'Unsupported diagnostics download.' ), '', array( 'response' => 400 ) );
 		}
 		global $wpdb;
-		$tables = array( 'global_admins', 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points' );
+		$tables = array( 'global_admins', 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'import_audit' );
 		$stamp = gmdate( 'Ymd-His' );
 		nocache_headers();
 		if ( 'json' === $type ) {

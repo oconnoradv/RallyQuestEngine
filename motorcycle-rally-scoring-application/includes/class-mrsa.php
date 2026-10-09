@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
 final class MRSA {
 	public static function table( $name ) {
 		global $wpdb;
-		$allowed = array( 'global_admins', 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points' );
+		$allowed = array( 'global_admins', 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'import_audit' );
 		if ( ! in_array( $name, $allowed, true ) ) {
 			throw new InvalidArgumentException( 'Unknown MRSA table.' );
 		}
@@ -20,6 +20,7 @@ final class MRSA {
 	}
 
 	public static function init() {
+		add_action( 'mrsa_bonus_expire', array( 'MRSA_Bonus', 'expire' ), 10, 3 );
 		if ( get_option( 'mrsa_db_version' ) !== MRSA_DB_VERSION ) {
 			self::install();
 		}
@@ -136,6 +137,19 @@ final class MRSA {
 			image_file varchar(255) NOT NULL DEFAULT '',
 			PRIMARY KEY  (id),
 			UNIQUE KEY event_bonus (event_id,bonus_id),
+			KEY event_id (event_id)
+		) ENGINE=InnoDB $c;" );
+		$t = self::table( 'import_audit' );
+		dbDelta( "CREATE TABLE $t (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			user_id bigint(20) unsigned NOT NULL,
+			username varchar(60) NOT NULL,
+			occurred_at datetime NOT NULL,
+			event_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			action varchar(32) NOT NULL,
+			detail text NOT NULL,
+			PRIMARY KEY  (id),
+			KEY user_action (user_id,action,id),
 			KEY event_id (event_id)
 		) ENGINE=InnoDB $c;" );
 		update_option( 'mrsa_db_version', MRSA_DB_VERSION, false );

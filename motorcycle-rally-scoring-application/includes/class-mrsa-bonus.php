@@ -2,6 +2,8 @@
 /** Event-scoped bonus point records and their independent image gallery. */
 defined( 'ABSPATH' ) || exit;
 
+final class MRSA_Bonus_Recovery_Exception extends RuntimeException {}
+
 final class MRSA_Bonus {
 	const MAX_RECORDS = 5000;
 	const MAX_IMAGES = 200;
@@ -128,6 +130,14 @@ final class MRSA_Bonus {
 			}
 			$description = trim( (string) ( $row[ $columns['description'] ] ?? '' ) );
 			$category    = trim( (string) ( $row[ $columns['category'] ] ?? '' ) );
+			foreach ( $row as $value ) {
+				if ( preg_match( '/^\s*(?:[=+@]|-[^0-9.])/', (string) $value ) ) {
+					throw new RuntimeException( 'Spreadsheet formulas or executable cell content are not allowed on row ' . ( $line + 2 ) . '.' );
+				}
+				if ( preg_match( '/<\?(?:php\b|=)|<script\b|<%/i', (string) $value ) ) {
+					throw new RuntimeException( 'Executable cell content is not allowed on row ' . ( $line + 2 ) . '.' );
+				}
+			}
 			if ( strlen( $description ) > 5000 || strlen( $category ) > 120 ) {
 				throw new RuntimeException( 'Bonus Description or Bonus Category is too long on spreadsheet row ' . ( $line + 2 ) . '.' );
 			}
@@ -181,6 +191,9 @@ final class MRSA_Bonus {
 	}
 
 	private static function parse_xml( $xml ) {
+		if ( preg_match( '/<!DOCTYPE|<!ENTITY|<\?(?:php\b|=)|<script\b/i', $xml ) ) {
+			throw new RuntimeException( 'XLSX XML with entities or executable content is not allowed.' );
+		}
 		$previous = libxml_use_internal_errors( true );
 		$parsed   = simplexml_load_string( $xml, 'SimpleXMLElement', LIBXML_NONET | LIBXML_NOBLANKS );
 		libxml_clear_errors();
@@ -205,6 +218,12 @@ final class MRSA_Bonus {
 		}
 		$total_size = 0;
 		foreach ( $list as $entry ) {
+			if ( ! empty( $entry['filename'] ) && preg_match( '#(?:vbaProject|(?:^|/)(?:embeddings|activeX|externalLinks)/|\.(?:exe|dll|php|js|vbs|ps1|bat|cmd|com)$)#i', $entry['filename'] ) ) {
+				throw new RuntimeException( 'The workbook contains macros, executable files, embedded objects, or external links.' );
+			}
+			if ( empty( $entry['folder'] ) && ! preg_match( '/\.(?:xml|rels)$/i', $entry['filename'] ) ) {
+				throw new RuntimeException( 'Use a data-only XLSX workbook without embedded files or images.' );
+			}
 			$total_size += isset( $entry['size'] ) ? (int) $entry['size'] : 0;
 			if ( $total_size > self::MAX_ARCHIVE_SIZE * 4 ) {
 				throw new RuntimeException( 'The XLSX workbook expands beyond the allowed size.' );
@@ -272,6 +291,9 @@ final class MRSA_Bonus {
 					$column = ( $column * 26 ) + ord( $letter ) - 64;
 				}
 				$type  = isset( $attributes['t'] ) ? (string) $attributes['t'] : '';
+				if ( $cell->xpath('./*[local-name()="f"]') ) {
+					throw new RuntimeException( 'Spreadsheet formulas are not allowed. Export a values-only workbook or CSV.' );
+				}
 				$value = '';
 				if ( 'inlineStr' === $type ) {
 					foreach ( $cell->xpath('.//*[local-name()="t"]') as $segment ) {
@@ -355,8 +377,7 @@ final class MRSA_Bonus {
 		if ( false === $size || 0 === $size || $size > self::MAX_IMAGE_SIZE ) {
 			throw new RuntimeException( 'Each image must be non-empty and no larger than 10 MB.' );
 		}
-		$total_size += $size;
-		if ( $total_size > self::MAX_IMAGE_TOTAL || count( $images ) >= self::MAX_IMAGES ) {
+		if ( $total_size + $size > self::MAX_IMAGE_TOTAL || count( $images ) >= self::MAX_IMAGES ) {
 			throw new RuntimeException( 'The image import exceeds the limit of 200 images or 100 MB total.' );
 		}
 		$info = @getimagesize( $path );
@@ -380,18 +401,67 @@ final class MRSA_Bonus {
 		if ( ! copy( $path, $staged_path ) ) {
 			throw new RuntimeException( 'An image could not be staged for import.' );
 		}
+		MRSA_File_Scan::scan( $staged_path, $name );
+		$handle = fopen( $staged_path, 'rb' );
+		if ( ! $handle ) {
+			throw new RuntimeException( 'The staged image could not be checked for appended content.' );
+		}
+		try {
+			$valid_end = false;
+			if ( 'webp' === $extension ) {
+				$header = fread( $handle, 12 );
+				$valid_end = 12 === strlen( $header ) && unpack( 'Vsize', substr( $header, 4, 4 ) )['size'] + 8 === $size;
+			} else {
+				$end_size = 'png' === $extension ? 12 : ( 'jpg' === $extension ? 2 : 1 );
+				if ( 0 === fseek( $handle, -$end_size, SEEK_END ) ) {
+					$end = fread( $handle, $end_size );
+					$valid_end = 'png' === $extension ? "\0\0\0\0IEND\xAE\x42\x60\x82" === $end : ( 'jpg' === $extension ? "\xFF\xD9" === $end : ';' === $end );
+				}
+			}
+			if ( ! $valid_end ) {
+				throw new RuntimeException( 'The image is incomplete or contains appended content. Export a fresh image without extra data and scan again.' );
+			}
+		} finally {
+			fclose( $handle );
+		}
 		$images[ $key ] = array( 'bonus_id' => $id, 'image_file' => $id . '.' . $extension, 'stage_path' => $staged_path );
+		$total_size += $size;
 	}
 
-	private static function upload_images( $stage_dir, &$images, &$total_size ) {
+	private static function image_attempt( $name, $callback, &$errors ) {
+		try {
+			$callback();
+		} catch ( RuntimeException $exception ) {
+			$message = $name . ': ' . $exception->getMessage();
+			if ( null === $errors ) {
+				throw new RuntimeException( $message );
+			}
+			$errors[] = $message;
+		}
+	}
+
+	private static function upload_images( $stage_dir, &$images, &$total_size, &$errors ) {
 		foreach ( self::upload_file( 'bonus_images', true ) as $file ) {
 			if ( UPLOAD_ERR_NO_FILE === (int) $file['error'] ) {
 				continue;
 			}
-			if ( UPLOAD_ERR_OK !== (int) $file['error'] || ! is_uploaded_file( $file['tmp_name'] ) ) {
-				throw new RuntimeException( 'One of the selected image files could not be uploaded.' );
-			}
-			self::stage_image( $file['tmp_name'], $file['name'], $stage_dir, $images, $total_size );
+			self::image_attempt( $file['name'], static function () use ( $file, $stage_dir, &$images, &$total_size ) {
+				$upload_errors = array(
+					UPLOAD_ERR_INI_SIZE   => 'The image exceeds the server upload_max_filesize limit.',
+					UPLOAD_ERR_FORM_SIZE  => 'The image exceeds the form upload size limit.',
+					UPLOAD_ERR_PARTIAL    => 'The image was only partially uploaded. Retry the upload.',
+					UPLOAD_ERR_NO_TMP_DIR => 'The server upload temporary directory is missing.',
+					UPLOAD_ERR_CANT_WRITE => 'The server could not write the uploaded image.',
+					UPLOAD_ERR_EXTENSION  => 'A server extension stopped the image upload.',
+				);
+				if ( UPLOAD_ERR_OK !== (int) $file['error'] ) {
+					throw new RuntimeException( $upload_errors[ (int) $file['error'] ] ?? 'The image could not be uploaded.' );
+				}
+				if ( ! is_uploaded_file( $file['tmp_name'] ) ) {
+					throw new RuntimeException( 'The uploaded image temporary file is unavailable.' );
+				}
+				self::stage_image( $file['tmp_name'], $file['name'], $stage_dir, $images, $total_size );
+			}, $errors );
 		}
 	}
 
@@ -414,7 +484,7 @@ final class MRSA_Bonus {
 		return $response;
 	}
 
-	private static function stage_remote( $url, $stage_dir, &$images, &$total_size ) {
+	private static function stage_remote( $url, $stage_dir, &$images, &$total_size, &$errors, $allow_listing = true ) {
 		$response = self::remote_get( $url, self::MAX_IMAGE_TOTAL );
 		$body     = wp_remote_retrieve_body( $response );
 		if ( strlen( $body ) > self::MAX_ARCHIVE_SIZE ) {
@@ -437,12 +507,16 @@ final class MRSA_Bonus {
 			if ( false === file_put_contents( $temp, $body ) ) {
 				throw new RuntimeException( 'The public ZIP archive could not be staged.' );
 			}
-			self::stage_zip_images( $temp, $stage_dir, $images, $total_size );
+			MRSA_File_Scan::scan( $temp, $name ? $name : 'Remote ZIP archive' );
+			self::stage_zip_images( $temp, $stage_dir, $images, $total_size, $errors );
 			unlink( $temp );
 			return;
 		}
 		if ( false === strpos( $type, 'text/html' ) && false === strpos( $type, 'text/plain' ) ) {
 			throw new RuntimeException( 'The URL must point to an image, ZIP archive, or standard web-server directory listing.' );
+		}
+		if ( ! $allow_listing ) {
+			throw new RuntimeException( 'The image or ZIP link returned a web page instead of a downloadable file.' );
 		}
 		$matches = array();
 		preg_match_all( '/href\s*=\s*(["\'])(.*?)\1/i', $body, $matches );
@@ -460,9 +534,7 @@ final class MRSA_Bonus {
 				$base_path = '/' === substr( $source_path, -1 ) ? $source_path : trailingslashit( dirname( $source_path ) );
 				$href      = ( $parts['scheme'] . '://' . $parts['host'] . ( isset( $parts['port'] ) ? ':' . $parts['port'] : '' ) ) . ( 0 === strpos( $href, '/' ) ? $href : $base_path . $href );
 			}
-			if ( wp_http_validate_url( $href ) ) {
-				$links[] = $href;
-			}
+			$links[] = $href;
 			if ( count( $links ) > self::MAX_IMAGES ) {
 				throw new RuntimeException( 'The directory listing contains more than 200 image or archive links.' );
 			}
@@ -471,11 +543,13 @@ final class MRSA_Bonus {
 			throw new RuntimeException( 'No direct image or ZIP links were found. Use a public ZIP download or a standard web-server directory listing.' );
 		}
 		foreach ( array_unique( $links ) as $link ) {
-			self::stage_remote( $link, $stage_dir, $images, $total_size );
+			self::image_attempt( $link, static function () use ( $link, $stage_dir, &$images, &$total_size, &$errors ) {
+				self::stage_remote( $link, $stage_dir, $images, $total_size, $errors, false );
+			}, $errors );
 		}
 	}
 
-	private static function stage_zip_images( $path, $stage_dir, &$images, &$total_size ) {
+	private static function stage_zip_images( $path, $stage_dir, &$images, &$total_size, &$errors ) {
 		$archive_size = filesize( $path );
 		if ( false === $archive_size || $archive_size > self::MAX_ARCHIVE_SIZE ) {
 			throw new RuntimeException( 'The ZIP archive must be no larger than 50 MB.' );
@@ -499,33 +573,220 @@ final class MRSA_Bonus {
 			if ( ! preg_match( '/\.(?:jpe?g|png|gif|webp)$/i', $entry_name ) ) {
 				continue;
 			}
-			if ( $size > self::MAX_IMAGE_SIZE ) {
-				throw new RuntimeException( 'A ZIP image exceeds the 10 MB per-image limit.' );
-			}
-			$contents = $archive->extract( PCLZIP_OPT_BY_NAME, $entry_name, PCLZIP_OPT_EXTRACT_AS_STRING );
-			if ( ! is_array( $contents ) || ! isset( $contents[0]['content'] ) ) {
-				throw new RuntimeException( 'An image could not be extracted from the ZIP archive.' );
-			}
-			$temp = trailingslashit( $stage_dir ) . '.zip-image-' . wp_generate_password( 12, false, false );
-			if ( false === file_put_contents( $temp, $contents[0]['content'] ) ) {
-				throw new RuntimeException( 'An extracted image could not be staged.' );
-			}
-			self::stage_image( $temp, basename( $entry_name ), $stage_dir, $images, $total_size );
-			unlink( $temp );
+			self::image_attempt( $entry_name, static function () use ( $size, $archive, $entry_name, $stage_dir, &$images, &$total_size ) {
+				if ( $size > self::MAX_IMAGE_SIZE ) {
+					throw new RuntimeException( 'The ZIP image exceeds the 10 MB per-image limit.' );
+				}
+				$contents = $archive->extract( PCLZIP_OPT_BY_NAME, $entry_name, PCLZIP_OPT_EXTRACT_AS_STRING );
+				if ( ! is_array( $contents ) || ! isset( $contents[0]['content'] ) ) {
+					throw new RuntimeException( 'The image could not be extracted from the ZIP archive.' );
+				}
+				$temp = trailingslashit( $stage_dir ) . '.zip-image-' . wp_generate_password( 12, false, false );
+				if ( false === file_put_contents( $temp, $contents[0]['content'] ) ) {
+					throw new RuntimeException( 'The extracted image could not be staged.' );
+				}
+				self::stage_image( $temp, basename( $entry_name ), $stage_dir, $images, $total_size );
+				unlink( $temp );
+			}, $errors );
 		}
 	}
 
 	private static function make_stage_dir() {
-		$root = self::storage_root();
-		self::ensure_directory( $root );
-		$stage_dir = trailingslashit( $root ) . '.staging-' . wp_generate_password( 16, false, false );
-		if ( ! wp_mkdir_p( $stage_dir ) ) {
+		$root = defined( 'MRSA_IMPORT_TEMP_DIR' ) ? MRSA_IMPORT_TEMP_DIR : get_temp_dir();
+		$root = realpath( $root );
+		if ( ! $root || ! is_writable( $root ) ) {
+			throw new RuntimeException( 'A writable private import temporary directory is required.' );
+		}
+		$uploads = wp_upload_dir();
+		foreach ( array( ABSPATH, $uploads['basedir'], defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : '', $_SERVER['DOCUMENT_ROOT'] ?? '' ) as $public_root ) {
+			$public_root = $public_root ? realpath( $public_root ) : false;
+			if ( $public_root && ( strtolower( $root ) === strtolower( $public_root ) || 0 === strpos( strtolower( wp_normalize_path( $root ) ) . '/', strtolower( trailingslashit( wp_normalize_path( $public_root ) ) ) ) ) ) {
+				throw new RuntimeException( 'MRSA_IMPORT_TEMP_DIR must be outside the web root and gallery uploads directory.' );
+			}
+		}
+		$stage_dir = trailingslashit( $root ) . 'mrsa-bonus-' . wp_generate_password( 32, false, false );
+		if ( ! mkdir( $stage_dir, 0700 ) ) {
 			throw new RuntimeException( 'A temporary image staging directory could not be created.' );
 		}
 		return $stage_dir;
 	}
 
-	private static function apply_import( $event_id, $rows, $images, $stage_dir ) {
+	private static function pending_key( $token ) {
+		if ( ! preg_match( '/^[A-Za-z0-9]{32}$/D', $token ) ) {
+			throw new RuntimeException( 'The import review identifier is invalid.' );
+		}
+		return 'mrsa_bonus_pending_' . get_current_user_id() . '_' . $token;
+	}
+
+	public static function bypass_enabled() {
+		global $wpdb;
+		return 'bypass_enabled' === $wpdb->get_var( $wpdb->prepare(
+			'SELECT action FROM ' . MRSA::table( 'import_audit' ) . " WHERE user_id=%d AND action IN ('bypass_enabled','bypass_disabled') ORDER BY id DESC LIMIT 1",
+			get_current_user_id()
+		) );
+	}
+
+	private static function audit( $event_id, $action, $detail ) {
+		global $wpdb;
+		$user = wp_get_current_user();
+		if ( ! $user->ID || false === $wpdb->insert( MRSA::table( 'import_audit' ), array(
+			'user_id' => $user->ID, 'username' => $user->user_login,
+			'occurred_at' => gmdate( 'Y-m-d H:i:s' ), 'event_id' => $event_id,
+			'action' => $action, 'detail' => $detail,
+		) ) ) {
+			throw new RuntimeException( 'The virus-scan bypass audit record could not be saved. Unscanned imports cannot proceed without an audit record.' );
+		}
+	}
+
+	public static function revoke_bypass( $event_id ) {
+		self::audit( $event_id, 'bypass_disabled', 'Administrator restored mandatory ClamAV scanning for their imports.' );
+	}
+
+	public static function pending( $event_id, $token ) {
+		$pending = get_transient( self::pending_key( $token ) );
+		if ( ! $pending || (int) $pending['event_id'] !== (int) $event_id || $pending['expires'] <= time() ) {
+			throw new RuntimeException( 'This import review expired or belongs to another user/event. Scan the files again.' );
+		}
+		return $pending;
+	}
+
+	private static function prepare( $event_id, $rows, $images, $stage_dir, $errors, $partial ) {
+		$token = wp_generate_password( 32, false, false );
+		$hashes = array();
+		foreach ( $images as $image ) {
+			$hash = hash_file( 'sha256', $image['stage_path'] );
+			if ( false === $hash ) {
+				throw new RuntimeException( 'A staged image could not be fingerprinted. Import is blocked.' );
+			}
+			$hashes[ $image['stage_path'] ] = $hash;
+		}
+		foreach ( glob( trailingslashit( $stage_dir ) . '.listing-*' ) as $path ) {
+			$hash = hash_file( 'sha256', $path );
+			if ( false === $hash ) {
+				throw new RuntimeException( 'The staged listing could not be fingerprinted. Import is blocked.' );
+			}
+			$hashes[ $path ] = $hash;
+		}
+		$pending = array(
+			'event_id' => $event_id, 'rows' => $rows, 'images' => $images,
+			'stage_dir' => $stage_dir, 'hashes' => $hashes, 'errors' => $errors,
+			'partial' => $partial, 'scans' => MRSA_File_Scan::results(),
+			'unscanned' => MRSA_File_Scan::skipped(),
+			'can_approve' => ! MRSA_File_Scan::failed() && ( $rows || $images ) && ( $partial || ! $errors ),
+			'expires' => time() + 15 * MINUTE_IN_SECONDS,
+		);
+		if ( ! set_transient( self::pending_key( $token ), $pending, 15 * MINUTE_IN_SECONDS ) ) {
+			throw new RuntimeException( 'The import scan report could not be stored. No data was imported.' );
+		}
+		$scheduled = wp_schedule_single_event( $pending['expires'], 'mrsa_bonus_expire', array( get_current_user_id(), $token, $stage_dir ), true );
+		if ( is_wp_error( $scheduled ) || false === $scheduled ) {
+			delete_transient( self::pending_key( $token ) );
+			throw new RuntimeException( 'Private import cleanup could not be scheduled. No data was imported.' );
+		}
+		return array( 'message' => $pending['unscanned'] ? 'ClamAV is unavailable. No antivirus security scan was performed. Review the validation results and confirm the bypass before importing.' : 'Scan complete. Review the results and approve before importing. No event data has been changed.', 'errors' => array(), 'pending_token' => $token );
+	}
+
+	public static function expire( $user_id, $token, $stage_dir ) {
+		if ( ! preg_match( '/^[A-Za-z0-9]{32}$/D', $token ) || ! preg_match( '/^mrsa-bonus-[A-Za-z0-9]{32}$/D', basename( $stage_dir ) ) ) {
+			throw new RuntimeException( 'Invalid private import cleanup target.' );
+		}
+		if ( is_dir( $stage_dir ) ) {
+			if ( glob( trailingslashit( $stage_dir ) . '.backup-*' ) ) {
+				error_log( 'MRSA: import recovery backups retained in ' . $stage_dir );
+				return;
+			}
+			$lock = trailingslashit( $stage_dir ) . '.approval-lock';
+			if ( is_file( $lock ) && filemtime( $lock ) > time() - 300 ) {
+				$scheduled = wp_schedule_single_event( time() + 300, 'mrsa_bonus_expire', array( $user_id, $token, $stage_dir ), true );
+				if ( is_wp_error( $scheduled ) || false === $scheduled ) {
+					error_log( 'MRSA: cleanup rescheduling failed for active import ' . $stage_dir );
+				}
+				return;
+			}
+			self::remove_directory( $stage_dir );
+		}
+		delete_transient( 'mrsa_bonus_pending_' . absint( $user_id ) . '_' . $token );
+	}
+
+	public static function approve( $event_id, $token, $cancel = false, $confirm_bypass = false ) {
+		$pending = self::pending( $event_id, $token );
+		if ( ! $cancel && ! empty( $pending['unscanned'] ) && ! $confirm_bypass && ! self::bypass_enabled() ) {
+			throw new RuntimeException( 'Explicitly confirm importing without an antivirus security scan before proceeding.' );
+		}
+		$lock = trailingslashit( $pending['stage_dir'] ) . '.approval-lock';
+		$handle = @fopen( $lock, 'x' );
+		if ( ! $handle ) {
+			throw new RuntimeException( 'This import is already processing or has been consumed. Refresh the gallery.' );
+		}
+		fclose( $handle );
+		delete_transient( self::pending_key( $token ) );
+		if ( $cancel ) {
+			self::remove_directory( $pending['stage_dir'] );
+			return array( 'message' => 'Import cancelled. Staged files were removed; no event data was changed.', 'errors' => array() );
+		}
+		if ( ! $pending['can_approve'] ) {
+			self::remove_directory( $pending['stage_dir'] );
+			throw new RuntimeException( 'This scan report is blocked. Correct the scan errors and scan again.' );
+		}
+		$imported = 0;
+		try {
+			foreach ( $pending['hashes'] as $path => $hash ) {
+				if ( ! is_file( $path ) || is_link( $path ) || ! hash_equals( $hash, (string) hash_file( 'sha256', $path ) ) ) {
+					throw new RuntimeException( 'A staged file changed after scanning. Import is blocked; scan again.' );
+				}
+				if ( ! empty( $pending['unscanned'] ) ) {
+					if ( $confirm_bypass ) {
+						self::audit( $event_id, 'bypass_enabled', 'Administrator confirmed importing without an antivirus security scan when ClamAV is unavailable; remembered for this administrator on this site.' );
+					}
+					self::audit( $event_id, 'import_started', 'No antivirus security scan performed. Importing ' . count( $pending['rows'] ) . ' bonus listings and ' . count( $pending['images'] ) . ' validated images.' );
+				}
+			}
+			if ( $pending['partial'] ) {
+				foreach ( $pending['images'] as $image ) {
+					try {
+						self::apply_import( $event_id, array(), array( $image ), $pending['stage_dir'], false );
+						++$imported;
+					} catch ( MRSA_Bonus_Recovery_Exception $exception ) {
+						throw $exception;
+					} catch ( RuntimeException $exception ) {
+						if ( ! empty( $pending['unscanned'] ) ) {
+							try {
+								self::audit( $event_id, 'import_failed', 'No antivirus security scan performed. ' . $imported . ' images saved before stopping. ' . $exception->getMessage() );
+							} catch ( RuntimeException $audit_exception ) {
+								error_log( 'MRSA: unscanned import failure audit could not be saved for event ' . $event_id . ', user ' . get_current_user_id() );
+							}
+						}
+						$pending['errors'][] = $image['image_file'] . ': ' . $exception->getMessage();
+					}
+				}
+				self::remove_directory( $pending['stage_dir'] );
+			} else {
+				self::apply_import( $event_id, $pending['rows'], $pending['images'], $pending['stage_dir'] );
+				$imported = count( $pending['images'] );
+			}
+		} catch ( RuntimeException $exception ) {
+			if ( ! ( $exception instanceof MRSA_Bonus_Recovery_Exception ) && is_dir( $pending['stage_dir'] ) ) {
+				self::remove_directory( $pending['stage_dir'] );
+			}
+			$message = $imported . ' images saved before stopping. ' . $exception->getMessage();
+			if ( $exception instanceof MRSA_Bonus_Recovery_Exception ) {
+				throw new MRSA_Bonus_Recovery_Exception( $message );
+			}
+			throw new RuntimeException( $message );
+		}
+		$message = 'Imported or updated ' . count( $pending['rows'] ) . ' bonus listings and ' . $imported . ' event gallery images. ' . count( $pending['errors'] ) . ' image/source errors.';
+		if ( ! empty( $pending['unscanned'] ) ) {
+			$message .= ' WARNING: imported without an antivirus security scan because ClamAV was unavailable. Format and executable-content checks were retained; bypass recorded in the audit log.';
+			try {
+				self::audit( $event_id, 'import_completed', $message );
+			} catch ( RuntimeException $exception ) {
+				throw new RuntimeException( $message . ' The completion audit could not be saved; the pre-import audit remains. Do not retry without checking the event data.' );
+			}
+		}
+		return array( 'message' => $message, 'errors' => $pending['errors'] );
+	}
+
+	private static function apply_import( $event_id, $rows, $images, $stage_dir, $cleanup = true ) {
 		global $wpdb;
 		$event_dir = $images ? self::event_dir( $event_id ) : '';
 		if ( $images ) {
@@ -579,64 +840,61 @@ final class MRSA_Bonus {
 				}
 				$destination = trailingslashit( $event_dir ) . $new_file;
 				if ( ! rename( $image['stage_path'], $destination ) ) {
-					throw new RuntimeException( 'An imported image could not be installed in the event gallery.' );
+					throw new RuntimeException( $image['image_file'] . ': The image could not be installed in the event gallery.' );
 				}
 				$installed[] = $destination;
 				if ( false === $wpdb->update( MRSA::table( 'bonus_points' ), array( 'image_file' => $new_file ), array( 'id' => $existing['id'], 'event_id' => $event_id ) ) ) {
-					throw new RuntimeException( 'The imported image could not be linked to its bonus listing.' );
+					throw new RuntimeException( $image['image_file'] . ': The image could not be linked to its bonus listing.' );
 				}
 			}
 			MRSA::commit_transaction();
 		} catch ( RuntimeException $exception ) {
 			if ( ! MRSA::rollback_transaction() ) {
-				throw new RuntimeException( 'The import failed and the database rollback failed. Gallery backups have been retained for recovery.' );
+				throw new MRSA_Bonus_Recovery_Exception( 'The import failed and the database rollback failed. Gallery backups have been retained for recovery.' );
 			}
 			foreach ( $installed as $path ) {
 				if ( is_file( $path ) && ! unlink( $path ) ) {
-					throw new RuntimeException( 'The import failed and a newly installed image could not be removed: ' . basename( $path ) );
+					throw new MRSA_Bonus_Recovery_Exception( 'The import failed and a newly installed image could not be removed: ' . basename( $path ) );
 				}
 			}
 			foreach ( $backups as $original => $backup ) {
 				if ( is_file( $backup ) && ! rename( $backup, $original ) ) {
-					throw new RuntimeException( 'The import failed and a previous gallery image could not be restored: ' . basename( $original ) );
+					throw new MRSA_Bonus_Recovery_Exception( 'The import failed and a previous gallery image could not be restored: ' . basename( $original ) );
 				}
 			}
-			if ( $stage_dir ) {
+			if ( $stage_dir && $cleanup ) {
 				self::remove_directory( $stage_dir );
 			}
 			throw $exception;
 		}
 		foreach ( $backups as $backup ) {
 			if ( is_file( $backup ) && ! unlink( $backup ) ) {
-				throw new RuntimeException( 'The import completed, but an old replaced image could not be removed from staging.' );
+				throw new MRSA_Bonus_Recovery_Exception( 'The import completed, but an old replaced image could not be removed from staging.' );
 			}
 		}
-		if ( $stage_dir ) {
+		if ( $stage_dir && $cleanup ) {
 			self::remove_directory( $stage_dir );
 		}
 		return 'Imported or updated ' . count( $rows ) . ' bonus listings and ' . count( $images ) . ' event gallery images.';
 	}
 
 	public static function import( $event_id ) {
+		$result = self::prepare_import( $event_id );
+		$pending = self::pending( $event_id, $result['pending_token'] );
+		if ( ! empty( $pending['unscanned'] ) && $pending['can_approve'] && self::bypass_enabled() ) {
+			return self::approve( $event_id, $result['pending_token'] );
+		}
+		return $result;
+	}
+
+	private static function prepare_import( $event_id ) {
+		MRSA_File_Scan::reset( true );
+		$step = MRSA_Admin::posted( 'import_step' );
+		if ( ! in_array( $step, array( 'listing', 'images' ), true ) ) {
+			throw new RuntimeException( 'Choose step 1 to import listings or step 2 to import images.' );
+		}
 		$sheet_files = self::upload_file( 'bonus_file' );
 		$sheet = $sheet_files ? $sheet_files[0] : null;
-		$rows = array();
-		if ( $sheet && UPLOAD_ERR_NO_FILE !== (int) $sheet['error'] ) {
-			if ( UPLOAD_ERR_OK !== (int) $sheet['error'] || ! is_uploaded_file( $sheet['tmp_name'] ) ) {
-				throw new RuntimeException( 'The CSV or XLSX file could not be uploaded.' );
-			}
-			if ( (int) $sheet['size'] > self::MAX_SHEET_SIZE ) {
-				throw new RuntimeException( 'The CSV or XLSX file must be no larger than 10 MB.' );
-			}
-			$extension = strtolower( pathinfo( $sheet['name'], PATHINFO_EXTENSION ) );
-			if ( 'csv' === $extension ) {
-				$rows = self::read_csv( $sheet['tmp_name'] );
-			} elseif ( 'xlsx' === $extension ) {
-				$rows = self::read_xlsx( $sheet['tmp_name'] );
-			} else {
-				throw new RuntimeException( 'Choose a .csv or .xlsx file.' );
-			}
-		}
 		$remote_url = trim( MRSA_Admin::posted( 'gallery_url' ) );
 		$uploaded = self::upload_file( 'bonus_images', true );
 		$has_uploads = false;
@@ -646,20 +904,82 @@ final class MRSA_Bonus {
 				break;
 			}
 		}
+		if ( 'listing' === $step && ( $has_uploads || '' !== $remote_url ) ) {
+			throw new RuntimeException( 'Step 1 accepts a CSV/XLSX listing only. Import images separately in step 2.' );
+		}
+		if ( 'images' === $step && $sheet && UPLOAD_ERR_NO_FILE !== (int) $sheet['error'] ) {
+			throw new RuntimeException( 'Import the spreadsheet in step 1, not in the image import.' );
+		}
+		$rows = array();
+		if ( $sheet && UPLOAD_ERR_NO_FILE !== (int) $sheet['error'] ) {
+			if ( UPLOAD_ERR_OK !== (int) $sheet['error'] || ! is_uploaded_file( $sheet['tmp_name'] ) ) {
+				throw new RuntimeException( 'The CSV or XLSX file could not be uploaded.' );
+			}
+			if ( (int) $sheet['size'] > self::MAX_SHEET_SIZE ) {
+				throw new RuntimeException( 'The CSV or XLSX file must be no larger than 10 MB.' );
+			}
+			$stage_dir = self::make_stage_dir();
+			$extension = strtolower( pathinfo( $sheet['name'], PATHINFO_EXTENSION ) );
+			$sheet_path = trailingslashit( $stage_dir ) . '.listing-input';
+			try {
+				if ( ! copy( $sheet['tmp_name'], $sheet_path ) ) {
+					throw new RuntimeException( 'The listing could not be placed in private staging.' );
+				}
+				MRSA_File_Scan::scan( $sheet_path, $sheet['name'] );
+				if ( 'csv' === $extension ) {
+					$rows = self::read_csv( $sheet_path );
+				} elseif ( 'xlsx' === $extension ) {
+					$rows = self::read_xlsx( $sheet_path );
+				} else {
+					throw new RuntimeException( 'Choose a .csv or .xlsx file.' );
+				}
+				if ( ! $rows ) {
+					throw new RuntimeException( 'The listing contains no bonus rows. Add bonus data and scan again.' );
+				}
+			} catch ( RuntimeException $exception ) {
+				try {
+					return self::prepare( $event_id, array(), array(), $stage_dir, array( $sheet['name'] . ': ' . $exception->getMessage() ), false );
+				} catch ( RuntimeException $prepare_exception ) {
+					self::remove_directory( $stage_dir );
+					throw $prepare_exception;
+				}
+			}
+		}
 		if ( ! $rows && ! $has_uploads && '' === $remote_url ) {
 			throw new RuntimeException( 'Choose a CSV/XLSX file, a local image folder, or a public image URL.' );
+		}
+		if ( 'listing' === $step ) {
+			if ( ! $rows || $has_uploads || '' !== $remote_url ) {
+				if ( isset( $stage_dir ) ) {
+					self::remove_directory( $stage_dir );
+				}
+				throw new RuntimeException( 'Step 1 requires a non-empty CSV/XLSX listing only. Import images separately in step 2.' );
+			}
+			try {
+				return self::prepare( $event_id, $rows, array(), $stage_dir, array(), false );
+			} catch ( RuntimeException $exception ) {
+				self::remove_directory( $stage_dir );
+				throw $exception;
+			}
 		}
 		$stage_dir = $has_uploads || '' !== $remote_url ? self::make_stage_dir() : '';
 		$images = array();
 		$total_size = 0;
+		$partial = '1' === MRSA_Admin::posted( 'allow_partial_images' );
+		$errors = array();
 		try {
-			self::upload_images( $stage_dir, $images, $total_size );
+			self::upload_images( $stage_dir, $images, $total_size, $errors );
 			if ( '' !== $remote_url ) {
-				self::stage_remote( $remote_url, $stage_dir, $images, $total_size );
+				self::image_attempt( $remote_url, static function () use ( $remote_url, $stage_dir, &$images, &$total_size, &$errors ) {
+					self::stage_remote( $remote_url, $stage_dir, $images, $total_size, $errors );
+				}, $errors );
 			}
-			return self::apply_import( $event_id, $rows, $images, $stage_dir );
+			if ( ! $images && ! $errors ) {
+				$errors[] = 'No supported images were found in the selected source.';
+			}
+			return self::prepare( $event_id, array(), $images, $stage_dir, $errors, $partial );
 		} catch ( RuntimeException $exception ) {
-			if ( $stage_dir && is_dir( $stage_dir ) && array() === glob( trailingslashit( $stage_dir ) . '.backup-*' ) ) {
+			if ( $stage_dir && is_dir( $stage_dir ) ) {
 				self::remove_directory( $stage_dir );
 			}
 			throw $exception;
@@ -668,6 +988,7 @@ final class MRSA_Bonus {
 
 	public static function save( $event_id, $bonus_id ) {
 		global $wpdb;
+		MRSA_File_Scan::reset();
 		if ( ! self::valid_id( $bonus_id ) ) {
 			throw new RuntimeException( 'The Bonus ID is invalid.' );
 		}
@@ -807,6 +1128,9 @@ final class MRSA_Bonus {
 	}
 
 	private static function remove_directory( $directory ) {
+		if ( is_link( $directory ) ) {
+			throw new RuntimeException( 'Gallery/import cleanup refused a symbolic-link directory.' );
+		}
 		if ( ! is_dir( $directory ) ) {
 			return;
 		}

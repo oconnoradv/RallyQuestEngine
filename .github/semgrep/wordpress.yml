@@ -1,0 +1,84 @@
+rules:
+  - id: mrsa-wordpress-sql-injection
+    languages: [php]
+    severity: ERROR
+    message: Use wpdb->prepare with a trusted query template and placeholders for request data.
+    metadata:
+      cwe: "CWE-89: SQL Injection"
+    mode: taint
+    pattern-sources: &request_sources
+      - pattern: $_GET
+      - pattern: $_POST
+      - pattern: $_REQUEST
+      - pattern: $_COOKIE
+      - pattern: $_FILES
+      - pattern: MRSA_Admin::posted(...)
+      - pattern: MRSA_Admin::query(...)
+      - pattern: self::posted(...)
+      - pattern: self::query(...)
+    pattern-sanitizers:
+      - pattern: $wpdb->prepare(...)
+      - pattern: intval(...)
+      - pattern: absint(...)
+      - pattern: (int) $VALUE
+    pattern-sinks:
+      - patterns:
+          - pattern: $wpdb->$METHOD($QUERY, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(query|get_results|get_row|get_col|get_var)$
+          - focus-metavariable: $QUERY
+
+  - id: mrsa-wordpress-tainted-sql-template
+    languages: [php]
+    severity: ERROR
+    message: Do not concatenate or interpolate request data into the prepare query template; pass values as placeholder arguments.
+    metadata:
+      cwe: "CWE-89: SQL Injection"
+    mode: taint
+    pattern-sources: *request_sources
+    pattern-sanitizers:
+      - pattern: intval(...)
+      - pattern: absint(...)
+      - pattern: (int) $VALUE
+    pattern-sinks:
+      - patterns:
+          - pattern: $wpdb->prepare($QUERY, ...)
+          - focus-metavariable: $QUERY
+
+  - id: mrsa-wordpress-reflected-xss
+    languages: [php]
+    severity: ERROR
+    message: Escape request data for its HTML output context before displaying it.
+    metadata:
+      cwe: "CWE-79: Cross-site Scripting"
+    mode: taint
+    pattern-sources: *request_sources
+    pattern-sanitizers:
+      - pattern: esc_html(...)
+      - pattern: esc_attr(...)
+      - pattern: esc_url(...)
+      - pattern: wp_kses(...)
+      - pattern: wp_kses_post(...)
+      - pattern: intval(...)
+      - pattern: absint(...)
+      - pattern: (int) $VALUE
+    pattern-sinks:
+      - pattern: echo $VALUE;
+      - pattern: print $VALUE;
+
+  - id: mrsa-wordpress-unsafe-request
+    languages: [php]
+    severity: ERROR
+    message: Use wp_safe_remote_get/post/request for user-controlled URLs to reject unsafe network destinations.
+    metadata:
+      cwe: "CWE-918: Server-Side Request Forgery"
+    mode: taint
+    pattern-sources: *request_sources
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: wp_remote_get($URL, ...)
+              - pattern: wp_remote_post($URL, ...)
+              - pattern: wp_remote_request($URL, ...)
+          - focus-metavariable: $URL

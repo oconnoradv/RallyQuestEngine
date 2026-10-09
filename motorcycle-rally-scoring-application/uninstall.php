@@ -9,7 +9,7 @@ $cleanup = static function () use ( $wpdb ) {
 	if ( ! get_option( 'mrsa_delete_on_uninstall', false ) ) {
 		return;
 	}
-	foreach ( array( 'global_admins', 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points' ) as $name ) {
+	foreach ( array( 'global_admins', 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'import_audit' ) as $name ) {
 		$table = $wpdb->prefix . 'MRSA_' . $name;
 		$wpdb->query( "DROP TABLE IF EXISTS `$table`" );
 	}
