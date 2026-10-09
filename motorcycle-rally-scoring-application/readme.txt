@@ -248,6 +248,7 @@ No. Rider and pillion prices are event configuration values only.
 == Changelog ==
 
 = 0.1.13 =
+* Rebuilt this release to fix sequential image uploads targeting an invalid URL when the hidden action field shadows the form destination; added a real-browser regression fixture.
 * Separated administrative request inputs from bonus import, review, override and edit operations.
 * Extracted shared hardened spreadsheet reading, audit persistence, roster import and audited Diagnostics deletion services.
 * Isolated scanning state per import and separated local ClamAV transport from executable-content policy.

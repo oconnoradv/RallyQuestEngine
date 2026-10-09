@@ -155,6 +155,8 @@ Administrative screens use `MRSA_Queries` read models for event-scoped lists, se
 
 Public-contract regressions cover ranking edge cases, parameterized read models, database failures and diagnostic composition. Run standalone suites with `php tests/<suite>.php`; the release workflow runs these alongside the import, roster, queue and Diagnostics regressions. No additional production dependencies are required.
 
+Open `tests/image-queue-browser.html` in a browser to exercise the single-image request with a mocked response and real form controls. This covers the hidden `action` field shadowing the form's JavaScript `action` property; requests must read the form's destination attribute instead.
+
 ## Validation
 
 The **Security checks and ZIP release** GitHub Actions workflow runs on pull requests, branch pushes, version tags, and manual dispatch. It:

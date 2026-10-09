@@ -38,7 +38,7 @@
 			if (operation === 'bypass' && unscanned) data.set('bypass_confirmation', '1');
 			let response;
 			try {
-				response = await fetch(imageForm.action, { method: 'POST', credentials: 'same-origin', body: data });
+				response = await fetch(imageForm.getAttribute('action'), { method: 'POST', credentials: 'same-origin', body: data });
 			} catch (error) {
 				throw new Error('Connection lost. The last request may have completed. Check the event gallery or saved scan review before retrying.');
 			}

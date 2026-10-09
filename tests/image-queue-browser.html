@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Image queue endpoint regression</title>
+<div class="mrsa">
+	<div id="mrsa-import-images">
+		<form action="https://example.test/wp-admin/admin-post.php" method="post">
+			<input type="hidden" name="action" value="mrsa_save">
+			<input type="hidden" name="_wpnonce" value="test-nonce">
+			<input type="hidden" name="event_id" value="7">
+			<input type="file" name="bonus_images[]" multiple>
+			<input name="gallery_url" value="">
+			<input type="checkbox" name="allow_partial_images">
+		</form>
+	</div>
+	<section class="mrsa-image-queue" hidden data-max-image="10485760" data-max-total="104857600" data-max-count="200">
+		<p class="mrsa-queue-progress"></p>
+		<div class="mrsa-queue-review"></div>
+		<ol class="mrsa-queue-log"></ol>
+		<button class="mrsa-queue-stop">Stop</button>
+		<a href="https://example.test/wp-admin/admin.php?page=mrsa">Gallery</a>
+	</section>
+</div>
+<pre id="result">RUNNING</pre>
+<script>
+	'use strict';
+	const requests = [];
+	window.fetch = async (url, options) => {
+		requests.push({ url, options });
+		return { ok: true, status: 200, json: async () => ({
+			success: true, data: { state: 'imported', message: 'Imported.', errors: [] }
+		}) };
+	};
+</script>
+<script src="../motorcycle-rally-scoring-application/assets/admin.js"></script>
+<script>
+	(async () => {
+		const form = document.querySelector('form');
+		const result = document.querySelector('#result');
+		try {
+			if (!(form.action instanceof HTMLInputElement)) throw new Error('Fixture must reproduce the named-control collision.');
+			const files = new DataTransfer();
+			files.items.add(new File(['image data'], 'B1.jpg', { type: 'image/jpeg' }));
+			form.querySelector('[type="file"]').files = files.files;
+			form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+			await new Promise(resolve => setTimeout(resolve, 50));
+			if (requests.length !== 1) throw new Error('Expected exactly one upload request.');
+			const request = requests[0];
+			if (request.url !== form.getAttribute('action')) throw new Error('Upload used the hidden action control instead of the form destination.');
+			if (request.options.method !== 'POST' || request.options.credentials !== 'same-origin') throw new Error('Upload must retain authenticated POST behavior.');
+			const body = request.options.body;
+			if (body.get('action') !== 'mrsa_image_queue' || body.get('_wpnonce') !== 'test-nonce' || body.get('event_id') !== '7') throw new Error('Queue routing, nonce or event scope was lost.');
+			if (body.getAll('bonus_images[]').length !== 1 || body.get('bonus_images[]').name !== 'B1.jpg') throw new Error('Expected one named image.');
+			if (!document.querySelector('.mrsa-queue-progress').textContent.includes('1 images imported')) throw new Error('Queue did not complete.');
+			result.textContent = 'PASS: named action control does not shadow the upload endpoint; authenticated single-image request completes.';
+		} catch (error) {
+			result.textContent = 'FAIL: ' + error.message;
+		}
+	})();
+</script>
+</html>
