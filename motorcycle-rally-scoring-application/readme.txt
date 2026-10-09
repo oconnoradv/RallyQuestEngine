@@ -3,7 +3,7 @@ Contributors: oconnoradv
 Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
-Stable tag: 0.1.2
+Stable tag: 0.1.3
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -133,6 +133,13 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.1.3 =
+* Import all NHTSA models for a make only after motorcycle classification is confirmed.
+* Support motorcycle catalog records with an unspecified year and optional four-digit manual years.
+* Move event administrator assignments to each event's Configure page.
+* Add Event Rosters with complete rider details and a dedicated Add Rider to Event workflow.
+* Rename Global Setup to Administrators.
 
 = 0.1.2 =
 * Restrict external import to one exact NHTSA motorcycle make/model/year record.
