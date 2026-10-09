@@ -12,7 +12,7 @@ final class MRSA_Admin {
 	public static function menu() {
 		if ( MRSA::access() ) {
 			add_menu_page( 'Motorcycle Rally Scoring Application', 'Rally Scoring', 'read', 'mrsa', array( 'MRSA_Views', 'render' ), 'dashicons-location-alt', 58 );
-			add_submenu_page( 'mrsa', 'Event Scoring', 'Event Scoring', 'read', 'mrsa-scoring', array( 'MRSA_Views', 'render_scoring' ) );
+			add_submenu_page( null, 'Event Scoring', 'Event Scoring', 'read', 'mrsa-scoring', array( 'MRSA_Views', 'render_scoring' ) );
 			add_submenu_page( null, 'Edit Rider', 'Edit Rider', 'read', 'mrsa-rider-edit', array( 'MRSA_Views', 'render_rider_edit' ) );
 			add_submenu_page( null, 'Edit Event', 'Edit Event', 'read', 'mrsa-event-edit', array( 'MRSA_Views', 'render_event_edit' ) );
 			add_submenu_page( null, 'Event Roster', 'Event Roster', 'read', 'mrsa-event-roster', array( 'MRSA_Views', 'render_event_roster' ) );
@@ -24,8 +24,9 @@ final class MRSA_Admin {
 		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'rally-scoring_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit', 'admin_page_mrsa-event-roster', 'admin_page_mrsa-event-enroll' ), true ) || ! MRSA::access() ) {
 			return;
 		}
-		wp_enqueue_style( 'mrsa-admin', plugins_url( 'assets/admin.css', MRSA_FILE ), array(), MRSA_VERSION );
-		wp_enqueue_script( 'mrsa-admin', plugins_url( 'assets/admin.js', MRSA_FILE ), array(), MRSA_VERSION, true );
+		$asset_version = MRSA_VERSION . '.' . MRSA_DB_VERSION;
+		wp_enqueue_style( 'mrsa-admin', plugins_url( 'assets/admin.css', MRSA_FILE ), array(), $asset_version );
+		wp_enqueue_script( 'mrsa-admin', plugins_url( 'assets/admin.js', MRSA_FILE ), array(), $asset_version, true );
 		if ( 'admin_page_mrsa-event-edit' === $hook ) {
 			wp_enqueue_media();
 		}
@@ -88,9 +89,6 @@ final class MRSA_Admin {
 	}
 
 	public static function url( $tab, $extra = array() ) {
-		if ( 'scoring' === $tab ) {
-			return add_query_arg( array_merge( array( 'page' => 'mrsa-scoring' ), $extra ), admin_url( 'admin.php' ) );
-		}
 		if ( in_array( $tab, array( 'rider-edit', 'event-edit', 'event-roster', 'event-enroll' ), true ) ) {
 			return add_query_arg( array_merge( array( 'page' => 'mrsa-' . $tab ), $extra ), admin_url( 'admin.php' ) );
 		}
@@ -122,12 +120,26 @@ final class MRSA_Admin {
 		return $result;
 	}
 
+	private static function return_url() {
+		$url = self::posted( 'return_url' );
+		$url = $url ? wp_validate_redirect( $url, '' ) : wp_get_referer();
+		if ( ! $url ) {
+			return '';
+		}
+		if ( 0 === strpos( $url, '/' ) ) {
+			$admin_path = (string) wp_parse_url( admin_url(), PHP_URL_PATH );
+			return $admin_path && 0 === strpos( $url, $admin_path ) ? $url : '';
+		}
+		return 0 === strpos( $url, admin_url() ) ? $url : '';
+	}
+
 	public static function save() {
 		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! MRSA::access() ) {
 			wp_die( esc_html( 'Unauthorized request.' ), '', array( 'response' => 403 ) );
 		}
 		check_admin_referer( 'mrsa_save' );
 		$op = self::posted( 'op' );
+		$return_url = self::return_url();
 		$tab = 'global';
 		$extra = array();
 		try {
@@ -155,7 +167,12 @@ final class MRSA_Admin {
 					break;
 				case 'delete_bike':
 					self::require_global();
-					self::delete_bike();
+					$message = self::delete_bikes( false );
+					$tab = 'bikes';
+					break;
+				case 'delete_bikes':
+					self::require_global();
+					$message = self::delete_bikes( true );
 					$tab = 'bikes';
 					break;
 				case 'source_import':
@@ -186,8 +203,10 @@ final class MRSA_Admin {
 				default:
 					throw new RuntimeException( 'Unknown operation.' );
 			}
-			$extra['notice'] = $message ?? 'Saved successfully.';
-			wp_safe_redirect( self::url( $tab, $extra ) );
+			$message = $message ?? 'Saved successfully.';
+			$extra['notice'] = $message;
+			$redirect = $return_url ? add_query_arg( 'notice', $message, remove_query_arg( 'notice', $return_url ) ) : self::url( $tab, $extra );
+			wp_safe_redirect( $redirect );
 			exit;
 		} catch ( RuntimeException $e ) {
 			wp_die( esc_html( $e->getMessage() ), esc_html( 'Rally update not saved' ), array( 'response' => 400, 'back_link' => true ) );
@@ -230,36 +249,51 @@ final class MRSA_Admin {
 		if ( $id && ! MRSA::row( 'bikes', $id ) ) {
 			throw new RuntimeException( 'Motorcycle not found.' );
 		}
-		$year = trim( self::posted( 'year' ) );
-		$data = array( 'make' => self::text( self::posted( 'make' ), 80, true ), 'model' => self::text( self::posted( 'model' ), 120, true ), 'year' => '' === $year ? 0 : self::integer( $year, 1900, 2100 ) );
+		$data = array( 'make' => self::text( self::posted( 'make' ), 80, true ), 'model' => self::text( self::posted( 'model' ), 120, true ), 'year' => 0 );
 		if ( ! $id ) {
 			$data['source'] = 'Manual entry';
 		}
 		self::checked( $id ? $wpdb->update( MRSA::table( 'bikes' ), $data, array( 'id' => $id ) ) : $wpdb->insert( MRSA::table( 'bikes' ), $data ) );
 	}
 
-	private static function delete_bike() {
+	private static function delete_bikes( $bulk ) {
 		global $wpdb;
-		$id = self::integer( self::posted( 'id' ), 1 );
+		$values = $bulk
+			? ( isset( $_POST['bike_ids'] ) && is_array( $_POST['bike_ids'] ) ? wp_unslash( $_POST['bike_ids'] ) : array() )
+			: array( self::posted( 'id' ) );
+		if ( ! $values || count( $values ) > 500 ) {
+			throw new RuntimeException( 'Select between 1 and 500 motorcycle records to delete.' );
+		}
+		$ids = array();
+		foreach ( $values as $value ) {
+			$ids[] = self::integer( $value, 1 );
+		}
+		$ids = array_values( array_unique( $ids ) );
+		sort( $ids, SORT_NUMERIC );
 		MRSA::begin_transaction();
 		try {
-			$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'bikes' ) . ' WHERE id=%d FOR UPDATE', $id ) );
-			if ( ! $locked ) {
-				throw new RuntimeException( 'Motorcycle no longer exists or could not be locked.' );
+			foreach ( $ids as $id ) {
+				$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'bikes' ) . ' WHERE id=%d FOR UPDATE', $id ) );
+				if ( ! $locked ) {
+					throw new RuntimeException( 'A selected motorcycle no longer exists or could not be locked.' );
+				}
+				$used = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'rider_bikes' ) . ' WHERE bike_id=%d LIMIT 1', $id ) );
+				if ( $wpdb->last_error ) {
+					throw new RuntimeException( 'Unable to check motorcycle assignments. No catalog records were deleted.' );
+				}
+				if ( $used ) {
+					throw new RuntimeException( 'A selected motorcycle is assigned to a rider. No catalog records were deleted.' );
+				}
 			}
-			$used = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'rider_bikes' ) . ' WHERE bike_id=%d LIMIT 1', $id ) );
-			if ( $wpdb->last_error ) {
-				throw new RuntimeException( 'Unable to check motorcycle assignments. No catalog entry was deleted.' );
+			foreach ( $ids as $id ) {
+				self::checked( $wpdb->delete( MRSA::table( 'bikes' ), array( 'id' => $id ) ) );
 			}
-			if ( $used ) {
-				throw new RuntimeException( 'This motorcycle is used by a rider and cannot be removed.' );
-			}
-			self::checked( $wpdb->delete( MRSA::table( 'bikes' ), array( 'id' => $id ) ) );
 			MRSA::commit_transaction();
 		} catch ( RuntimeException $e ) {
 			MRSA::rollback_transaction();
 			throw $e;
 		}
+		return count( $ids ) . ' motorcycle catalog record(s) deleted.';
 	}
 
 	private static function rider() {
@@ -282,8 +316,9 @@ final class MRSA_Admin {
 		}
 		$bike_ids = isset( $_POST['bike_ids'] ) && is_array( $_POST['bike_ids'] ) ? wp_unslash( $_POST['bike_ids'] ) : array();
 		$fuel = isset( $_POST['fuel'] ) && is_array( $_POST['fuel'] ) ? wp_unslash( $_POST['fuel'] ) : array();
-		if ( count( $bike_ids ) > 20 || count( $bike_ids ) !== count( $fuel ) ) {
-			throw new RuntimeException( 'Select at most 20 motorcycles with matching fuel capacities.' );
+		$model_years = isset( $_POST['model_year'] ) && is_array( $_POST['model_year'] ) ? wp_unslash( $_POST['model_year'] ) : array();
+		if ( count( $bike_ids ) > 20 || count( $bike_ids ) !== count( $fuel ) || count( $bike_ids ) !== count( $model_years ) ) {
+			throw new RuntimeException( 'Select at most 20 motorcycles with matching years and fuel capacities.' );
 		}
 		$bikes = array();
 		foreach ( array_values( $bike_ids ) as $i => $bike_id ) {
@@ -291,7 +326,12 @@ final class MRSA_Admin {
 				continue;
 			}
 			$bike_id = self::integer( $bike_id, 1 );
-			$bikes[] = array( 'bike_id' => $bike_id, 'fuel_capacity' => self::text( array_values( $fuel )[ $i ], 100 ) );
+			$model_year = trim( (string) array_values( $model_years )[ $i ] );
+			$bikes[] = array(
+				'bike_id'      => $bike_id,
+				'model_year'   => '' === $model_year ? 0 : self::integer( $model_year, 1000, 9999 ),
+				'fuel_capacity' => self::text( array_values( $fuel )[ $i ], 100 ),
+			);
 		}
 		MRSA::begin_transaction();
 		try {

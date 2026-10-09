@@ -15,8 +15,12 @@ final class MRSA_Views {
 		echo '<a href="' . esc_url( MRSA_Admin::url( $tab, $extra ) ) . '">' . esc_html( (string) $label ) . '</a>';
 	}
 
-	private static function form( $op, $hidden = array(), $class = '' ) {
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="' . esc_attr( $class ) . '">';
+	private static function form( $op, $hidden = array(), $class = '', $id = '' ) {
+		$return_url = MRSA_Admin::query( 'return_url' );
+		if ( $return_url && ! isset( $hidden['return_url'] ) ) {
+			$hidden['return_url'] = $return_url;
+		}
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="' . esc_attr( $class ) . '"' . ( $id ? ' id="' . esc_attr( $id ) . '"' : '' ) . '>';
 		wp_nonce_field( 'mrsa_save' );
 		foreach ( array_merge( array( 'action' => 'mrsa_save', 'op' => $op ), $hidden ) as $key => $value ) {
 			echo '<input type="hidden" name="' . esc_attr( $key ) . '" value="' . esc_attr( (string) $value ) . '">';
@@ -94,7 +98,7 @@ final class MRSA_Views {
 		}
 		$global = MRSA::global_access();
 		$tab = MRSA_Admin::query( 'tab', $global ? 'global' : 'events' );
-		$tabs = array( 'global' => 'Administrators', 'bikes' => 'Bike Setup', 'riders' => 'Rider Registration', 'events' => 'Event Setup', 'rosters' => 'Event Rosters', 'about' => 'About' );
+		$tabs = array( 'global' => 'Administrators', 'bikes' => 'Bike Setup', 'riders' => 'Rider Registration', 'events' => 'Event Setup', 'rosters' => 'Event Rosters', 'scoring' => 'Scoring', 'about' => 'About' );
 		if ( ! isset( $tabs[ $tab ] ) || ( ! $global && in_array( $tab, array( 'global', 'bikes' ), true ) ) ) {
 			wp_die( esc_html( 'This setup area is restricted to global administrators.' ), '', array( 'response' => 403 ) );
 		}
@@ -127,6 +131,9 @@ final class MRSA_Views {
 				break;
 			case 'rosters':
 				self::event_rosters();
+				break;
+			case 'scoring':
+				self::scoring_setup();
 				break;
 			case 'about':
 				self::about();
@@ -203,20 +210,20 @@ final class MRSA_Views {
 		echo '<h3>' . ( $id ? 'Edit motorcycle #' . esc_html( $id ) : 'Manual motorcycle entry' ) . '</h3><div class="mrsa-grid">';
 		self::field( 'Make', 'make', $bike['make'] ?? '', 'text', true, array( 'maxlength' => 80 ) );
 		self::field( 'Model', 'model', $bike['model'] ?? '', 'text', true, array( 'maxlength' => 120 ) );
-		self::field( 'Year (optional, 4 digits)', 'year', isset( $bike['year'] ) && (int) $bike['year'] ? $bike['year'] : '', 'number', false, array( 'min' => 1900, 'max' => 2100, 'step' => 1, 'placeholder' => 'YYYY', 'inputmode' => 'numeric' ) );
 		echo '</div>';
 		self::button( $id ? 'Save motorcycle' : 'Add motorcycle' );
 		echo '</form>';
 		$q = substr( MRSA_Admin::query( 'q' ), 0, 100 );
-		$where = $q ? ' WHERE make LIKE %s OR model LIKE %s OR CAST(year AS CHAR) LIKE %s' : '';
-		$args = $q ? array_fill( 0, 3, '%' . $wpdb->esc_like( $q ) . '%' ) : array();
-		$rows = self::list_page( 'bikes', 'SELECT * FROM ' . MRSA::table( 'bikes' ) . $where . ' ORDER BY make,model,year DESC', $args, 'SELECT COUNT(*) FROM ' . MRSA::table( 'bikes' ) . $where );
-		self::table( array( 'ID', 'Make', 'Model', 'Year', 'Source', 'Actions' ), array( 1, 3 ) );
+		$where = $q ? ' WHERE make LIKE %s OR model LIKE %s' : '';
+		$args = $q ? array_fill( 0, 2, '%' . $wpdb->esc_like( $q ) . '%' ) : array();
+		$rows = self::list_page( 'bikes', 'SELECT * FROM ' . MRSA::table( 'bikes' ) . $where . ' ORDER BY make,model,id', $args, 'SELECT COUNT(*) FROM ' . MRSA::table( 'bikes' ) . $where );
+		echo '<p><label><input type="checkbox" class="mrsa-select-all-bikes"> Select all motorcycle records loaded on this server page</label></p>';
+		self::table( array( 'Select', 'ID', 'Make', 'Model', 'Source', 'Actions' ), array( 2 ) );
 		foreach ( $rows as $row ) {
-			echo '<tr>';
-			foreach ( array( 'id', 'make', 'model', 'year', 'source' ) as $key ) {
+			echo '<tr><td><input type="checkbox" name="bike_ids[]" value="' . esc_attr( $row['id'] ) . '" form="mrsa-bulk-delete-bikes" aria-label="Select motorcycle catalog record ' . esc_attr( $row['id'] ) . '"></td>';
+			foreach ( array( 'id', 'make', 'model', 'source' ) as $key ) {
 				echo '<td>';
-				self::h( 'year' === $key ? self::year( $row[ $key ] ) : $row[ $key ] );
+				self::h( $row[ $key ] );
 				echo '</td>';
 			}
 			echo '<td>';
@@ -225,7 +232,9 @@ final class MRSA_Views {
 			echo '<button class="button" data-confirm="Remove this catalog entry? Entries used by riders cannot be removed.">Delete</button></form></td></tr>';
 		}
 		self::end_table();
-		echo '<h2>Import motorcycle models for a make</h2><p>Source: <a href="' . esc_url( MRSA_Importer::SOURCE ) . '" target="_blank" rel="noopener noreferrer">NHTSA Product Information Catalog and Vehicle Listing (vPIC) API</a>. Enter one make. Models from Get Models for Make are stored only when the motorcycle-filtered NHTSA response confirms the same model ID. Imported models have an Unspecified year because this endpoint does not provide model years. No request is made on activation or page load.</p>';
+		self::form( 'delete_bikes', array(), 'mrsa-panel', 'mrsa-bulk-delete-bikes' );
+		echo '<p>Select multiple catalog rows above, then delete them together. If any selected motorcycle is assigned to a rider, none are deleted.</p><button type="submit" class="button" data-confirm="Delete all selected motorcycle catalog records?">Delete selected motorcycles</button></form>';
+		echo '<h2>Import motorcycle models for a make</h2><p>Source: <a href="' . esc_url( MRSA_Importer::SOURCE ) . '" target="_blank" rel="noopener noreferrer">NHTSA Product Information Catalog and Vehicle Listing (vPIC) API</a>. Enter one make. Make/model records from Get Models for Make are stored only when the motorcycle-filtered NHTSA response confirms the same model ID. No year is imported. No request is made on activation or page load.</p>';
 		self::form( 'source_import', array(), 'mrsa-panel mrsa-edit-form' );
 		self::field( 'Make', 'import_make', '', 'text', true, array( 'maxlength' => 80, 'placeholder' => 'Honda' ) );
 		echo '<label><input type="checkbox" name="source_consent" value="1" required> I understand that this sends the entered make to NHTSA and imports only models independently confirmed as Motorcycles.</label><p>Two HTTPS requests, each with a 256 KB response limit and no redirects. Unavailable, malformed, unconfirmed, and non-motorcycle results are rejected. Manual motorcycle entry remains available.</p>';
@@ -296,18 +305,18 @@ final class MRSA_Views {
 		}
 		self::field( 'Insurance information (multiline)', 'insurance', $rider['insurance'] ?? '', 'textarea' );
 		self::field( 'Other information (do not store unnecessary sensitive data)', 'other', $rider['other'] ?? '', 'textarea' );
-		echo '<h4>Motorcycles and fuel capacity</h4><p>Choose make, then model, then year. Fuel capacity is optional text; include your preferred units. Multiple motorcycles allowed (up to 20). Without JavaScript, use the full catalog dropdown.</p>';
-		$bikes = $wpdb->get_results( 'SELECT id,make,model,year FROM ' . MRSA::table( 'bikes' ) . ' ORDER BY make,model,year DESC', ARRAY_A );
-		$owned = $id ? $wpdb->get_results( $wpdb->prepare( 'SELECT bike_id,fuel_capacity FROM ' . MRSA::table( 'rider_bikes' ) . ' WHERE rider_id=%d ORDER BY id', $id ), ARRAY_A ) : array();
+		echo '<h4>Motorcycles and fuel capacity</h4><p>Choose a catalog make and model, then optionally enter the rider&rsquo;s four-digit model year. The year is not validated against the catalog. Fuel capacity is optional text; include your preferred units. Multiple motorcycles allowed (up to 20). Without JavaScript, use the full catalog dropdown.</p>';
+		$bikes = $wpdb->get_results( 'SELECT id,make,model FROM ' . MRSA::table( 'bikes' ) . ' ORDER BY make,model,id', ARRAY_A );
+		$owned = $id ? $wpdb->get_results( $wpdb->prepare( 'SELECT bike_id,model_year,fuel_capacity FROM ' . MRSA::table( 'rider_bikes' ) . ' WHERE rider_id=%d ORDER BY id', $id ), ARRAY_A ) : array();
 		if ( ! $owned ) {
-			$owned[] = array( 'bike_id' => '', 'fuel_capacity' => '' );
+			$owned[] = array( 'bike_id' => '', 'model_year' => '', 'fuel_capacity' => '' );
 		}
 		echo '<div class="mrsa-bike-rows">';
 		foreach ( $owned as $row ) {
 			self::bike_row( $bikes, $row );
 		}
 		echo '</div><template id="mrsa-bike-template">';
-		self::bike_row( $bikes, array( 'bike_id' => '', 'fuel_capacity' => '' ) );
+		self::bike_row( $bikes, array( 'bike_id' => '', 'model_year' => '', 'fuel_capacity' => '' ) );
 		echo '</template><button type="button" class="button mrsa-add-bike">Add motorcycle</button><p>';
 		self::button( $id ? 'Save rider' : 'Add Rider' );
 		echo '</p></form>';
@@ -334,12 +343,12 @@ final class MRSA_Views {
 	}
 
 	private static function bike_row( $bikes, $row ) {
-		echo '<div class="mrsa-bike-row"><div class="mrsa-dependent" hidden><label>Make <select class="mrsa-make" aria-label="Motorcycle make"></select></label><label>Model <select class="mrsa-model" aria-label="Motorcycle model"></select></label><label>Year <select class="mrsa-year" aria-label="Motorcycle year"></select></label></div><label class="mrsa-catalog-label">Catalog motorcycle <select name="bike_ids[]" class="mrsa-catalog"><option value="">No motorcycle</option>';
+		echo '<div class="mrsa-bike-row"><div class="mrsa-dependent" hidden><label>Make <select class="mrsa-make" aria-label="Motorcycle make"></select></label><label>Model <select class="mrsa-model" aria-label="Motorcycle model"></select></label></div><label class="mrsa-catalog-label">Catalog motorcycle <select name="bike_ids[]" class="mrsa-catalog"><option value="">No motorcycle</option>';
 		foreach ( $bikes as $bike ) {
-			$year = self::year( $bike['year'] );
-			echo '<option value="' . esc_attr( $bike['id'] ) . '" data-make="' . esc_attr( $bike['make'] ) . '" data-model="' . esc_attr( $bike['model'] ) . '" data-year="' . esc_attr( $year ) . '"' . selected( $row['bike_id'], $bike['id'], false ) . '>' . esc_html( $bike['make'] . ' ' . $bike['model'] . ' (' . $year . ')' ) . '</option>';
+			echo '<option value="' . esc_attr( $bike['id'] ) . '" data-make="' . esc_attr( $bike['make'] ) . '" data-model="' . esc_attr( $bike['model'] ) . '"' . selected( $row['bike_id'], $bike['id'], false ) . '>' . esc_html( $bike['make'] . ' ' . $bike['model'] ) . '</option>';
 		}
 		echo '</select></label>';
+		self::field( 'Year (optional)', 'model_year[]', (int) ( $row['model_year'] ?? 0 ) ?: '', 'number', false, array( 'min' => 1000, 'max' => 9999, 'step' => 1, 'placeholder' => 'YYYY', 'inputmode' => 'numeric' ) );
 		self::field( 'Fuel capacity', 'fuel[]', $row['fuel_capacity'], 'text', false, array( 'maxlength' => 100, 'placeholder' => 'e.g. 5 US gal or 20 L' ) );
 		echo '<button type="button" class="button mrsa-remove-bike">Remove motorcycle</button></div>';
 	}
@@ -518,8 +527,8 @@ final class MRSA_Views {
 			echo '<p>Ask a global administrator to enroll additional master riders. You can edit bib and pillion details for this event below.</p>';
 		}
 		$motorcycles = array();
-		foreach ( $wpdb->get_results( $wpdb->prepare( 'SELECT rb.rider_id,b.make,b.model,b.year,rb.fuel_capacity FROM ' . MRSA::table( 'rider_bikes' ) . ' rb JOIN ' . MRSA::table( 'bikes' ) . ' b ON b.id=rb.bike_id JOIN ' . MRSA::table( 'registrations' ) . ' reg ON reg.rider_id=rb.rider_id WHERE reg.event_id=%d ORDER BY b.make,b.model,b.year DESC', $id ), ARRAY_A ) as $bike ) {
-			$motorcycles[ (int) $bike['rider_id'] ][] = $bike['make'] . ' ' . $bike['model'] . ' (' . self::year( $bike['year'] ) . ')' . ( $bike['fuel_capacity'] ? ' — ' . $bike['fuel_capacity'] : '' );
+		foreach ( $wpdb->get_results( $wpdb->prepare( 'SELECT rb.rider_id,b.make,b.model,rb.model_year,rb.fuel_capacity FROM ' . MRSA::table( 'rider_bikes' ) . ' rb JOIN ' . MRSA::table( 'bikes' ) . ' b ON b.id=rb.bike_id JOIN ' . MRSA::table( 'registrations' ) . ' reg ON reg.rider_id=rb.rider_id WHERE reg.event_id=%d ORDER BY b.make,b.model,rb.model_year DESC', $id ), ARRAY_A ) as $bike ) {
+			$motorcycles[ (int) $bike['rider_id'] ][] = $bike['make'] . ' ' . $bike['model'] . ' (' . self::year( $bike['model_year'] ) . ')' . ( $bike['fuel_capacity'] ? ' — ' . $bike['fuel_capacity'] : '' );
 		}
 		self::table( array( 'Rider ID', 'Bib / scoring context', 'Name', 'Alias', 'Email', 'Phone', 'Emergency contact', 'Emergency email', 'Emergency phone', 'Insurance', 'Other information', 'Motorcycles / fuel capacity', 'Pillion', 'Status', 'Score', 'Event placing', 'Actions' ), array( 13 ) );
 		foreach ( $rows as $row ) {
@@ -598,28 +607,37 @@ final class MRSA_Views {
 				echo '</tr>';
 			}
 			self::end_table();
+		} elseif ( count( $used ) >= (int) $event['max_bib'] ) {
+			echo '<p>Every bib is assigned. Increase the event maximum bib before adding another rider.</p>';
 		} else {
-			echo '<p>No riders are available to add, or every bib is assigned. Add a master rider or increase the event maximum bib.</p>';
+			$return_url = MRSA_Admin::url( 'event-enroll', array( 'event_id' => $id ) );
+			$add_url = MRSA_Admin::url( 'rider-edit', array( 'return_url' => $return_url ) );
+			echo '<div class="notice notice-info inline"><p>No additional riders are available. Do you wish to add a new rider?</p><p><a class="button button-primary" href="' . esc_url( $add_url ) . '" data-confirm="No additional riders are available. Open the Add Rider form?">Add New Rider</a></p></div>';
 		}
 		echo '</div>';
 	}
 
 	public static function render_scoring() {
-		if ( ! MRSA::access() ) {
-			wp_die( esc_html( 'You are not assigned to rally administration.' ), '', array( 'response' => 403 ) );
+		$extra = array();
+		foreach ( array( 'event_id', 'score_rider', 'score_tab' ) as $key ) {
+			$value = MRSA_Admin::query( $key );
+			if ( '' !== $value ) {
+				$extra[ $key ] = $value;
+			}
 		}
+		wp_safe_redirect( MRSA_Admin::url( 'scoring', $extra ) );
+		exit;
+	}
+
+	private static function scoring_setup() {
 		$events = self::events();
-		$id = absint( MRSA_Admin::query( 'event_id', $events ? (string) $events[0]['id'] : '0' ) );
+		$id = absint( MRSA_Admin::query( 'event_id', '0' ) );
 		if ( $id && ! MRSA::event_access( $id ) ) {
 			wp_die( esc_html( 'Event not found or not assigned to you.' ), '', array( 'response' => 403 ) );
 		}
-		echo '<div class="wrap mrsa">';
-		self::header();
-		echo '<h2>Event Scoring</h2><p>';
-		self::link( 'Return to Event Setup', 'events', $id ? array( 'event_id' => $id ) : array() );
-		echo '</p>';
+		echo '<h2>Scoring</h2>';
 		if ( $events ) {
-			echo '<form method="get" action="' . esc_url( admin_url( 'admin.php' ) ) . '" class="mrsa-panel"><input type="hidden" name="page" value="mrsa-scoring">';
+			echo '<form method="get" action="' . esc_url( admin_url( 'admin.php' ) ) . '" class="mrsa-panel"><input type="hidden" name="page" value="mrsa"><input type="hidden" name="tab" value="scoring">';
 			self::event_select( $events, $id );
 			echo '<button class="button">Choose event</button></form>';
 		}
@@ -627,9 +645,8 @@ final class MRSA_Views {
 		if ( $event ) {
 			self::scoring( $event );
 		} else {
-			echo '<p>Create or select an assigned event to open its scoring context. Scoring functionality is future-defined.</p><ul><li>Bonus Point Library</li><li>Submissions - Pending Review</li><li>Submissions - Reviewed</li><li>Submissions - Contested</li></ul>';
+			echo '<p>' . esc_html( $events ? 'Choose an event to display its scoring tabs.' : 'Create or be assigned to an event before opening scoring.' ) . '</p>';
 		}
-		echo '</div>';
 	}
 
 	private static function scoring( $event ) {
@@ -694,8 +711,8 @@ final class MRSA_Views {
 		}
 		echo '</table>';
 		echo '<p>The plugin is free software released under the GNU General Public License, version 3 or (at your option) any later version. The repository and installable package include the license and documentation.</p>';
-		echo '<h2>What this version includes</h2><ul class="ul-disc"><li>Global and per-event administrator assignments based on existing WordPress users.</li><li>Manual and make-based NHTSA motorcycle catalog workflows.</li><li>Master rider records with emergency, insurance, and motorcycle details.</li><li>Separate event configuration, roster, enrollment, and scoring pages with media-library logos, capacity controls, pillion details, and unique event bibs.</li></ul>';
-		echo '<h2>Catalog source</h2><div class="notice notice-info inline"><p>The optional import uses the <a href="' . esc_url( MRSA_Importer::SOURCE ) . '" target="_blank" rel="noopener noreferrer">NHTSA Product Information Catalog and Vehicle Listing API<span class="screen-reader-text"> (opens in a new tab)</span></a>. It accepts a make and intersects Get Models for Make results with NHTSA&rsquo;s motorcycle-filtered models. Imported model years are Unspecified because the source response does not include a year.</p></div>';
+		echo '<h2>What this version includes</h2><ul class="ul-disc"><li>Global and per-event administrator assignments based on existing WordPress users.</li><li>Manual and make-based NHTSA motorcycle make/model catalog workflows with bulk deletion.</li><li>Master rider records with emergency, insurance, make/model motorcycle, optional manual year, and fuel-capacity details.</li><li>Event configuration, roster, enrollment, and Scoring tabs with media-library logos, capacity controls, pillion details, and unique event bibs.</li><li>Successful forms return to their originating form or tab.</li></ul>';
+		echo '<h2>Catalog source</h2><div class="notice notice-info inline"><p>The optional import uses the <a href="' . esc_url( MRSA_Importer::SOURCE ) . '" target="_blank" rel="noopener noreferrer">NHTSA Product Information Catalog and Vehicle Listing API<span class="screen-reader-text"> (opens in a new tab)</span></a>. It accepts a make and intersects Get Models for Make results with NHTSA&rsquo;s motorcycle-filtered models. Only make and model are imported; an optional four-digit year is entered separately on a rider&rsquo;s motorcycle assignment and is not validated against the catalog.</p></div>';
 		echo '<h2>Privacy and security</h2><p>Collect only necessary rider, emergency-contact, insurance, and pillion details. WordPress personal-data export and erasure tools include plugin rider information. Erasure anonymizes riders and removes motorcycle and pillion details while retaining anonymous registration identifiers and results fields for event integrity.</p><p>Use TLS, least-privilege accounts, secure backups, and supported WordPress, PHP, and database versions. Automated Semgrep and Trivy checks support secure development but do not certify NIST compliance, guarantee that every CVE is absent, or replace an independent security assessment.</p>';
 		echo '<h2>Reporting issues</h2><ol><li>Search <a href="' . esc_url( $repository . '/issues' ) . '" target="_blank" rel="noopener noreferrer">existing issues<span class="screen-reader-text"> (opens in a new tab)</span></a> to see whether the problem is already reported.</li><li>If not, <a href="' . esc_url( $repository . '/issues/new' ) . '" target="_blank" rel="noopener noreferrer">open a new issue<span class="screen-reader-text"> (opens in a new tab)</span></a> with a short, descriptive title.</li><li>Describe the expected and actual behavior, steps to reproduce it, the affected tab or workflow, and any error messages or screenshots.</li><li>Include your environment: <code>Plugin ' . esc_html( MRSA_VERSION ) . ', WordPress ' . esc_html( $wp_version ) . ', PHP ' . esc_html( PHP_VERSION ) . '</code>.</li><li>Do not include passwords, rider records, emergency contacts, insurance details, or other sensitive data. Report security vulnerabilities privately to the repository owner rather than in a public issue.</li></ol>';
 	}

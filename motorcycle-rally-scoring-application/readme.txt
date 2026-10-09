@@ -14,13 +14,14 @@ Manage motorcycle rally administrators, motorcycles, riders, and event registrat
 Motorcycle Rally Scoring Application provides administrative tabs for:
 
 * Administrators: global administrator assignments using existing WordPress users.
-* Bike Setup: manual motorcycle records with an optional four-digit year and make-based NHTSA motorcycle import.
-* Rider Registration: rider details, multiple motorcycles, emergency contacts, insurance information, and registered events.
+* Bike Setup: manual or imported motorcycle make/model records plus transactional bulk deletion of unassigned catalog rows.
+* Rider Registration: rider details, make/model-filtered motorcycles with optional manually entered four-digit years, emergency contacts, insurance information, and registered events.
 * Event Setup: event configuration and per-event administrator assignments.
-* Event Rosters: event selection, complete registered-rider details, dedicated enrollment, pillion information, and unique per-event bib numbers.
+* Event Rosters: event selection, complete registered-rider details, dedicated enrollment, new-rider recovery, pillion information, and unique per-event bib numbers.
+* Scoring: event selection, roster scoring summaries, and the reserved scoring workspace tabs.
 * About: version, licensing, attribution, and scope.
 
-The dedicated Event Scoring page has Bonus Point Library, Submissions - Pending Review,
+The Scoring tab has Bonus Point Library, Submissions - Pending Review,
 Submissions - Reviewed, and Submissions - Contested tabs. Their requirements
 have not yet been defined. These tabs are intentionally placeholders, not
 a working scoring engine. Bib links provide event/rider context; this
@@ -49,6 +50,10 @@ site timezone. Add Rider and Add Event open dedicated edit pages with one
 attribute per row. Enrolled rider details remain read-only outside explicit
 registration controls.
 
+Successful forms return to their originating form or tab. If Event Rosters has
+no unenrolled rider to select, Add Rider to Event can open the Add Rider form
+and return to enrollment after the new rider is saved.
+
 Use MySQL 8.0+ or MariaDB 10.6+ with InnoDB tables. Atomic rider updates,
 catalog deletion, and event-capacity changes rely on transaction and row-lock
 support. Keep the database server on a vendor-supported, patched release.
@@ -65,8 +70,9 @@ vehicle make and model data. An administrator supplies only a make and must
 explicitly initiate and confirm retrieval; no remote import runs on activation.
 The importer intersects Get Models for Make results with a second response
 restricted to NHTSA's motorcycle vehicle type and stores only model IDs present
-in both responses. Imported years are Unspecified because these responses do
-not include model years.
+in both responses. Only make and model are imported. A four-digit model year
+may be entered manually and optionally when assigning a motorcycle to a rider;
+it is not validated against the catalog.
 
 An authorized retrieval discloses the site's server IP and ordinary HTTP
 request metadata plus the entered make to NHTSA. Rider, administrator, and
@@ -133,6 +139,14 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= Unreleased =
+* Limit motorcycle catalog imports and manual catalog entries to make and model.
+* Add transactional bulk selection and deletion for unused motorcycle catalog records.
+* Filter rider motorcycles by make/model and store an optional rider-specific manual year.
+* Return successful form submissions to their originating form or tab.
+* Offer Add Rider when an event has no remaining unenrolled riders.
+* Add a main Scoring tab with event selection and the existing scoring workspaces.
 
 = 0.1.3 =
 * Import all NHTSA models for a make only after motorcycle classification is confirmed.

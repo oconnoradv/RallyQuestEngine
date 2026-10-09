@@ -36,12 +36,11 @@
 	function setupBike(row) {
 		const catalog = row.querySelector('.mrsa-catalog');
 		const records = Array.from(catalog.options).filter(item => item.value).map(item => ({
-			id: item.value, make: item.dataset.make, model: item.dataset.model, year: item.dataset.year
+			id: item.value, make: item.dataset.make, model: item.dataset.model
 		}));
 		const dependent = row.querySelector('.mrsa-dependent');
 		const make = row.querySelector('.mrsa-make');
 		const model = row.querySelector('.mrsa-model');
-		const year = row.querySelector('.mrsa-year');
 		function fill(select, values, label, current) {
 			select.replaceChildren(option('', label));
 			Array.from(new Set(values)).forEach(value => select.append(option(value, value)));
@@ -49,22 +48,19 @@
 		}
 		const initial = records.find(item => item.id === catalog.value);
 		fill(make, records.map(item => item.make), 'Choose make', initial && initial.make);
-		function models(currentModel, currentYear) {
+		function models(currentModel) {
 			fill(model, records.filter(item => item.make === make.value).map(item => item.model), 'Choose model', currentModel);
-			years(currentYear);
-		}
-		function years(currentYear) {
-			fill(year, records.filter(item => item.make === make.value && item.model === model.value).map(item => item.year), 'Choose year', currentYear);
 			sync();
 		}
 		function sync() {
-			const item = records.find(item => item.make === make.value && item.model === model.value && item.year === year.value);
+			const selected = records.find(item => item.id === catalog.value);
+			if (selected && selected.make === make.value && selected.model === model.value) return;
+			const item = records.find(item => item.make === make.value && item.model === model.value);
 			catalog.value = item ? item.id : '';
 		}
-		make.addEventListener('change', () => models('', ''));
-		model.addEventListener('change', () => years(''));
-		year.addEventListener('change', sync);
-		models(initial && initial.model, initial && initial.year);
+		make.addEventListener('change', () => models(''));
+		model.addEventListener('change', sync);
+		models(initial && initial.model);
 		dependent.hidden = false;
 		row.querySelector('.mrsa-catalog-label').hidden = true;
 		row.querySelector('.mrsa-remove-bike').addEventListener('click', () => row.remove());
@@ -81,6 +77,12 @@
 		const row = fragment.querySelector('.mrsa-bike-row');
 		setupBike(row);
 		holder.append(fragment);
+	});
+	const selectAllBikes = root.querySelector('.mrsa-select-all-bikes');
+	if (selectAllBikes) selectAllBikes.addEventListener('change', () => {
+		root.querySelectorAll('[form="mrsa-bulk-delete-bikes"]').forEach(checkbox => {
+			checkbox.checked = selectAllBikes.checked;
+		});
 	});
 	root.querySelectorAll('.mrsa-table-region').forEach(region => {
 		const table = region.querySelector('table');
