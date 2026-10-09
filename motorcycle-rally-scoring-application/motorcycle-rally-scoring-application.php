@@ -16,6 +16,7 @@
 defined( 'ABSPATH' ) || exit;
 
 define( 'MRSA_VERSION', '0.1.2' );
+define( 'MRSA_DB_VERSION', '2' );
 define( 'MRSA_FILE', __FILE__ );
 require_once __DIR__ . '/includes/class-mrsa.php';
 require_once __DIR__ . '/includes/class-mrsa-importer.php';

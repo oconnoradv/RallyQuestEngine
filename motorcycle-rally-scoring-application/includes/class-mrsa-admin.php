@@ -16,11 +16,12 @@ final class MRSA_Admin {
 			add_submenu_page( null, 'Edit Rider', 'Edit Rider', 'read', 'mrsa-rider-edit', array( 'MRSA_Views', 'render_rider_edit' ) );
 			add_submenu_page( null, 'Edit Event', 'Edit Event', 'read', 'mrsa-event-edit', array( 'MRSA_Views', 'render_event_edit' ) );
 			add_submenu_page( null, 'Event Roster', 'Event Roster', 'read', 'mrsa-event-roster', array( 'MRSA_Views', 'render_event_roster' ) );
+			add_submenu_page( null, 'Add Rider to Event', 'Add Rider to Event', 'read', 'mrsa-event-enroll', array( 'MRSA_Views', 'render_event_enroll' ) );
 		}
 	}
 
 	public static function assets( $hook ) {
-		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'rally-scoring_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit', 'admin_page_mrsa-event-roster' ), true ) || ! MRSA::access() ) {
+		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'rally-scoring_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit', 'admin_page_mrsa-event-roster', 'admin_page_mrsa-event-enroll' ), true ) || ! MRSA::access() ) {
 			return;
 		}
 		wp_enqueue_style( 'mrsa-admin', plugins_url( 'assets/admin.css', MRSA_FILE ), array(), MRSA_VERSION );
@@ -90,7 +91,7 @@ final class MRSA_Admin {
 		if ( 'scoring' === $tab ) {
 			return add_query_arg( array_merge( array( 'page' => 'mrsa-scoring' ), $extra ), admin_url( 'admin.php' ) );
 		}
-		if ( in_array( $tab, array( 'rider-edit', 'event-edit', 'event-roster' ), true ) ) {
+		if ( in_array( $tab, array( 'rider-edit', 'event-edit', 'event-roster', 'event-enroll' ), true ) ) {
 			return add_query_arg( array_merge( array( 'page' => 'mrsa-' . $tab ), $extra ), admin_url( 'admin.php' ) );
 		}
 		return add_query_arg( array_merge( array( 'page' => 'mrsa', 'tab' => $tab ), $extra ), admin_url( 'admin.php' ) );
@@ -140,7 +141,8 @@ final class MRSA_Admin {
 				case 'remove_event_admin':
 					self::require_global();
 					self::event_admin( 'remove_event_admin' === $op );
-					$tab = 'events';
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					$tab = 'event-edit';
 					break;
 				case 'uninstall':
 					self::require_global();
@@ -161,7 +163,7 @@ final class MRSA_Admin {
 					if ( '1' !== self::posted( 'source_consent' ) ) {
 						throw new RuntimeException( 'Confirm that you understand the source and review requirements before importing the factual catalog data.' );
 					}
-					$message = MRSA_Importer::import( self::posted( 'import_make' ), self::posted( 'import_model' ), self::posted( 'import_year' ) );
+					$message = MRSA_Importer::import( self::posted( 'import_make' ) );
 					$tab = 'bikes';
 					break;
 				case 'rider':
@@ -179,7 +181,7 @@ final class MRSA_Admin {
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
 					self::registration( $extra['event_id'], $op );
-					$tab = 'event-roster';
+					$tab = 'rosters';
 					break;
 				default:
 					throw new RuntimeException( 'Unknown operation.' );
@@ -228,7 +230,8 @@ final class MRSA_Admin {
 		if ( $id && ! MRSA::row( 'bikes', $id ) ) {
 			throw new RuntimeException( 'Motorcycle not found.' );
 		}
-		$data = array( 'make' => self::text( self::posted( 'make' ), 80, true ), 'model' => self::text( self::posted( 'model' ), 120, true ), 'year' => self::integer( self::posted( 'year' ), 1900, 2100 ) );
+		$year = trim( self::posted( 'year' ) );
+		$data = array( 'make' => self::text( self::posted( 'make' ), 80, true ), 'model' => self::text( self::posted( 'model' ), 120, true ), 'year' => '' === $year ? 0 : self::integer( $year, 1900, 2100 ) );
 		if ( ! $id ) {
 			$data['source'] = 'Manual entry';
 		}

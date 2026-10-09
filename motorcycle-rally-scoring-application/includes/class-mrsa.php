@@ -20,7 +20,7 @@ final class MRSA {
 	}
 
 	public static function init() {
-		if ( get_option( 'mrsa_db_version' ) !== MRSA_VERSION ) {
+		if ( get_option( 'mrsa_db_version' ) !== MRSA_DB_VERSION ) {
 			self::install();
 		}
 		if ( is_admin() ) {
@@ -53,7 +53,7 @@ final class MRSA {
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			make varchar(80) NOT NULL,
 			model varchar(120) NOT NULL,
-			year smallint(5) unsigned NOT NULL,
+			year smallint(5) unsigned NOT NULL DEFAULT 0,
 			source varchar(255) NOT NULL DEFAULT '',
 			PRIMARY KEY  (id),
 			UNIQUE KEY catalog (make,model,year)
@@ -117,7 +117,7 @@ final class MRSA {
 			UNIQUE KEY event_rider (event_id,rider_id),
 			KEY rider_id (rider_id)
 		) ENGINE=InnoDB $c;" );
-		update_option( 'mrsa_db_version', MRSA_VERSION, false );
+		update_option( 'mrsa_db_version', MRSA_DB_VERSION, false );
 	}
 
 	public static function begin_transaction() {
@@ -197,7 +197,7 @@ final class MRSA {
 			}
 			$bikes = $wpdb->get_results( $wpdb->prepare( 'SELECT b.make,b.model,b.year,rb.fuel_capacity FROM ' . self::table( 'rider_bikes' ) . ' rb JOIN ' . self::table( 'bikes' ) . ' b ON b.id=rb.bike_id WHERE rb.rider_id=%d', $rider['id'] ), ARRAY_A );
 			foreach ( $bikes as $bike ) {
-				$fields[] = array( 'name' => 'Motorcycle', 'value' => $bike['make'] . ' / ' . $bike['model'] . ' / ' . $bike['year'] );
+				$fields[] = array( 'name' => 'Motorcycle', 'value' => $bike['make'] . ' / ' . $bike['model'] . ' / ' . ( (int) $bike['year'] ? $bike['year'] : 'Unspecified' ) );
 				$fields[] = array( 'name' => 'Fuel capacity', 'value' => $bike['fuel_capacity'] );
 			}
 			$events = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,r.bib,r.pillion,r.status,r.score,r.placing FROM ' . self::table( 'registrations' ) . ' r JOIN ' . self::table( 'events' ) . ' e ON e.id=r.event_id WHERE r.rider_id=%d', $rider['id'] ), ARRAY_A );
@@ -255,7 +255,7 @@ final class MRSA {
 			$assigned = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'global_admins' ) . ' WHERE user_id=%d', $user->ID ) ) || $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'event_admins' ) . ' WHERE user_id=%d LIMIT 1', $user->ID ) );
 			if ( $assigned ) {
 				$retained = true;
-				$messages[] = 'Administrator assignments retained for access control; remove global assignments in Global Setup and event assignments in Event Setup if appropriate. WordPress user profiles are managed by WordPress.';
+				$messages[] = 'Administrator assignments retained for access control; remove global assignments in Administrators and event assignments from the event Configure page if appropriate. WordPress user profiles are managed by WordPress.';
 			}
 		}
 		return array( 'items_removed' => $removed, 'items_retained' => $retained, 'messages' => $messages, 'done' => true );
