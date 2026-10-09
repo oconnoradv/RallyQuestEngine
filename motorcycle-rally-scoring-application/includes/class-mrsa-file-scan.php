@@ -95,20 +95,33 @@ final class MRSA_Executable_Content_Policy {
 	}
 
 	/**
-	 * Byte length of a JPEG's primary image through its first top-level EOI marker, or null if
-	 * the file is not a JPEG. Phones commonly append gain maps, MPF images, trailers, or video.
+	 * Byte length of a validated raster's primary image through its format end marker (JPEG EOI,
+	 * PNG IEND, GIF trailer, WebP RIFF size), or null for other files. Phones, editors and
+	 * sharing apps commonly append gain maps, MPF images, vendor trailers, video or padding.
 	 */
-	public function primary_jpeg_length( $path ) {
+	public function primary_image_length( $path ) {
 		$handle = fopen( $path, 'rb' );
 		if ( ! $handle ) {
 			throw new RuntimeException( 'The file could not be read for executable-content checks.' );
 		}
 		try {
-			$content = $this->read_jpeg( $handle );
+			$content = $this->read_image( $handle );
 		} finally {
 			fclose( $handle );
 		}
-		return "\xFF\xD8" === substr( $content, 0, 2 ) ? $this->jpeg_primary_length( $content ) : null;
+		if ( "\xFF\xD8" === substr( $content, 0, 2 ) ) {
+			return $this->jpeg_primary_length( $content );
+		}
+		if ( "\x89PNG\r\n\x1A\n" === substr( $content, 0, 8 ) ) {
+			return $this->png_primary_length( $content );
+		}
+		if ( in_array( substr( $content, 0, 6 ), array( 'GIF87a', 'GIF89a' ), true ) ) {
+			return $this->gif_primary_length( $content );
+		}
+		if ( 'RIFF' === substr( $content, 0, 4 ) && 'WEBP' === substr( $content, 8, 4 ) ) {
+			return $this->webp_primary_length( $content );
+		}
+		return null;
 	}
 
 	private function jpeg_primary_length( $content ) {
@@ -189,6 +202,12 @@ final class MRSA_Executable_Content_Policy {
 	}
 
 	private function validate_png( $content ) {
+		if ( $this->png_primary_length( $content ) !== strlen( $content ) ) {
+			$this->invalid_image();
+		}
+	}
+
+	private function png_primary_length( $content ) {
 		$offset = 8;
 		$length = strlen( $content );
 		$has_pixels = false;
@@ -213,8 +232,8 @@ final class MRSA_Executable_Content_Policy {
 			}
 			$offset += $size + 12;
 			if ( 'IEND' === $type ) {
-				if ( 0 === $size && $has_pixels && $offset === $length ) {
-					return;
+				if ( 0 === $size && $has_pixels && "\xAE\x42\x60\x82" === substr( $content, $offset - 4, 4 ) ) {
+					return $offset;
 				}
 				$this->invalid_image();
 			}
@@ -276,6 +295,12 @@ final class MRSA_Executable_Content_Policy {
 	}
 
 	private function validate_gif( $content ) {
+		if ( $this->gif_primary_length( $content ) !== strlen( $content ) ) {
+			$this->invalid_image();
+		}
+	}
+
+	private function gif_primary_length( $content ) {
 		$length = strlen( $content );
 		if ( $length < 13 ) {
 			$this->invalid_image();
@@ -285,8 +310,8 @@ final class MRSA_Executable_Content_Policy {
 		$has_pixels = false;
 		while ( $offset < $length ) {
 			$type = ord( $content[ $offset++ ] );
-			if ( 0x3B === $type && $has_pixels && $offset === $length ) {
-				return;
+			if ( 0x3B === $type && $has_pixels ) {
+				return $offset;
 			}
 			if ( 0x21 === $type && $offset < $length ) {
 				++$offset;
@@ -305,6 +330,18 @@ final class MRSA_Executable_Content_Policy {
 			}
 		}
 		$this->invalid_image();
+	}
+
+	private function webp_primary_length( $content ) {
+		if ( strlen( $content ) < 12 ) {
+			$this->invalid_image();
+		}
+		$riff_length = unpack( 'Vsize', substr( $content, 4, 4 ) )['size'] + 8;
+		if ( $riff_length > strlen( $content ) ) {
+			$this->invalid_image();
+		}
+		$this->validate_webp( substr( $content, 0, $riff_length ) );
+		return $riff_length;
 	}
 
 	private function validate_webp( $content, $is_frame = false ) {

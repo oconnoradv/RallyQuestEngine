@@ -36,6 +36,19 @@ try {
 		check_raster( true, $format . ': compressed/palette bytes do not trigger text policy' );
 		$reject( $bytes . '<?php evil();', $format . ': appended scripts remain blocked' );
 		$reject( substr( $bytes, 0, -3 ), $format . ': truncated image remains blocked' );
+		$primary_length = function ( $data ) use ( $path, $policy ) {
+			if ( strlen( $data ) !== file_put_contents( $path, $data ) ) { throw new RuntimeException( 'Fixture write failed.' ); }
+			return $policy->primary_image_length( $path );
+		};
+		check_raster( strlen( $bytes ) === $primary_length( $bytes ), $format . ': complete image primary length is the whole file' );
+		check_raster( strlen( $bytes ) === $primary_length( $bytes . $bytes . str_repeat( "\0", 31 ) . '<?php trailer();' ), $format . ': appended image, padding and trailer are excluded from the primary image' );
+		try {
+			// WebP length comes from its RIFF header, so filler after cut-off pixels is indistinguishable from pixel data.
+			$primary_length( substr( $bytes, 0, -3 ) . ( 'WebP' === $format ? '' : '<?php trailer();' ) );
+			throw new LogicException( 'Truncated image produced a primary length: ' . $format );
+		} catch ( RuntimeException $exception ) {
+			check_raster( true, $format . ': truncated image cannot be trimmed into acceptance' );
+		}
 	}
 	$prefix = substr( $png, 0, -12 );
 	$end = $chunk( 'IEND', '' );
@@ -60,6 +73,19 @@ try {
 	$validate( $riff( $webp_chunk( 'VP8X', str_repeat( "\0", 10 ) ) . $webp_chunk( 'ANMF', str_repeat( "\0", 16 ) . $webp_chunk( 'VP8L', 'pixels<%' ) ) ) );
 	check_raster( true, 'WebP: animated frame compressed bytes are inspected as image data' );
 	$reject( $riff( $webp_chunk( 'ANMF', str_repeat( "\0", 16 ) . $webp_chunk( 'ANMF', str_repeat( "\0", 16 ) . $webp_chunk( 'VP8L', 'pixels' ) ) ) ), 'WebP: invalid nested animation frames remain blocked' );
+	foreach ( array(
+		'PNG' => $prefix . $chunk( 'tEXt', "Note\0<?php evil();" ) . $end,
+		'GIF' => substr( $fixtures['GIF'], 0, -1 ) . $comment . ';',
+		'WebP' => $riff( $chunks . $webp_chunk( 'XMP ', '<?php evil();' ) ),
+	) as $format => $bytes ) {
+		file_put_contents( $path, $bytes . 'trailer' );
+		try {
+			$policy->primary_image_length( $path );
+			throw new LogicException( 'Metadata script accepted while trimming: ' . $format );
+		} catch ( RuntimeException $exception ) {
+			check_raster( true, $format . ': metadata scripts inside the primary image remain blocked when trimming' );
+		}
+	}
 } finally {
 	if ( is_file( $path ) && ! unlink( $path ) ) { throw new RuntimeException( 'Fixture cleanup failed.' ); }
 }

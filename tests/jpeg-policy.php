@@ -51,13 +51,13 @@ try {
 	check_jpeg( true, 'multiple scans, stuffed bytes and restart markers are handled without treating pixels as text' );
 
 	$write( $jpeg . $jpeg . str_repeat( "\0", 32 ) . '<?php trailer();' );
-	check_jpeg( strlen( $jpeg ) === $policy->primary_jpeg_length( $path ), 'primary image length excludes appended gain-map images, padding and trailers' );
+	check_jpeg( strlen( $jpeg ) === $policy->primary_image_length( $path ), 'primary image length excludes appended gain-map images, padding and trailers' );
 	$reject( $jpeg . $jpeg, 'strict validation still rejects untrimmed appended images' );
 	$write( '<?php echo 1;' );
-	check_jpeg( null === $policy->primary_jpeg_length( $path ), 'non-JPEG files report no primary JPEG length' );
+	check_jpeg( null === $policy->primary_image_length( $path ), 'non-image files report no primary image length' );
 	$write( substr( $jpeg, 0, -2 ) );
 	try {
-		$policy->primary_jpeg_length( $path );
+		$policy->primary_image_length( $path );
 		throw new LogicException( 'Truncated JPEG reported a primary length.' );
 	} catch ( RuntimeException $exception ) {
 		check_jpeg( true, 'JPEG without a primary end marker cannot be trimmed into acceptance' );

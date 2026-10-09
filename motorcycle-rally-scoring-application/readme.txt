@@ -77,9 +77,10 @@ tables from script text, preventing short random byte sequences from causing
 false executable-content warnings. Metadata is still inspected, including
 bounded PNG metadata decompression. Malformed/truncated containers, appended
 content and malware results remain blocked; ClamAV scans the entire file.
-JPEG imports keep only the primary image: data phones append after its end
-marker (gain maps, multi-picture images, trailers, motion-photo video) is
-removed before scanning and is never stored.
+JPEG, PNG, GIF and WebP imports keep only the primary image: data appended
+after its end marker (JPEG EOI, PNG IEND, GIF trailer, WebP RIFF length) such
+as gain maps, multi-picture images, editor/vendor trailers, motion-photo video
+or padding is removed before scanning and is never stored.
 The persistent ClamAV bypass warning is inside the minimized Step 0 panel.
 Step 2 collects filename, local upload, URL, limit and skip-failed guidance in
 Help? beside its heading, available on hover, keyboard focus or click/tap.
@@ -265,7 +266,7 @@ No. Rider and pillion prices are event configuration values only.
 == Changelog ==
 
 = Unreleased =
-* Fixed rejection of phone JPEGs with appended gain-map, multi-picture, trailer or motion-photo data; only the validated primary image is scanned and stored.
+* Fixed rejection of JPEG, PNG, GIF and WebP images with appended gain-map, multi-picture, editor/vendor trailer, motion-photo or padding data; only the validated primary image is scanned and stored.
 
 = 0.1.14 =
 * Fixed false executable-content warnings caused by compressed JPEG, PNG, GIF and WebP image bytes.

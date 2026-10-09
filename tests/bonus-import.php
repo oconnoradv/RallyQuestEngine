@@ -312,9 +312,11 @@ try {
 	}
 
 	foreach ( array( 'INFECTED', 'ERROR', 'TRUNCATED', 'SCRIPT' ) as $kind ) {
+		$marker = 'SCRIPT' === $kind ? '<?php /* rejected test marker */' : 'MRSA_TEST_' . $kind;
+		$text_chunk = pack( 'N', strlen( $marker ) + 5 ) . 'tEXt' . "Note\0" . $marker . hash( 'crc32b', 'tEXtNote' . "\0" . $marker, true );
 		$GLOBALS['responses']['https://example.com/' . $kind . '.png'] = array(
 			'code' => 200, 'type' => 'image/png',
-			'body' => $png . ( 'SCRIPT' === $kind ? '<?php /* rejected test marker */' : 'MRSA_TEST_' . $kind ),
+			'body' => substr( $png, 0, -12 ) . $text_chunk . substr( $png, -12 ),
 		);
 		$_POST['gallery_url'] = 'https://example.com/' . $kind . '.png';
 		$prepared = MRSA_Bonus::import( 22 );
@@ -453,7 +455,8 @@ try {
 		check( $before === $wpdb->rows && strpos( $exception->getMessage(), 'audit' ) !== false, 'audit storage failure prevents unscanned persistence' );
 	}
 	$wpdb->fail_audit = false;
-	$GLOBALS['responses']['https://example.com/gallery/SCRIPT.png'] = array( 'code' => 200, 'type' => 'image/png', 'body' => $png . '<?php malicious();' );
+	$script_chunk = pack( 'N', 23 ) . 'tEXt' . "Note\0<?php malicious();" . hash( 'crc32b', "tEXtNote\0<?php malicious();", true );
+	$GLOBALS['responses']['https://example.com/gallery/SCRIPT.png'] = array( 'code' => 200, 'type' => 'image/png', 'body' => substr( $png, 0, -12 ) . $script_chunk . substr( $png, -12 ) );
 	$_POST['gallery_url'] = 'https://example.com/gallery/SCRIPT.png';
 	$prepared = MRSA_Bonus::import( 31 );
 	$pending = MRSA_Bonus::pending( 31, $prepared['pending_token'] );
@@ -484,13 +487,20 @@ try {
 		check( ! isset( $result['pending_token'] ) && is_file( $GLOBALS['test_root'] . '/mrsa-event-gallery/32/' . $format . '.' . $fixture[3] ), $format . ': real compressed image passes staging and audited unavailable-scanner import without false script rejection' );
 	}
 	$primary_jpeg = file_get_contents( __DIR__ . '/fixtures/jpeg-binary-marker.jpg' );
-	$url = 'https://example.com/gallery/PHONE.jpg';
-	$GLOBALS['responses'][ $url ] = array( 'code' => 200, 'type' => 'image/jpeg', 'body' => $primary_jpeg . $primary_jpeg . str_repeat( "\0", 64 ) . 'SEFH<?php trailer();' );
-	( new MRSA_Bonus_Application_Service() )->import( 32, array(
-		'import_step' => 'images', 'image_source' => 'url', 'gallery_url' => $url, 'files' => array(),
-	) );
-	$stored = $GLOBALS['test_root'] . '/mrsa-event-gallery/32/PHONE.jpg';
-	check( is_file( $stored ) && file_get_contents( $stored ) === $primary_jpeg, 'phone JPEG with appended gain-map image and trailer imports as only the validated primary image' );
+	foreach ( array(
+		'PHONE.jpg' => array( 'image/jpeg', $primary_jpeg ),
+		'EDITED.png' => array( 'image/png', $png ),
+		'SHARED.gif' => array( 'image/gif', file_get_contents( __DIR__ . '/fixtures/gif-binary-marker.gif' ) ),
+		'SHARED.webp' => array( 'image/webp', file_get_contents( __DIR__ . '/fixtures/webp-binary-marker.webp' ) ),
+	) as $file => $fixture ) {
+		$url = 'https://example.com/gallery/' . $file;
+		$GLOBALS['responses'][ $url ] = array( 'code' => 200, 'type' => $fixture[0], 'body' => $fixture[1] . $fixture[1] . str_repeat( "\0", 64 ) . 'SEFH<?php trailer();' );
+		( new MRSA_Bonus_Application_Service() )->import( 32, array(
+			'import_step' => 'images', 'image_source' => 'url', 'gallery_url' => $url, 'files' => array(),
+		) );
+		$stored = $GLOBALS['test_root'] . '/mrsa-event-gallery/32/' . $file;
+		check( is_file( $stored ) && file_get_contents( $stored ) === $fixture[1], $file . ': appended image data and trailer are removed; only the validated primary image is stored' );
+	}
 	MRSA_Bonus::revoke_bypass( 31 );
 } finally {
 	foreach ( $GLOBALS['cleanup'] ?? array() as $args ) {
