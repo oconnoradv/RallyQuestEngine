@@ -3,7 +3,7 @@ Contributors: oconnoradv
 Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
-Stable tag: 0.1.1
+Stable tag: 0.1.2
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -132,7 +132,7 @@ No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
 
-= Next =
+= 0.1.2 =
 * Restrict external import to one exact NHTSA motorcycle make/model/year record.
 * Move event administrator assignments into Event Setup behind Add Administrator.
 * Separate event configuration, roster, and scoring pages and links.
