@@ -123,4 +123,4 @@ jobs:
             "motorcycle-rally-scoring-application-$RELEASE_TAG.zip" SHA256SUMS \
             --verify-tag \
             --title "Motorcycle Rally Scoring Application $RELEASE_TAG" \
-            --notes "Install the ZIP through WordPress Plugins > Add New > Upload Plugin. This source passed the workflow's syntax, Semgrep static security, and Trivy dependency/secret checks. These checks do not certify NIST compliance or absence of all CVEs; deployed WordPress, PHP, and other plugins require separate assessment. Scoring tabs remain placeholders."
+            --notes "Install the ZIP through WordPress Plugins > Add New > Upload Plugin. See the bundled readme changelog for this version's changes. This source passed the workflow's syntax, Semgrep static security, and Trivy dependency/secret checks. These checks do not certify NIST compliance or absence of all CVEs; deployed WordPress, PHP, and other plugins require separate assessment. The Event Bonus Point Library supports listing and image imports; bonus scoring calculations and submission review remain future work. Back up the database and event gallery files separately before upgrading."

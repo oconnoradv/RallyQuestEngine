@@ -6,6 +6,11 @@
 .mrsa .mrsa-header p { margin: 0; color: #50575e; font-size: 16px; }
 .mrsa .mrsa-header p span { margin-left: 8px; font-size: 13px; }
 .mrsa .mrsa-panel { background: #fff; border: 1px solid #c3c4c7; padding: 18px; margin: 16px 0; }
+.mrsa .mrsa-roster-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 12px 0 16px; }
+.mrsa .mrsa-roster-event-select { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.mrsa .mrsa-roster-event-select .mrsa-field { min-width: 240px; margin: 0; }
+.mrsa .mrsa-roster-toolbar__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; }
+.mrsa .mrsa-roster-toolbar__actions h2 { margin: 0; }
 .mrsa .mrsa-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px 18px; margin-bottom: 12px; }
 .mrsa .mrsa-field { display: flex; flex-direction: column; gap: 5px; margin: 8px 0; }
 .mrsa .mrsa-field input, .mrsa .mrsa-field select, .mrsa .mrsa-field textarea { width: 100%; max-width: 100%; }
@@ -34,6 +39,8 @@
 .mrsa .mrsa-bike-row select { min-width: 140px; max-width: 320px; }
 .mrsa .mrsa-logo { margin: 12px 0; }
 .mrsa .mrsa-logo-preview img { width: auto; max-width: 150px; max-height: 150px; margin: 10px 0; }
+.mrsa .mrsa-bonus-thumbnail { display: block; width: auto; max-width: 120px; max-height: 90px; }
+.mrsa .mrsa-bonus-preview { width: auto; max-width: 480px; max-height: 360px; }
 .mrsa [hidden] { display: none !important; }
 @media (max-width: 782px) {
 	.mrsa .mrsa-header .dashicons { width: 64px; height: 64px; border-radius: 12px; font-size: 42px; }
@@ -41,4 +48,8 @@
 	.mrsa .mrsa-table-tools, .mrsa .mrsa-table-tools label { align-items: start; }
 	.mrsa .mrsa-grid { grid-template-columns: 1fr; }
 	.mrsa .nav-tab { margin-top: 8px; }
+	.mrsa .mrsa-roster-toolbar { align-items: stretch; flex-direction: column; }
+	.mrsa .mrsa-roster-event-select { align-items: stretch; }
+	.mrsa .mrsa-roster-event-select .mrsa-field { min-width: min(100%, 240px); }
+	.mrsa .mrsa-roster-toolbar__actions { justify-content: space-between; }
 }

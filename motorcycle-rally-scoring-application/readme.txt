@@ -3,7 +3,7 @@ Contributors: oconnoradv
 Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
-Stable tag: 0.1.5
+Stable tag: 0.1.6
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -13,30 +13,38 @@ Manage motorcycle rally administrators, motorcycles, riders, and event registrat
 
 Motorcycle Rally Scoring Application provides administrative tabs for:
 
-* Administrators: global administrator assignments using existing WordPress users.
 * Bike Setup: manual or imported motorcycle make/model records plus transactional bulk deletion of unassigned catalog rows.
-* Rider Registration: rider details, make/model-filtered motorcycles with optional manually entered four-digit years, emergency contacts, insurance information, and registered events.
+* Rider Setup: rider details, make/model-filtered motorcycles with optional manually entered four-digit years, emergency contacts, insurance information, and registered events.
 * Event Setup: event configuration and per-event administrator assignments.
-* Event Rosters: event selection, complete registered-rider details, dedicated enrollment, new-rider recovery, pillion information, and unique per-event bib numbers.
-* Scoring: event selection, roster scoring summaries, and the reserved scoring workspace tabs.
-* Overall Results: score ordering, computed overall placing, automatic or manual result status, and rider score-sheet placeholders.
-* Diagnostics: JSON export, restorable SQL backup, and verification-string-protected scoped deletion.
-* About: version, licensing, attribution, and scope.
+* Event Rosters: event selection and a read-only roster table with rider ID, bib ID, registration status, name, email, score, and overall placing. Rider IDs open rider details/editing, bibs open event scoring, and enrollment remains a separate screen.
+* Scoring: event-specific Bonus Point Library, CSV/XLSX listing import, local-folder and public-URL image import, and event-roster scoring summaries in the remaining workspace tabs.
+* Overall Results: score ordering, computed overall placing, read-only result status, and rider score-sheet placeholders.
+* Diagnostics: JSON export, restorable SQL backup, and verification-string-protected scoped deletion. Gallery image files are stored separately and are not included in database exports or backups.
+* About: version, licensing, attribution, scope, and an optional Gallery for SpotWalla recommendation with documentation and download links.
 
-The Scoring tab has Bonus Point Library, Submissions - Pending Review,
-Submissions - Reviewed, and Submissions - Contested tabs. Their requirements
-have not yet been defined. These tabs are intentionally placeholders, not
-a working scoring engine. Bib links provide event/rider context; this
-release does not create or calculate bonus records. Overall Results orders
-existing total scores using competition ranking and derives Preliminary
-Finisher when a score is greater than the event minimum; event administrators
-can override result status. New registrations have lifecycle status Initial
-Registration, result status Registered, score 0, and unset stored placing.
+The Bonus Point Library stores event-specific bonus IDs, descriptions,
+categories, points, one latitude/longitude pair, and matching image files.
+Import CSV or XLSX listings and images from a local directory or public HTTPS
+image, ZIP, or standard directory-listing URLs. Re-importing an ID updates its
+listing without removing other event listings. Images are stored in a dedicated
+event folder and are not registered in the WordPress media library. Submissions
+- Pending Review, Submissions - Reviewed, and Submissions - Contested remain
+placeholders. Bib links provide event/rider context; this release does not
+calculate bonus scores. Overall Results orders existing total scores using competition
+ranking and displays the automatically derived Preliminary Finisher status
+when a score is greater than the event minimum. Status is read-only on that
+page. New registrations have lifecycle status Initial Registration, result
+status Registered, score 0, and unset stored placing. Gallery files live in
+the dedicated uploads/mrsa-event-gallery directory and must be backed up
+separately from the JSON and SQL database exports.
+Diagnostics can delete all bonus listings and images for a selected event.
 
-WordPress administrators can bootstrap setup. Assigned global administrators
-manage plugin data. Assigned event administrators are restricted to their
-assigned events and their enrolled riders; they cannot change global setup,
-the motorcycle catalog, or master rider records.
+WordPress administrators can bootstrap access. Existing assigned global
+administrators retain access to plugin data, though the application no longer
+provides global-assignment or uninstall-retention controls. Assigned event
+administrators are restricted to their assigned events and enrolled riders;
+they cannot change global assignments, the motorcycle catalog, or master
+rider records.
 
 Tables use the current site's WordPress prefix followed by MRSA_, avoiding
 collisions between sites. No WordPress core tables or users are replaced.
@@ -55,11 +63,13 @@ site timezone. Add Rider and Add Event open dedicated edit pages with one
 attribute per row. Enrolled rider details remain read-only outside explicit
 registration controls.
 
-Successful forms return to their originating form or tab. If Event Rosters has
+Rider ID and bib links from Event Rosters return to that selected roster through
+the destination page's back link. Successful forms return to their originating
+form or tab. If Event Rosters has
 no unenrolled rider to select, Add Rider to Event can open the Add Rider form,
 automatically enroll the new rider with the lowest available bib, and return
-to the selected roster. Roster registration status can be Initial Registration,
-Paid, Fully Registered, or Cancelled without changing scoring-result status.
+to the selected roster. Roster registration status is displayed read-only and
+remains independent of scoring-result status.
 
 Use MySQL 8.0+ or MariaDB 10.6+ with InnoDB tables. Atomic rider updates,
 catalog deletion, and event-capacity changes rely on transaction and row-lock
@@ -108,11 +118,11 @@ Review exports and erasures against your legal retention obligations.
 Erasure anonymizes the rider and removes motorcycle and pillion details;
 registration identifiers, bibs, statuses, scores, and placing remain for event integrity.
 Administrator assignments remain for access control, while secondary contact
-details are cleared. Remove global assignments in Administrators and event
-assignments on the event Configure page if needed.
-Removing plugin data does not delete WordPress users or media attachments.
-Deactivation preserves data. Destructive uninstall requires explicit opt-in
-through the plugin's data-removal setting; back up before enabling it.
+details are cleared. Event assignments can be removed from the event Configure
+page. Deactivation preserves data. Fresh installs retain data on uninstall by
+default; existing sites continue to honor any previously saved uninstall-
+deletion preference. Removing plugin data does not delete WordPress users or
+media attachments. Back up before uninstalling a site with that preference.
 
 == Security and directory guidelines ==
 
@@ -147,8 +157,17 @@ No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
 
+= 0.1.6 =
+* Removed the Administrators tab and controls, preserving existing administrator access, and renamed Rider Registration to Rider Setup.
+* Moved event scoring workspaces below event selection and made Overall Results status read-only.
+* Simplified Event Rosters to seven read-only columns with rider and bib links that return to the roster.
+* Added event-specific bonus listings, CSV/XLSX imports, independent image galleries, and manual bonus editing.
+* Added verified event-specific deletion of bonus listings and gallery images in Diagnostics.
+* Added an optional Gallery for SpotWalla recommendation to About.
+
 = 0.1.5 =
 * Added rider-filtered roster/results navigation, computed overall results, automatic and manual result statuses, and an authorized rider score-sheet placeholder.
+* Removed the Administrators tab and its global-assignment and uninstall-retention controls; renamed Rider Registration to Rider Setup.
 * Added automatic event enrollment after creating a rider from a full enrollment workflow.
 * Added editable registration lifecycle statuses and renamed Event Placing to Overall Placing on Event Rosters.
 * Added JSON export, SQL database backup, and randomized-string-verified destructive Diagnostics operations.

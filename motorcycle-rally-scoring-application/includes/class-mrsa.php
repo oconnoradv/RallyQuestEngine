@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
 final class MRSA {
 	public static function table( $name ) {
 		global $wpdb;
-		$allowed = array( 'global_admins', 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations' );
+		$allowed = array( 'global_admins', 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points' );
 		if ( ! in_array( $name, $allowed, true ) ) {
 			throw new InvalidArgumentException( 'Unknown MRSA table.' );
 		}
@@ -123,6 +123,20 @@ final class MRSA {
 			UNIQUE KEY event_bib (event_id,bib),
 			UNIQUE KEY event_rider (event_id,rider_id),
 			KEY rider_id (rider_id)
+		) ENGINE=InnoDB $c;" );
+		$t = self::table( 'bonus_points' );
+		dbDelta( "CREATE TABLE $t (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			event_id bigint(20) unsigned NOT NULL,
+			bonus_id varchar(64) NOT NULL,
+			description text NOT NULL,
+			category varchar(120) NOT NULL DEFAULT '',
+			points bigint(20) unsigned NOT NULL DEFAULT 0,
+			locations varchar(80) NOT NULL DEFAULT '',
+			image_file varchar(255) NOT NULL DEFAULT '',
+			PRIMARY KEY  (id),
+			UNIQUE KEY event_bonus (event_id,bonus_id),
+			KEY event_id (event_id)
 		) ENGINE=InnoDB $c;" );
 		update_option( 'mrsa_db_version', MRSA_DB_VERSION, false );
 	}
@@ -263,7 +277,7 @@ final class MRSA {
 			$assigned = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'global_admins' ) . ' WHERE user_id=%d', $user->ID ) ) || $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'event_admins' ) . ' WHERE user_id=%d LIMIT 1', $user->ID ) );
 			if ( $assigned ) {
 				$retained = true;
-				$messages[] = 'Administrator assignments retained for access control; remove global assignments in Administrators and event assignments from the event Configure page if appropriate. WordPress user profiles are managed by WordPress.';
+				$messages[] = 'Administrator assignments retained for access control. Event assignments can be removed from the event Configure page. WordPress user profiles are managed by WordPress.';
 			}
 		}
 		return array( 'items_removed' => $removed, 'items_retained' => $retained, 'messages' => $messages, 'done' => true );
