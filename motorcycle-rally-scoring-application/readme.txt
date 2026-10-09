@@ -3,7 +3,7 @@ Contributors: oconnoradv
 Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
-Stable tag: 0.1.7
+Stable tag: 0.1.8
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -190,6 +190,12 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.1.8 =
+* Arranged bonus import steps 0, 1, and 2 in a responsive three-column header.
+* Collapsed working ClamAV setup to a green ClamAV Enabled label, remembered bypass to an orange ClamAV Manually Disabled label, and highlighted unconfigured setup in red.
+* Consolidated step notices, errors, scan-review controls, and green successful import notifications below the import header.
+* Returned import failures to the selected event's feedback area and added rendering regression coverage.
 
 = 0.1.7 =
 * Renamed and reordered tabs to Riders, Events, Rosters, Scoring, Results, Bikes, Diagnostics, and About; aligned motorcycle entry and import forms.

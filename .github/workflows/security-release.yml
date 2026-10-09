@@ -35,7 +35,9 @@ jobs:
           node --check motorcycle-rally-scoring-application/assets/admin.js
 
       - name: Check bonus image import behavior
-        run: php tests/bonus-import.php
+        run: |
+          php tests/bonus-import.php
+          php tests/bonus-feedback.php
 
       - name: Install static security scanner
         shell: bash

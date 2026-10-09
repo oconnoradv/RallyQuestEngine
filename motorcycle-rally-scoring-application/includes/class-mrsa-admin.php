@@ -149,7 +149,15 @@ final class MRSA_Admin {
 		$return_url = self::return_url();
 		$tab = 'events';
 		$extra = array();
+		$bonus_step = null;
 		try {
+			if ( in_array( $op, array( 'bonus_clamav_check', 'bonus_import_require_scan' ), true ) ) {
+				$bonus_step = 'setup';
+			} elseif ( 'bonus_import' === $op ) {
+				$bonus_step = 'listing' === self::posted( 'import_step' ) ? 'listing' : 'images';
+			} elseif ( in_array( $op, array( 'bonus_import_approve', 'bonus_import_bypass', 'bonus_import_cancel' ), true ) ) {
+				$bonus_step = 'listing' === self::posted( 'import_step' ) ? 'listing' : 'images';
+			}
 			switch ( $op ) {
 				case 'event_admin':
 				case 'remove_event_admin':
@@ -240,6 +248,8 @@ final class MRSA_Admin {
 					if ( 'bonus_import' === $op ) {
 						$result = MRSA_Bonus::import( $extra['event_id'] );
 					} else {
+						$pending = MRSA_Bonus::pending( $extra['event_id'], self::posted( 'pending_token' ) );
+						$bonus_step = $pending['import_step'] ?? $bonus_step;
 						if ( 'bonus_import_approve' === $op && '1' !== self::posted( 'scan_approval' ) ) {
 							throw new RuntimeException( 'Review the scan results and explicitly approve the import.' );
 						}
@@ -254,7 +264,7 @@ final class MRSA_Admin {
 					$message = $result['message'];
 					if ( $result['errors'] ) {
 						$report_id = wp_generate_password( 24, false, false );
-						if ( ! set_transient( 'mrsa_bonus_report_' . get_current_user_id() . '_' . $report_id, array( 'event_id' => $extra['event_id'], 'errors' => $result['errors'] ), 15 * MINUTE_IN_SECONDS ) ) {
+						if ( ! set_transient( 'mrsa_bonus_report_' . get_current_user_id() . '_' . $report_id, array( 'event_id' => $extra['event_id'], 'step' => $bonus_step, 'errors' => $result['errors'] ), 15 * MINUTE_IN_SECONDS ) ) {
 							throw new RuntimeException( $message . ' The detailed error report could not be stored. Errors: ' . implode( '; ', $result['errors'] ) );
 						}
 						$extra['bonus_report'] = $report_id;
@@ -291,6 +301,9 @@ final class MRSA_Admin {
 					throw new RuntimeException( 'Unknown operation.' );
 			}
 			$message = $message ?? 'Saved successfully.';
+			if ( null !== $bonus_step ) {
+				self::bonus_redirect( $extra, $bonus_step, $message, false !== strpos( $message, 'WARNING:' ) ? 'warning' : 'success' );
+			}
 			$extra['notice'] = $message;
 			$redirect = $return_url ? add_query_arg( 'notice', $message, remove_query_arg( 'notice', $return_url ) ) : self::url( $tab, $extra );
 			if ( isset( $extra['bonus_report'] ) ) {
@@ -305,8 +318,25 @@ final class MRSA_Admin {
 			wp_safe_redirect( $redirect );
 			exit;
 		} catch ( RuntimeException $e ) {
+			if ( null !== $bonus_step && ! empty( $extra['event_id'] ) && MRSA::event_access( $extra['event_id'] ) && MRSA::row( 'events', $extra['event_id'] ) ) {
+				self::bonus_redirect( array( 'event_id' => $extra['event_id'] ), $bonus_step, $e->getMessage(), 'error' );
+			}
 			wp_die( esc_html( $e->getMessage() ), esc_html( 'Rally update not saved' ), array( 'response' => 400, 'back_link' => true ) );
 		}
+	}
+
+	private static function bonus_redirect( $extra, $step, $message, $severity ) {
+		$id = wp_generate_password( 24, false, false );
+		if ( ! set_transient( 'mrsa_bonus_feedback_' . get_current_user_id() . '_' . $id, array(
+			'event_id' => $extra['event_id'], 'step' => $step, 'message' => $message, 'severity' => $severity,
+		), 15 * MINUTE_IN_SECONDS ) ) {
+			wp_die( esc_html( $message . ' The section feedback could not be stored.' ), '', array( 'response' => 500, 'back_link' => true ) );
+		}
+		unset( $extra['notice'] );
+		$extra['score_tab'] = 'library';
+		$extra['bonus_feedback'] = $id;
+		wp_safe_redirect( self::url( 'scoring', $extra ) . '#mrsa-import-feedback' );
+		exit;
 	}
 
 	private static function event_admin( $remove ) {

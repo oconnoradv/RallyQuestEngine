@@ -671,6 +671,7 @@ final class MRSA_Bonus {
 			'event_id' => $event_id, 'rows' => $rows, 'images' => $images,
 			'stage_dir' => $stage_dir, 'hashes' => $hashes, 'errors' => $errors,
 			'partial' => $partial, 'scans' => MRSA_File_Scan::results(),
+			'import_step' => 'listing' === MRSA_Admin::posted( 'import_step' ) ? 'listing' : 'images',
 			'unscanned' => MRSA_File_Scan::skipped(),
 			'can_approve' => ! MRSA_File_Scan::failed() && ( $rows || $images ) && ( $partial || ! $errors ),
 			'expires' => time() + 15 * MINUTE_IN_SECONDS,

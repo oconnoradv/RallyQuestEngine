@@ -712,18 +712,30 @@ final class MRSA_Views {
 		echo '</section>';
 	}
 
-	private static function bonus_library( $event ) {
-		global $wpdb;
-		$event_id = (int) $event['id'];
+	private static function bonus_import_feedback( $event_id, $step ) {
+		$feedback_id = MRSA_Admin::query( 'bonus_feedback' );
+		$feedback = preg_match( '/^[A-Za-z0-9]{24}$/D', $feedback_id ) ? get_transient( 'mrsa_bonus_feedback_' . get_current_user_id() . '_' . $feedback_id ) : false;
+		if ( $feedback && (int) $feedback['event_id'] === $event_id && $feedback['step'] === $step ) {
+			$severity = in_array( $feedback['severity'], array( 'success', 'warning', 'error' ), true ) ? $feedback['severity'] : 'warning';
+			echo '<div class="notice notice-' . esc_attr( $severity ) . ' inline"><p>' . esc_html( $feedback['message'] ) . '</p></div>';
+		} elseif ( $feedback_id && ! $feedback && 'listing' === $step ) {
+			echo '<div class="notice notice-warning inline"><p>The import feedback expired or is unavailable. Feedback remains available for 15 minutes.</p></div>';
+		}
+		if ( 'setup' === $step ) {
+			self::clamav_feedback( $event_id );
+			return;
+		}
 		$pending_token = MRSA_Admin::query( 'bonus_pending' );
 		if ( $pending_token ) {
 			try {
 				$pending = MRSA_Bonus::pending( $event_id, $pending_token );
 			} catch ( RuntimeException $exception ) {
 				$pending = null;
-				echo '<div class="notice notice-warning inline"><p>' . esc_html( $exception->getMessage() ) . '</p></div>';
+				if ( ( $feedback['step'] ?? 'listing' ) === $step ) {
+					echo '<div class="notice notice-warning inline"><p>' . esc_html( $exception->getMessage() ) . '</p></div>';
+				}
 			}
-			if ( $pending ) {
+			if ( $pending && ( $pending['import_step'] ?? 'images' ) === $step ) {
 				echo '<section class="mrsa-panel"><h3>Review security scan results</h3><p>No listings or images have been imported yet. This review expires after 15 minutes. A passed scan means no threat was detected, not a guarantee that a file is harmless.</p>';
 				echo '<p>' . esc_html( count( $pending['rows'] ) . ' bonus listings and ' . count( $pending['images'] ) . ' validated images ready for approval.' ) . '</p>';
 				self::table( array( 'File', 'Scan status', 'Result' ) );
@@ -741,11 +753,11 @@ final class MRSA_Views {
 				if ( $pending['can_approve'] ) {
 					if ( ! empty( $pending['unscanned'] ) ) {
 						echo '<div class="notice notice-warning inline"><p><strong>No antivirus security scan was performed.</strong> ClamAV is unavailable. Format and executable-content checks do not replace virus scanning. Your username, UTC date/time, event, and unscanned import activity will be recorded in the audit table.</p></div>';
-						self::form( 'bonus_import_bypass', array( 'event_id' => $event_id, 'pending_token' => $pending_token ) );
+						self::form( 'bonus_import_bypass', array( 'event_id' => $event_id, 'pending_token' => $pending_token, 'import_step' => $step ) );
 						echo '<label><input type="checkbox" name="bypass_confirmation" value="1" required> I accept the risk and confirm importing these validated files without antivirus scanning. Remember this choice for my account on this site and import without further approval prompts only while ClamAV is unavailable.</label><p>';
 						self::button( 'Confirm Bypass and Import' );
 					} else {
-						self::form( 'bonus_import_approve', array( 'event_id' => $event_id, 'pending_token' => $pending_token ) );
+						self::form( 'bonus_import_approve', array( 'event_id' => $event_id, 'pending_token' => $pending_token, 'import_step' => $step ) );
 						echo '<label><input type="checkbox" name="scan_approval" value="1" required> I have reviewed the scan results and approve importing only the validated listings/images into this event.</label><p>';
 						self::button( 'Approve and Import' );
 					}
@@ -753,7 +765,7 @@ final class MRSA_Views {
 				} else {
 					echo '<div class="notice notice-error inline"><p>Import approval is blocked. Resolve scanner or file errors and try again. Scanner errors always block the batch; the unavailable-ClamAV bypass cannot override a malware detection or validation failure.</p></div>';
 				}
-				self::form( 'bonus_import_cancel', array( 'event_id' => $event_id, 'pending_token' => $pending_token ) );
+				self::form( 'bonus_import_cancel', array( 'event_id' => $event_id, 'pending_token' => $pending_token, 'import_step' => $step ) );
 				self::button( 'Cancel and Remove Staged Files' );
 				echo '</form></section>';
 			}
@@ -761,30 +773,31 @@ final class MRSA_Views {
 		$report_id = MRSA_Admin::query( 'bonus_report' );
 		if ( preg_match( '/^[A-Za-z0-9]{24}$/D', $report_id ) ) {
 			$report = get_transient( 'mrsa_bonus_report_' . get_current_user_id() . '_' . $report_id );
-			if ( $report && (int) $report['event_id'] === $event_id ) {
-				echo '<div class="notice notice-warning inline"><h4>Bonus image import errors</h4><p>See the import summary above for the number of images saved. Correct the following image/source errors and retry those files.</p><ul class="ul-disc mrsa-import-errors">';
+			if ( $report && (int) $report['event_id'] === $event_id && ( $report['step'] ?? 'images' ) === $step ) {
+				echo '<div class="notice notice-warning inline"><h4>Bonus import errors</h4><p>See the import summary in this section for the number saved. Correct the following file/source errors and retry those files.</p><ul class="ul-disc mrsa-import-errors">';
 				foreach ( $report['errors'] as $error ) {
 					echo '<li>' . esc_html( $error ) . '</li>';
 				}
 				echo '</ul></div>';
-			} else {
+			} elseif ( ! $report && ( $feedback['step'] ?? 'images' ) === $step ) {
 				echo '<div class="notice notice-warning inline"><p>The image import report has expired or is unavailable for this event. Reports remain available for 15 minutes.</p></div>';
 			}
 		}
+	}
+
+	private static function bonus_library( $event ) {
+		global $wpdb;
+		$event_id = (int) $event['id'];
 		echo '<h4>Bulk Import Bonus Listing</h4><ol><li>Validate and import the bonus listing XLSX or CSV.</li><li>Validate and import the bonus images.</li></ol><p>ClamAV scans require review and approval. If the daemon is unavailable, you can explicitly confirm a per-account bypass; later unscanned imports then proceed without another approval prompt and are audited. Scanner errors, detected malware, and unsafe content cannot be bypassed. Re-importing a Bonus ID updates its listing without removing other IDs.</p>';
+		echo '<div class="mrsa-import-header"><div id="mrsa-import-setup">';
 		self::clamav_setup( $event_id );
-		if ( MRSA_Bonus::bypass_enabled() ) {
-			echo '<div class="notice notice-warning inline"><p><strong>Your ClamAV bypass is enabled on this site.</strong> When ClamAV is unavailable, valid imports run without an approval prompt and without an antivirus security scan. Each import is logged with your username and UTC date/time. When ClamAV is available, scanning and approval remain required.</p>';
-			self::form( 'bonus_import_require_scan', array( 'event_id' => $event_id ) );
-			self::button( 'Restore Mandatory ClamAV Scanning' );
-			echo '</form></div>';
-		}
+		echo '</div><div id="mrsa-import-listing">';
 		self::form( 'bonus_import', array( 'event_id' => $event_id, 'import_step' => 'listing' ), 'mrsa-panel mrsa-edit-form', '', 'multipart/form-data' );
 		echo '<h4>Step 1: Import the bonus listing</h4>';
 		echo '<label class="mrsa-field"><span>Bonus listing spreadsheet (XLSX or CSV)</span><input type="file" name="bonus_file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label>';
 		echo '<p>Columns: Bonus ID, Bonus Description, Bonus Category, Bonus Points, Bonus Locations (GPS coordinates). Enter locations as latitude,longitude.</p>';
 		self::button( 'Validate and Import Bonus Listing' );
-		echo '</form>';
+		echo '</form></div><div id="mrsa-import-images">';
 		self::form( 'bonus_import', array( 'event_id' => $event_id, 'import_step' => 'images' ), 'mrsa-panel mrsa-edit-form', '', 'multipart/form-data' );
 		echo '<h4>Step 2: Import the bonus images</h4><p>Image filenames must match Bonus IDs, for example B12.jpg. An image with a new ID creates a listing with empty attributes; import its spreadsheet attributes in step 1.</p>';
 		echo '<label class="mrsa-field"><span>Images from a local folder</span><input type="file" name="bonus_images[]" accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp" multiple webkitdirectory directory><span>Select a folder whose image filenames match Bonus IDs.</span></label>';
@@ -792,7 +805,17 @@ final class MRSA_Views {
 		echo '<p>Public URLs must use HTTPS and point to an image, a ZIP of images, or a standard web-server directory listing. Google Drive/Dropbox links must provide a public ZIP download or directory listing. Limits: 200 images, 10 MB per image, 100 MB total, and 50 MB per ZIP/download. Server upload limits may be lower.</p>';
 		echo '<label><input type="checkbox" name="allow_partial_images" value="1"> Import all successful images and skip failed images</label><p>When selected, only validated images can be approved; failed images and sources are listed in the review. Otherwise, any image error blocks approval of the entire batch. Scanner errors always block approval.</p>';
 		self::button( 'Validate and Import Bonus Images' );
-		echo '</form>';
+		echo '</form></div></div><section class="mrsa-import-feedback" id="mrsa-import-feedback" aria-label="Bonus import notices and scan results">';
+		foreach ( array( 'setup', 'listing', 'images' ) as $step ) {
+			ob_start();
+			self::bonus_import_feedback( $event_id, $step );
+			$feedback = ob_get_clean();
+			if ( '' !== $feedback ) {
+				$labels = array( 'setup' => 'Step 0: ClamAV', 'listing' => 'Step 1: Bonus listing', 'images' => 'Step 2: Bonus images' );
+				echo '<div class="mrsa-import-feedback-group"><h4>' . esc_html( $labels[ $step ] ) . '</h4>' . $feedback . '</div>';
+			}
+		}
+		echo '</section>';
 		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT bonus_id,description,category,points,locations,image_file FROM ' . MRSA::table( 'bonus_points' ) . ' WHERE event_id=%d ORDER BY bonus_id', $event_id ), ARRAY_A );
 		echo '<h4>Event Bonus Point Gallery</h4>';
 		if ( ! $rows ) {
@@ -825,16 +848,16 @@ final class MRSA_Views {
 	}
 
 	private static function clamav_setup( $event_id ) {
-		echo '<section class="mrsa-panel mrsa-edit-form" id="mrsa-clamav-setup"><h4>Step 0: Set up or verify ClamAV</h4><p>If ClamAV is already installed using the README instructions, skip installation and check the connection below. Otherwise, follow the setup guide or ask your hosting provider to configure it.</p><p>Installation requires server administrator access. These commands run in your server terminal, not WordPress; this page does not install packages, run privileged commands, or change server configuration.</p>';
-		$check_id = MRSA_Admin::query( 'clamav_check' );
-		if ( preg_match( '/^[A-Za-z0-9]{24}$/D', $check_id ) ) {
-			$check = get_transient( 'mrsa_clamav_check_' . get_current_user_id() . '_' . $check_id );
-			if ( $check && (int) $check['event_id'] === $event_id ) {
-				echo '<div class="notice ' . ( $check['passed'] ? 'notice-success' : 'notice-error' ) . ' inline"><p>' . esc_html( $check['message'] ) . '</p></div>';
-			} else {
-				echo '<div class="notice notice-warning inline"><p>The connection-check result expired or is unavailable for this event. Run the check again.</p></div>';
-			}
+		$connection = MRSA_File_Scan::check_connection();
+		$bypassed = MRSA_Bonus::bypass_enabled();
+		if ( $bypassed ) {
+			echo '<details class="mrsa-clamav-disabled"><summary>ClamAV Manually Disabled</summary>';
+		} elseif ( $connection['passed'] ) {
+			echo '<details class="mrsa-clamav-enabled"><summary>ClamAV Enabled</summary>';
+		} else {
+			echo '<div class="mrsa-clamav-unconfigured">';
 		}
+		echo '<section class="mrsa-panel mrsa-edit-form" id="mrsa-clamav-setup"><h4>Step 0: Set up or verify ClamAV</h4><p>If ClamAV is already installed using the README instructions, skip installation and check the connection below. Otherwise, follow the setup guide or ask your hosting provider to configure it.</p><p>Installation requires server administrator access. These commands run in your server terminal, not WordPress; this page does not install packages, run privileged commands, or change server configuration.</p>';
 		echo '<details><summary>ClamAV installation and configuration guide</summary>';
 		echo '<h5>Ubuntu / Debian (systemd)</h5><p>Run these commands on the WordPress server using an account with sudo access:</p>';
 		echo '<pre class="mrsa-setup-commands"><code>' . esc_html( "sudo apt-get update\nsudo apt-get install clamav clamav-daemon\nsudo systemctl enable --now clamav-freshclam" ) . '</code></pre><p>Wait for freshclam to download its signature databases. Configure the following settings in <code>/etc/clamav/clamd.conf</code>, updating existing values rather than adding duplicates:</p>';
@@ -849,6 +872,29 @@ final class MRSA_Views {
 		echo '<p>';
 		self::button( 'Check ClamAV Connection' );
 		echo '</p></form><p>The check streams a small, harmless test file to the configured local daemon. It does not import bonus records or images or enable a bypass. When ClamAV is available, each import requires its own scan and approval.</p></section>';
+		if ( $bypassed || $connection['passed'] ) {
+			echo '</details>';
+		} else {
+			echo '</div>';
+		}
+	}
+
+	private static function clamav_feedback( $event_id ) {
+		$check_id = MRSA_Admin::query( 'clamav_check' );
+		if ( preg_match( '/^[A-Za-z0-9]{24}$/D', $check_id ) ) {
+			$check = get_transient( 'mrsa_clamav_check_' . get_current_user_id() . '_' . $check_id );
+			if ( $check && (int) $check['event_id'] === $event_id ) {
+				echo '<div class="notice ' . ( $check['passed'] ? 'notice-success' : 'notice-error' ) . ' inline"><p>' . esc_html( $check['message'] ) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-warning inline"><p>The connection-check result expired or is unavailable for this event. Run the check again.</p></div>';
+			}
+		}
+		if ( MRSA_Bonus::bypass_enabled() ) {
+			echo '<div class="notice notice-warning inline"><p><strong>Your ClamAV bypass is enabled on this site.</strong> When ClamAV is unavailable, valid imports run without an approval prompt and without an antivirus security scan. Each import is logged with your username and UTC date/time. When ClamAV is available, scanning and approval remain required.</p>';
+			self::form( 'bonus_import_require_scan', array( 'event_id' => $event_id ) );
+			self::button( 'Restore Mandatory ClamAV Scanning' );
+			echo '</form></div>';
+		}
 	}
 
 	public static function render_bonus_edit() {

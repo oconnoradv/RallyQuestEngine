@@ -54,6 +54,10 @@ The **Bonus Point Library** stores listings separately per event. **Step 1:** va
 
 ### Import antivirus setup
 
+Steps 0, 1, and 2 appear in a three-column import header, stacking on narrow screens. A successful live ClamAV connection check collapses Step 0 to a green **ClamAV Enabled** label; expand it to access setup guidance and connection controls. Import notices, warnings, errors, and scan-review controls share one section immediately below the header, grouped by originating step. Successful notifications are highlighted in green; unscanned-import warnings remain warnings. Import actions return to this feedback area in the selected event. Feedback reports are private to the administrator and expire after 15 minutes.
+
+A remembered bypass instead collapses Step 0 to an orange **ClamAV Manually Disabled** label for that administrator. Without bypass or a successful connection check, Step 0 stays expanded and highlighted red. These labels do not change scan enforcement: an available daemon is still used even with remembered bypass consent.
+
 The import screen includes **Step 0: Set up or verify ClamAV**, with expandable Ubuntu/Debian installation commands, configuration guidance, and links for other platforms. Run the commands on the server with server-administrator permissions, or have your hosting provider complete them; WordPress does not execute installation commands or elevate privileges. **Check ClamAV Connection** performs a small local file-stream scan and displays the result without importing any event data. It does not certify signature freshness or scan-limit configuration. Existing README-based pre-installation remains supported: skip installation and use the connection check.
 
 Bonus imports normally require a **local ClamAV daemon (`clamd`)** with current signatures maintained by `freshclam`. The default endpoint is `unix:///var/run/clamav/clamd.ctl`. If needed, set `MRSA_CLAMAV_SOCKET` in `wp-config.php` to your local Unix socket or `tcp://127.0.0.1:3310` (loopback only). Give the WordPress PHP process permission to access the socket. Never expose clamd's unauthenticated TCP listener to the network.
