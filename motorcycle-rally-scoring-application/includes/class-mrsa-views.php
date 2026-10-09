@@ -90,7 +90,7 @@ final class MRSA_Views {
 		if ( ! isset( $tabs[ $tab ] ) || ( ! $global && in_array( $tab, array( 'global', 'bikes' ), true ) ) ) {
 			wp_die( esc_html( 'This setup area is restricted to global administrators.' ), '', array( 'response' => 403 ) );
 		}
-		echo '<div class="wrap mrsa"><h1>Motorcycle Rally Scoring Application <small>v0.1.0</small></h1><nav class="nav-tab-wrapper" aria-label="Setup tabs">';
+		echo '<div class="wrap mrsa"><h1>Motorcycle Rally Scoring Application <small>v' . esc_html( MRSA_VERSION ) . '</small></h1><nav class="nav-tab-wrapper" aria-label="Setup tabs">';
 		foreach ( $tabs as $key => $label ) {
 			if ( ! $global && in_array( $key, array( 'global', 'bikes' ), true ) ) {
 				continue;
@@ -364,7 +364,7 @@ final class MRSA_Views {
 
 	private static function rider_events( $id ) {
 		global $wpdb;
-		echo '<h3>Registered events (read-only)</h3><p>Finisher / DNF / DNS / Registered are reserved outcome labels. Version 0.1.0 stores registrations as Registered; scoring, outcomes and placing await defined rules.</p>';
+		echo '<h3>Registered events (read-only)</h3><p>Finisher / DNF / DNS / Registered are reserved outcome labels. Version ' . esc_html( MRSA_VERSION ) . ' stores registrations as Registered; scoring, outcomes and placing await defined rules.</p>';
 		$sql = 'SELECT reg.*,e.name FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'events' ) . ' e ON e.id=reg.event_id WHERE reg.rider_id=%d';
 		$args = array( $id );
 		if ( ! MRSA::global_access() ) {
@@ -579,7 +579,7 @@ final class MRSA_Views {
 		foreach ( $tabs as $key => $label ) {
 			echo '<a class="nav-tab' . ( $key === $tab ? ' nav-tab-active' : '' ) . '" href="' . esc_url( MRSA_Admin::url( 'scoring', array( 'event_id' => $event['id'], 'score_rider' => $rider_id, 'score_tab' => $key ) ) . '#mrsa-scoring' ) . '">' . esc_html( $label ) . '</a>';
 		}
-		echo '</nav><div class="mrsa-panel"><h4>' . esc_html( $tabs[ $tab ] ) . ' — future defined functionality</h4><p>No bonus rules, submissions, review transitions or scoring algorithm have been defined for v0.1.0. There are no scoring records to display. No scores, finisher decisions or placing are calculated. This event/rider context is reserved for the future workflow.</p></div></section>';
+		echo '</nav><div class="mrsa-panel"><h4>' . esc_html( $tabs[ $tab ] ) . ' — future defined functionality</h4><p>No bonus rules, submissions, review transitions or scoring algorithm have been defined for v' . esc_html( MRSA_VERSION ) . '. There are no scoring records to display. No scores, finisher decisions or placing are calculated. This event/rider context is reserved for the future workflow.</p></div></section>';
 	}
 
 	private static function about() {

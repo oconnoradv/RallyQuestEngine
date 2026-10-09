@@ -3,7 +3,7 @@ Contributors: oconnoradv
 Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.1.1
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -37,7 +37,7 @@ collisions between sites. No WordPress core tables or users are replaced.
 == Installation ==
 
 1. Back up the database and use a supported, patched WordPress/PHP installation.
-2. Upload motorcycle-rally-scoring-application-v0.1.0.zip through Plugins > Add New > Upload Plugin.
+2. Upload motorcycle-rally-scoring-application-vX.Y.Z.zip through Plugins > Add New > Upload Plugin.
 3. Activate Motorcycle Rally Scoring Application.
 4. Open the rally administration menu as a WordPress administrator.
 5. Assign administrators, populate Bike Setup, register riders, and configure events.
@@ -125,13 +125,18 @@ No. Scoring workflows are reserved for later specifications.
 
 = Can riders register themselves on the public website? =
 
-No. Version 0.1.0 provides the requested administrator-operated registration.
+No. The current version provides administrator-operated registration.
 
 = Is this a payment processor? =
 
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.1.1 =
+* Switched the optional catalog import to arthurkao/vehicle-make-model-data.
+* Moved rider and event creation into dedicated one-field-per-row edit pages.
+* Expanded the project README and in-plugin About guidance.
 
 = 0.1.0 =
 * Initial administration, motorcycle catalog, rider, and event registration release.

@@ -2,7 +2,7 @@
 
 A WordPress plugin for administering motorcycle rallies, including administrator assignments, a motorcycle catalog, master rider records, event configuration, and event enrollment. Requires WordPress 6.2+, PHP 7.4+, and MySQL 8.0+ or MariaDB 10.6+ with InnoDB. Licensed under the GNU General Public License v3 or later (see [LICENSE](LICENSE)).
 
-> **Version status:** Version 0.1.0 provides rally setup and registration workflows. The Bonus Point Library and submission review tabs reserve the future scoring workflow, but this release does **not** calculate scores, determine finisher status, or assign placing.
+> **Version status:** Version 0.1.1 provides rally setup and registration workflows. The Bonus Point Library and submission review tabs reserve the future scoring workflow, but this release does **not** calculate scores, determine finisher status, or assign placing.
 
 ## Installation
 

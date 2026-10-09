@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Motorcycle Rally Scoring Application
  * Description: Site-scoped rally administration, motorcycle catalog and rider registration.
- * Version: 0.1.0
+ * Version: 0.1.1
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author: Motorcycle Rally Scoring Application contributors
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'MRSA_VERSION', '0.1.0' );
+define( 'MRSA_VERSION', '0.1.1' );
 define( 'MRSA_FILE', __FILE__ );
 require_once __DIR__ . '/includes/class-mrsa.php';
 require_once __DIR__ . '/includes/class-mrsa-importer.php';
