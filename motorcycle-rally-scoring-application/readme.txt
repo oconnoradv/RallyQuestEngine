@@ -44,8 +44,9 @@ collisions between sites. No WordPress core tables or users are replaced.
 6. Enroll riders in an event using an unused bib number.
 
 Event dates are derived from the configured start date/time in the WordPress
-site timezone. Add Rider and Edit open subforms; enrolled rider details remain
-read-only outside those explicit registration controls.
+site timezone. Add Rider and Add Event open dedicated edit pages with one
+attribute per row. Enrolled rider details remain read-only outside explicit
+registration controls.
 
 Use MySQL 8.0+ or MariaDB 10.6+ with InnoDB tables. Atomic rider updates,
 catalog deletion, and event-capacity changes rely on transaction and row-lock
@@ -56,23 +57,22 @@ on each site when using multisite; network activation is not supported.
 
 == Motorcycle data and external services ==
 
-Source reference: https://www.totalmotorcycle.com/motorcyclemodelguides-index
+Source reference: https://github.com/arthurkao/vehicle-make-model-data
 
-No motorcycle dataset, articles, or images from Total Motorcycle are bundled.
-The source is a third-party website, not a guaranteed API. An administrator
-must explicitly initiate and authorize any source retrieval and confirm they
-have permission to use the data. No remote import runs on activation.
-Only factual make/model/year entries are intended for the catalog, not
-editorial content or photographs. Respect the source's terms and obtain
-permission where needed. This plugin is not affiliated with Total Motorcycle.
+The MIT-licensed source contains factual year, make, and model data for cars,
+motorcycles, trucks, and UTVs from 2001 through 2015. An administrator must
+explicitly initiate and confirm retrieval; no remote import runs on activation.
+The importer retrieves one pinned CSV revision, selects recognized motorcycle
+manufacturers, sorts newest years first, and imports at most 500 rows.
+Manufacturers that also produce cars may include non-motorcycle models, so
+review imported labels.
 
 An authorized retrieval discloses the site's server IP and ordinary HTTP
-request metadata to Total Motorcycle. Rider details and administrator
-contact information are not sent. Imports are bounded and may fail because
-of network restrictions or source markup changes. Do not interpret an empty
-import as a complete catalog. Use the manual catalog controls or CSV import
-for factual records you are authorized to use when live retrieval is unavailable.
-CSV columns are make,model,year, with an optional matching header row.
+request metadata to GitHub. Rider details and administrator contact information
+are not sent. The request is limited to 1 MB, follows no redirects, and fails
+closed if the source is unavailable or has an unexpected format. Use the manual
+catalog controls or CSV import when remote retrieval is unavailable. CSV columns
+are make,model,year, with an optional matching header row.
 
 == Privacy and retention ==
 

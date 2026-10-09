@@ -3,71 +3,45 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MRSA_Importer {
-	const SOURCE = 'https://www.totalmotorcycle.com/motorcyclemodelguides-index';
+	const SOURCE = 'https://github.com/arthurkao/vehicle-make-model-data';
+	const DATA_URL = 'https://raw.githubusercontent.com/arthurkao/vehicle-make-model-data/d7e14ab7f3ffec5f7527055fd5ce2377dade6306/csv_data.csv';
 
 	public static function import() {
-		if ( ! class_exists( 'DOMDocument' ) ) {
-			throw new RuntimeException( 'The PHP DOM extension is unavailable. Use manual entry or factual CSV rows instead.' );
+		$response = wp_safe_remote_get( self::DATA_URL, array( 'timeout' => 15, 'redirection' => 0, 'limit_response_size' => 1048576, 'headers' => array( 'Accept' => 'text/csv' ) ) );
+		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+			throw new RuntimeException( 'The vehicle catalog source is unavailable. No records were imported. Use manual entry or the factual CSV fallback.' );
 		}
-		$queue = array( self::SOURCE );
-		$seen = array();
+		$lines = preg_split( '/\r\n|\r|\n/', trim( wp_remote_retrieve_body( $response ) ) );
+		if ( ! $lines || str_getcsv( array_shift( $lines ), ',', '"', '' ) !== array( 'year', 'make', 'model' ) ) {
+			throw new RuntimeException( 'The vehicle catalog source returned an unrecognized CSV format. No records were imported.' );
+		}
+		$makes = array( 'AMERICAN IRONHORSE', 'APRILIA', 'ATK', 'BENELLI', 'BETA', 'BIG DOG', 'BMW', 'BUELL', 'CAN-AM', 'CFMOTO', 'DUCATI', 'GAS GAS', 'HARLEY-DAVIDSON', 'HONDA', 'HUSABERG', 'HUSQVARNA', 'HYOSUNG', 'INDIAN', 'KAWASAKI', 'KTM', 'KYMCO', 'MOTO GUZZI', 'MV AGUSTA', 'PIAGGIO', 'POLARIS', 'ROYAL ENFIELD', 'SUZUKI', 'TRIUMPH', 'URAL', 'VESPA', 'VICTORY', 'YAMAHA', 'ZERO' );
 		$rows = array();
-		// No redirects, alternate hosts, images, assets, articles or unbounded crawling.
-		while ( $queue && count( $seen ) < 6 && count( $rows ) < 500 ) {
-			$url = array_shift( $queue );
-			if ( isset( $seen[ $url ] ) ) {
+		foreach ( $lines as $line ) {
+			if ( '' === trim( $line ) ) {
 				continue;
 			}
-			$seen[ $url ] = true;
-			$response = wp_safe_remote_get( $url, array( 'timeout' => 8, 'redirection' => 0, 'limit_response_size' => 1048576, 'headers' => array( 'Accept' => 'text/html' ) ) );
-			if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+			$cols = str_getcsv( $line, ',', '"', '' );
+			if ( 3 !== count( $cols ) || ! in_array( strtoupper( trim( $cols[1] ) ), $makes, true ) ) {
 				continue;
 			}
-			$html = wp_remote_retrieve_body( $response );
-			$doc = new DOMDocument();
-			$previous = libxml_use_internal_errors( true );
-			$loaded = $doc->loadHTML( $html, LIBXML_NONET );
-			libxml_clear_errors();
-			libxml_use_internal_errors( $previous );
-			if ( ! $loaded ) {
+			$year = trim( $cols[0] );
+			$make = trim( $cols[1] );
+			$model = trim( $cols[2] );
+			if ( ! preg_match( '/^\d{4}$/D', $year ) || strlen( $make ) > 80 || strlen( $model ) > 120 || '' === $model ) {
 				continue;
 			}
-			foreach ( $doc->getElementsByTagName( 'a' ) as $a ) {
-				$text = trim( preg_replace( '/\s+/u', ' ', $a->textContent ) );
-				if ( preg_match( '/^((?:19|20)\d{2})\s+(Aprilia|BMW|Buell|CFMoto|Ducati|Harley-Davidson|Honda|Husqvarna|Indian|Kawasaki|KTM|Moto Guzzi|MV Agusta|Royal Enfield|Suzuki|Triumph|Ural|Vespa|Yamaha|Zero)\s+(.+)$/iu', $text, $m ) ) {
-					$model = trim( $m[3] );
-					if ( strlen( $model ) <= 120 && ! preg_match( '/\b(guide|review|news|price|specification|motorcycles|lineup|models|overview|photos)\b/i', $model ) ) {
-						$key = strtolower( $m[2] . '/' . $model . '/' . $m[1] );
-						$rows[ $key ] = array( 'make' => sanitize_text_field( $m[2] ), 'model' => sanitize_text_field( $model ), 'year' => (int) $m[1], 'source' => self::SOURCE );
-					}
-				}
-				$href = self::guide_url( $a->getAttribute( 'href' ), $url );
-				if ( $href && ! isset( $seen[ $href ] ) && count( $queue ) < 30 ) {
-					$queue[] = $href;
-				}
-				if ( count( $rows ) >= 500 ) {
-					break;
-				}
-			}
+			$key = strtolower( $make . '/' . $model . '/' . $year );
+			$rows[ $key ] = array( 'make' => sanitize_text_field( $make ), 'model' => sanitize_text_field( $model ), 'year' => (int) $year, 'source' => self::SOURCE );
 		}
 		if ( ! $rows ) {
-			throw new RuntimeException( 'No unambiguous make/model/year rows could be extracted, or the source was unavailable. No records were invented. Use manual entry or the factual CSV fallback.' );
+			throw new RuntimeException( 'No motorcycle make/model/year rows were found in the vehicle catalog source. No records were imported.' );
 		}
-		return self::store( array_values( $rows ) );
-	}
-
-	public static function guide_url( $href, $base ) {
-		if ( 0 === strpos( $href, '/' ) && 0 !== strpos( $href, '//' ) ) {
-			$href = 'https://www.totalmotorcycle.com' . $href;
-		} elseif ( ! preg_match( '~^[a-z]+:~i', $href ) && preg_match( '~^[a-zA-Z0-9/_-]+(?:\.htm[l]?)?$~', $href ) ) {
-			$href = substr( $base, 0, strrpos( $base, '/' ) + 1 ) . $href;
-		}
-		$p = wp_parse_url( $href );
-		if ( ! $p || ( $p['scheme'] ?? '' ) !== 'https' || ( $p['host'] ?? '' ) !== 'www.totalmotorcycle.com' || isset( $p['port'] ) || isset( $p['user'] ) || isset( $p['pass'] ) || isset( $p['query'] ) || isset( $p['fragment'] ) ) {
-			return false;
-		}
-		$path = $p['path'] ?? '';
-		return preg_match( '~^/[a-zA-Z0-9/_-]*(?:19|20)\d{2}[a-zA-Z0-9/_-]*(?:guide|model)[a-zA-Z0-9/_-]*(?:\.htm[l]?)?/?$~i', $path ) && false === strpos( $path, '..' ) ? $href : false;
+		usort( $rows, static function ( $a, $b ) {
+			$year_order = $b['year'] <=> $a['year'];
+			return $year_order ?: array( $a['make'], $a['model'] ) <=> array( $b['make'], $b['model'] );
+		} );
+		return self::store( array_slice( $rows, 0, 500 ) );
 	}
 
 	public static function csv( $text ) {

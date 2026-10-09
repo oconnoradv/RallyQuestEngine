@@ -4,6 +4,8 @@
 .mrsa .mrsa-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px 18px; margin-bottom: 12px; }
 .mrsa .mrsa-field { display: flex; flex-direction: column; gap: 5px; margin: 8px 0; }
 .mrsa .mrsa-field input, .mrsa .mrsa-field select, .mrsa .mrsa-field textarea { width: 100%; max-width: 100%; }
+.mrsa .mrsa-edit-form { max-width: 760px; }
+.mrsa .mrsa-edit-form .mrsa-bike-row, .mrsa .mrsa-edit-form .mrsa-dependent { flex-direction: column; align-items: stretch; }
 .mrsa textarea { min-height: 90px; }
 .mrsa .mrsa-profile { margin: 12px 0; }
 .mrsa .mrsa-note { background: #f0f6fc; border-left: 4px solid #2271b1; padding: 12px; }

@@ -13,16 +13,18 @@ final class MRSA_Admin {
 		if ( MRSA::access() ) {
 			add_menu_page( 'Motorcycle Rally Scoring Application', 'Rally Scoring', 'read', 'mrsa', array( 'MRSA_Views', 'render' ), 'dashicons-location-alt', 58 );
 			add_submenu_page( 'mrsa', 'Event Scoring', 'Event Scoring', 'read', 'mrsa-scoring', array( 'MRSA_Views', 'render_scoring' ) );
+			add_submenu_page( null, 'Edit Rider', 'Edit Rider', 'read', 'mrsa-rider-edit', array( 'MRSA_Views', 'render_rider_edit' ) );
+			add_submenu_page( null, 'Edit Event', 'Edit Event', 'read', 'mrsa-event-edit', array( 'MRSA_Views', 'render_event_edit' ) );
 		}
 	}
 
 	public static function assets( $hook ) {
-		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'rally-scoring_page_mrsa-scoring' ), true ) || ! MRSA::access() ) {
+		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'rally-scoring_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit' ), true ) || ! MRSA::access() ) {
 			return;
 		}
 		wp_enqueue_style( 'mrsa-admin', plugins_url( 'assets/admin.css', MRSA_FILE ), array(), MRSA_VERSION );
 		wp_enqueue_script( 'mrsa-admin', plugins_url( 'assets/admin.js', MRSA_FILE ), array(), MRSA_VERSION, true );
-		if ( 'toplevel_page_mrsa' === $hook && 'events' === self::query( 'tab', MRSA::global_access() ? 'global' : 'events' ) ) {
+		if ( 'admin_page_mrsa-event-edit' === $hook ) {
 			wp_enqueue_media();
 		}
 	}
@@ -86,6 +88,9 @@ final class MRSA_Admin {
 	public static function url( $tab, $extra = array() ) {
 		if ( 'scoring' === $tab ) {
 			return add_query_arg( array_merge( array( 'page' => 'mrsa-scoring' ), $extra ), admin_url( 'admin.php' ) );
+		}
+		if ( in_array( $tab, array( 'rider-edit', 'event-edit' ), true ) ) {
+			return add_query_arg( array_merge( array( 'page' => 'mrsa-' . $tab ), $extra ), admin_url( 'admin.php' ) );
 		}
 		return add_query_arg( array_merge( array( 'page' => 'mrsa', 'tab' => $tab ), $extra ), admin_url( 'admin.php' ) );
 	}
@@ -153,7 +158,7 @@ final class MRSA_Admin {
 				case 'csv_import':
 					self::require_global();
 					if ( '1' !== self::posted( 'source_consent' ) ) {
-						throw new RuntimeException( 'Confirm that you have permission to retrieve and import the factual catalog data first. No source API or reuse license is assumed.' );
+						throw new RuntimeException( 'Confirm that you understand the source and review requirements before importing the factual catalog data.' );
 					}
 					$message = 'source_import' === $op ? MRSA_Importer::import() : MRSA_Importer::csv( self::posted( 'csv' ) );
 					$tab = 'bikes';
@@ -161,11 +166,11 @@ final class MRSA_Admin {
 				case 'rider':
 					self::require_global();
 					$extra['rider_id'] = self::rider();
-					$tab = 'riders';
+					$tab = 'rider-edit';
 					break;
 				case 'event':
 					$extra['event_id'] = self::event();
-					$tab = 'events';
+					$tab = 'event-edit';
 					break;
 				case 'registration':
 				case 'edit_registration':
@@ -173,7 +178,7 @@ final class MRSA_Admin {
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
 					self::registration( $extra['event_id'], $op );
-					$tab = 'events';
+					$tab = 'event-edit';
 					break;
 				default:
 					throw new RuntimeException( 'Unknown operation.' );
