@@ -13,27 +13,37 @@ A WordPress plugin for administering motorcycle rallies, including administrator
 
 The plugin supports individual WordPress sites. On multisite, activate and manage it separately on each site; network activation is not supported.
 
-## Managing rallies
+## Current administration design
 
-The **Rally Scoring** page provides these tabs:
+The plugin is an administrator-operated application. It does not expose public registration forms or change WordPress roles. The **Rally Scoring** screen provides the following navigation:
 
-- **Administrators** assigns global administrators from existing WordPress users. Users with `manage_options` retain bootstrap access.
-- **Bike Setup** manages make/model catalog records through manual entry or a make-based NHTSA motorcycle import. Catalog rows can be selected individually or by loaded page and deleted in one transaction when none are assigned to riders.
-- **Rider Registration** lists master rider records. **Add Rider** and edit links open a dedicated page with one attribute per row, including contact details, emergency contacts, insurance notes, and motorcycles. Motorcycle selection filters by make and model; each rider assignment has its own optional, manually entered four-digit year and fuel-capacity note.
-- **Event Setup** lists accessible events with separate **Configure**, **Registrations**, and **Scoring** links. Event administrator assignments are managed from each existing event's **Configure** page.
-- **Event Rosters** selects an accessible event and displays every registered rider attribute, motorcycle, fuel-capacity note, and registration field. Global administrators use **Add Rider to Event** to select an unenrolled rider on a dedicated page. When no riders remain, the page offers to open **Add Rider** and returns to enrollment after the rider is saved.
-- **Scoring** selects an accessible event and displays its current roster scoring summary plus the **Bonus Point Library**, **Submissions - Pending Review**, **Submissions - Reviewed**, and **Submissions - Contested** workspace tabs.
-- **About** shows the installed environment, repository and license links, version scope, privacy and security guidance, and issue-reporting instructions.
+| Tab | Current function | Access |
+| --- | --- | --- |
+| **Administrators** | Assign global administrators from existing WordPress users and configure uninstall retention. Users with `manage_options` retain bootstrap access. | Global administrators |
+| **Bike Setup** | Add or edit make/model catalog records, import motorcycle models by make from NHTSA, and bulk-delete selected unassigned records. | Global administrators |
+| **Rider Registration** | List riders and open dedicated add/edit pages for contact, emergency-contact, insurance, notes, motorcycle, year, and fuel-capacity attributes. | Global administrators can edit; event administrators have read-only access to riders in assigned events |
+| **Event Setup** | Add events and open separate **Configure**, **Registrations**, and **Scoring** destinations. The Configure page also manages that event's administrator assignments. | Global administrators manage all events; event administrators manage assigned events |
+| **Event Rosters** | Select an event, view every registered rider attribute, edit bib/pillion details, and open the dedicated enrollment screen. | Global and assigned event administrators; only global administrators can enroll riders |
+| **Scoring** | Select an event and display its roster scoring summary and reserved scoring workspace tabs. | Global and assigned event administrators |
+| **About** | Show version/environment details, repository and license links, source attribution, privacy guidance, and reporting instructions. | Global and assigned event administrators |
 
-Global administrators can manage every plugin record. Event administrators can access only assigned events and the riders enrolled in those events; they cannot change global assignments, the catalog, or master rider records.
+Global administrators can manage every plugin record. Event administrators can access only assigned events and enrolled rider details; they cannot change global assignments, the catalog, master rider records, or event enrollment.
+
+### Primary workflows
+
+1. **Build the motorcycle catalog:** add make/model records manually or explicitly import a make from NHTSA. Select individual records—or all records loaded on the current server page—to delete them together. Bulk deletion is all-or-nothing and stops if any selected record is assigned to a rider.
+2. **Create riders:** open **Rider Registration > Add Rider**, enter one attribute per row, and attach up to 20 catalog motorcycles. Motorcycle filtering uses make and model only. The optional four-digit year belongs to the rider's motorcycle assignment and is not checked against the catalog.
+3. **Create and configure events:** open **Event Setup > Add Event**, then use **Configure** for event attributes and event-administrator assignments.
+4. **Build event rosters:** choose an event under **Event Rosters**, then use **Add Rider to Event** to select a rider who is not already enrolled and assign an available bib. If no unenrolled riders remain, the screen can open **Add Rider** and returns to enrollment after the new record is saved.
+5. **Open scoring context:** use the event row's **Scoring** link or the main **Scoring** tab, select an event, and view its roster summary and reserved scoring workspaces.
+
+Successful create, edit, assignment, enrollment, import, and deletion forms return to the form or tab from which they were submitted.
 
 ### Rider and event registration
 
 Rider email addresses are unique. A rider can have up to 20 catalog make/model motorcycles with optional rider-specific four-digit years and fuel-capacity notes. Event enrollment assigns a bib that must be unique within that event and may record optional pillion details.
 
 Event registration open, close, start, and end values use the WordPress site timezone and must be chronological. The event date is derived from the start time. Rider and pillion prices are configuration values only; the plugin does not process payments.
-
-Successful create, edit, assignment, enrollment, import, and deletion forms return to the form or tab from which they were submitted, preserving the administrator's workflow location.
 
 ### Scoring status
 
@@ -66,6 +76,15 @@ The requests disclose the site server's IP address, the entered make, and ordina
 ## Storage, privacy, and data lifecycle
 
 Activation creates plugin-owned tables using the current site's WordPress database prefix followed by `MRSA_`. WordPress users and media remain in core tables and are referenced rather than copied or owned by the plugin.
+
+| Stored area | Contents |
+| --- | --- |
+| Administrators | References to WordPress users, global secondary contacts, and event assignments |
+| Motorcycle catalog | Motorcycle make/model labels and source attribution |
+| Riders | Contact, emergency-contact, insurance, notes, and unique email data |
+| Rider motorcycles | Catalog association, optional manually entered model year, and fuel-capacity text |
+| Events | Schedule, registration window, prices, location, coordinates, logo reference, bib capacity, and minimum-finisher-points configuration |
+| Registrations | Event/rider association, unique event bib, pillion text, status, score, and placing |
 
 Rider records can contain names, aliases, email addresses, phone numbers, motorcycle make/model assignments, manually entered model years, fuel capacity, emergency contacts, insurance details, and free-form notes. Registrations link riders to events and store bib, pillion, status, score, and placing values. Site operators are responsible for participant notices, consent where required, access control, retention, backups, and secure handling of this data.
 
