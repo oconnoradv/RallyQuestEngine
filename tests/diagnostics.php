@@ -111,6 +111,12 @@ function invoke_method( $class, $name, ...$args ) {
 	if ( PHP_VERSION_ID < 80100 ) { $method->setAccessible( true ); }
 	return $method->invoke( null, ...$args );
 }
+function get_user_option( $key, $user_id ) { return $GLOBALS['user_options'][ $user_id ][ $key ] ?? false; }
+function update_user_option( $user_id, $key, $value ) {
+	if ( ! empty( $GLOBALS['fail_user_option'] ) ) { return false; }
+	$GLOBALS['user_options'][ $user_id ][ $key ] = $value;
+	return true;
+}
 function check( $condition, $label ) {
 	if ( ! $condition ) { throw new RuntimeException( 'FAIL: ' . $label ); }
 	echo 'PASS: ' . $label . PHP_EOL;
@@ -125,6 +131,12 @@ if ( in_array( '--preview', $argv ?? array(), true ) ) {
 	exit;
 }
 check( strpos( $html, 'mrsa-destructive-grid' ) !== false && substr_count( $html, 'mrsa-destructive-action' ) === 6, 'six destructive actions share a compact grid' );
+check( substr_count( $html, 'mrsa-diagnostics-section' ) === 10, 'configuration, exports, destructive group and individual actions can all collapse' );
+check( strpos( $html, '<details class="mrsa-diagnostics-section"><summary><h3>Destructive operations</h3></summary>' ) !== false, 'Destructive operations defaults to collapsed' );
+foreach ( array( 'Required Plugins and Configuration', 'Export Data', 'Database Backup', 'Destructive operations' ) as $heading ) {
+	check( strpos( $html, '<summary><h3>' . $heading . '</h3>' ) !== false, 'native collapse control wraps ' . $heading );
+}
+check( substr_count( $html, 'mrsa-destructive-action mrsa-diagnostics-section" open><summary><h4>' ) === 6, 'all destructive cards retain initially visible controls with individual collapse buttons' );
 check( strpos( $html, '<details class="mrsa-administrative-audit"><summary><h3>Administrative Audit</h3></summary>' ) !== false, 'Administrative Audit uses a native expand control and defaults to collapsed' );
 $audit_start = strpos( $html, '<details class="mrsa-administrative-audit">' );
 $audit_end = strpos( $html, '</details>', $audit_start );

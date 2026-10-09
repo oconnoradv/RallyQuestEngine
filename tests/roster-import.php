@@ -2,7 +2,13 @@
 /** Standalone roster import regression tests: php tests/roster-import.php */
 define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
+define( 'MRSA_VERSION', 'test' );
+define( 'MRSA_FILE', __DIR__ . '/../motorcycle-rally-scoring-application/motorcycle-rally-scoring-application.php' );
 final class MRSA {
+	public static $global = true;
+	public static function global_access() { return self::$global; }
+	public static function event_access( $id ) { return 7 === $id; }
+	public static function row( $table, $id ) { return 7 === $id ? array( 'id' => 7, 'name' => 'Test Rally' ) : null; }
 	public static function table( $name ) { return $name; }
 	public static function begin_transaction() { $GLOBALS['wpdb']->snapshot = $GLOBALS['wpdb']->registrations; }
 	public static function commit_transaction() {}
@@ -14,6 +20,7 @@ final class Roster_Test_DB {
 	public $snapshot = array();
 	public $max_bib = 6;
 	public $fail_insert = false;
+	public $view_mode = false;
 	public function prepare( $sql, ...$args ) { return array( $sql, $args ); }
 	public function get_row( $query, $format ) {
 		list( $sql, $args ) = $query;
@@ -27,6 +34,10 @@ final class Roster_Test_DB {
 		return null;
 	}
 	public function get_results( $query, $format ) {
+		if ( $this->view_mode ) {
+			$sql = is_array( $query ) ? $query[0] : $query;
+			return strpos( $sql, 'SELECT e.*' ) === 0 ? array( MRSA::row( 'events', 7 ) ) : array();
+		}
 		return array_values( array_filter( $this->registrations, function ( $row ) use ( $query ) { return $row['event_id'] === $query[1][0]; } ) );
 	}
 	public function insert( $table, $data ) {
@@ -38,6 +49,18 @@ final class Roster_Test_DB {
 function sanitize_text_field( $value ) { return $value; }
 function sanitize_email( $value ) { return $value; }
 function is_email( $value ) { return filter_var( $value, FILTER_VALIDATE_EMAIL ); }
+function wp_unslash( $value ) { return $value; }
+function absint( $value ) { return abs( (int) $value ); }
+function esc_html( $value ) { return htmlspecialchars( (string) $value, ENT_QUOTES ); }
+function esc_attr( $value ) { return esc_html( $value ); }
+function esc_url( $value ) { return esc_html( $value ); }
+function admin_url( $path ) { return 'https://example.test/wp-admin/' . $path; }
+function add_query_arg( $args, $url ) { return $url . '?' . http_build_query( $args ); }
+function plugins_url( $path, $file ) { return 'https://example.test/plugins/mrsa/' . $path; }
+function wp_nonce_field( $action ) { echo '<input name="_wpnonce" value="test">'; }
+function wp_list_pluck( $rows, $key ) { return array_column( $rows, $key ); }
+function selected( $first, $second ) { if ( (string) $first === (string) $second ) { echo ' selected'; } }
+function wp_die( $message, $title = '', $args = array() ) { throw new RuntimeException( $args['response'] . ': ' . $message ); }
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-admin.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-bonus.php';
 function check( $ok, $label ) {
@@ -130,3 +153,27 @@ catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(),
 PclZip::$entries['xl/vbaProject.bin'] = 'unsafe';
 try { MRSA_Bonus::read_spreadsheet( 'fixture.xlsx', 'xlsx' ); throw new LogicException( 'Macro workbook accepted.' ); }
 catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), 'macros' ) !== false, 'roster XLSX macros rejected' ); }
+
+require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-views.php';
+$_GET = array( 'event_id' => '7' );
+$wpdb->view_mode = true;
+$rosters = new ReflectionMethod( 'MRSA_Views', 'event_rosters' );
+if ( PHP_VERSION_ID < 80100 ) { $rosters->setAccessible( true ); }
+ob_start();
+$rosters->invoke( null );
+$html = ob_get_clean();
+check( strpos( $html, '>Add Rider</a>' ) !== false && strpos( $html, '>Import Riders</a>' ) !== false, 'roster toolbar shows Add Rider and Import Riders' );
+check( strpos( $html, 'page=mrsa-roster-import&amp;event_id=7' ) !== false && strpos( $html, 'name="roster_file"' ) === false, 'import link retains event and inline import form is removed' );
+ob_start();
+MRSA_Views::render_roster_import();
+$html = ob_get_clean();
+check( strpos( $html, 'Import Riders — Test Rally' ) !== false && strpos( $html, 'tab=rosters&amp;event_id=7' ) !== false, 'import screen names event and returns to selected roster' );
+check( strpos( $html, 'multipart/form-data' ) !== false && strpos( $html, 'name="op" value="roster_import"' ) !== false && strpos( $html, 'name="event_id" value="7"' ) !== false, 'dedicated screen submits existing import operation with event and nonce' );
+check( strpos( $html, 'samples/event-roster.csv' ) !== false && strpos( $html, 'bonus-import scanning overrides do not apply' ) !== false, 'sample download and mandatory scanning instructions remain available' );
+MRSA::$global = false;
+try { MRSA_Views::render_roster_import(); throw new LogicException( 'Non-global import screen accepted.' ); }
+catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), '403:' ) === 0, 'import screen rejects non-global administrators' ); }
+MRSA::$global = true;
+$_GET['event_id'] = '8';
+try { MRSA_Views::render_roster_import(); throw new LogicException( 'Unknown event accepted.' ); }
+catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), '404:' ) === 0, 'import screen rejects missing or inaccessible events' ); }

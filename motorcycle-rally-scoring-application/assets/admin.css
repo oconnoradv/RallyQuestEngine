@@ -9,6 +9,9 @@
 .mrsa .mrsa-check-passed { color: #006b1b; }
 .mrsa .mrsa-check-failed { color: #b32d2e; }
 .mrsa .mrsa-check-review { color: #924500; }
+.mrsa .mrsa-configuration-passed { border-color: #008a20; }
+.mrsa .mrsa-configuration-review { border-color: #b85c00; }
+.mrsa .mrsa-configuration-failed-row > td { background: #fcf0f1; color: #3c1718; }
 .mrsa .mrsa-recommended-plugins { border-color: #008a20; background: #edfaef; color: #004d16; }
 .mrsa .mrsa-recommended-plugins h2 { margin-top: 0; }
 .mrsa .mrsa-recommended-plugins h2, .mrsa .mrsa-recommended-plugins h3 { color: #006b1b; }
@@ -18,6 +21,9 @@
 .mrsa .mrsa-bike-import-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .mrsa .mrsa-bike-import-heading h3 { margin-bottom: 12px; }
 .mrsa .mrsa-bike-import-heading .mrsa-url-help { flex-shrink: 0; }
+.mrsa .mrsa-image-import-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.mrsa .mrsa-image-import-heading .mrsa-url-help { flex-shrink: 0; }
+.mrsa .mrsa-image-import-heading .mrsa-url-help-content { max-height: 60vh; overflow-y: auto; }
 .mrsa .mrsa-bike-import-controls { display: flex; align-items: end; gap: 12px; margin-bottom: 12px; }
 .mrsa .mrsa-bike-import-controls .mrsa-field { flex: 1; min-width: 0; margin: 8px 0 0; }
 .mrsa .mrsa-bike-import-controls .button { white-space: normal; }
@@ -61,6 +67,9 @@
 .mrsa .mrsa-administrative-audit > summary { padding: 8px 0; }
 .mrsa .mrsa-administrative-audit > summary h3 { display: inline; margin: 0; }
 .mrsa .mrsa-administrative-audit > summary:focus-visible { outline: 2px solid #2271b1; outline-offset: 3px; }
+.mrsa .mrsa-diagnostics-section > summary { padding: 8px 0; }
+.mrsa .mrsa-diagnostics-section > summary h3, .mrsa .mrsa-diagnostics-section > summary h4 { display: inline; margin: 0; }
+.mrsa .mrsa-diagnostics-section > summary:focus-visible { outline: 2px solid #2271b1; outline-offset: 3px; }
 .mrsa details[open] > summary { margin-bottom: 12px; }
 .mrsa .mrsa-inline { display: inline-block; margin-left: 8px; }
 .mrsa .mrsa-bike-row { border: 1px solid #c3c4c7; padding: 12px; margin-bottom: 10px; display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }

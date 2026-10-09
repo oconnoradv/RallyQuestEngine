@@ -526,7 +526,8 @@ final class MRSA_Views {
 		}
 		echo '</div><div class="mrsa-roster-toolbar__actions"><h2>Event Roster</h2>';
 		if ( $id && MRSA::global_access() ) {
-			echo '<a class="button button-primary" href="' . esc_url( MRSA_Admin::url( 'event-enroll', array( 'event_id' => $id ) ) ) . '">Add Rider to Event</a>';
+			echo '<a class="button button-primary" href="' . esc_url( MRSA_Admin::url( 'event-enroll', array( 'event_id' => $id ) ) ) . '">Add Rider</a>';
+			echo '<a class="button" href="' . esc_url( MRSA_Admin::url( 'roster-import', array( 'event_id' => $id ) ) ) . '">Import Riders</a>';
 		}
 		echo '</div></div>';
 		if ( $rider_id ) {
@@ -535,17 +536,28 @@ final class MRSA_Views {
 		}
 		$event = $id ? MRSA::row( 'events', $id ) : null;
 		if ( $event ) {
-			if ( MRSA::global_access() ) {
-				echo '<details class="mrsa-panel"><summary>Import Event Roster (CSV or XLSX)</summary>';
-				self::form( 'roster_import', array( 'event_id' => $id ), '', '', 'multipart/form-data' );
-				echo '<p>Enroll existing riders only. Supply Rider ID or Email; if both are supplied they must match. Optional columns: Bib ID, Status, Pillion. Blank bibs receive the next available number; blank status defaults to Initial Registration. Existing enrollments, duplicate riders or bibs, and invalid rows reject the entire batch.</p><p><a href="' . esc_url( plugins_url( 'samples/event-roster.csv', MRSA_FILE ) ) . '" download>Download sample roster CSV</a> (replace example identifiers with existing riders). Use the same column headings on the first worksheet of an XLSX file.</p><label class="mrsa-field"><span>Roster file (CSV or XLSX, maximum 10 MB / 5,000 rows)</span><input type="file" name="roster_file" accept=".csv,.xlsx" required></label><p>ClamAV must be available for roster imports. Files are scanned and checked for unsafe content; bonus-import scanning overrides do not apply.</p>';
-				self::button( 'Import Event Roster' );
-				echo '</form></details>';
-			}
 			self::registrations( $event );
 		} else {
 			echo '<p>' . esc_html( $events ? 'Choose an event to display its registered riders.' : 'Create or be assigned to an event before viewing a roster.' ) . '</p>';
 		}
+	}
+
+	public static function render_roster_import() {
+		if ( ! MRSA::global_access() ) {
+			wp_die( esc_html( 'Only global administrators may import riders into events.' ), '', array( 'response' => 403 ) );
+		}
+		$id = absint( MRSA_Admin::query( 'event_id', '0' ) );
+		if ( ! MRSA::event_access( $id ) || ! ( $event = MRSA::row( 'events', $id ) ) ) {
+			wp_die( esc_html( 'Event not found.' ), '', array( 'response' => 404 ) );
+		}
+		echo '<div class="wrap mrsa">';
+		self::header();
+		echo '<h2>Import Riders — ' . esc_html( $event['name'] ) . '</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'rosters', array( 'event_id' => $id ) ) ) . '">Back to Rosters</a></p>';
+		self::notice();
+		self::form( 'roster_import', array( 'event_id' => $id ), 'mrsa-panel mrsa-edit-form', '', 'multipart/form-data' );
+		echo '<h3>Import Event Roster (CSV or XLSX)</h3><p>Enroll existing riders only. Supply Rider ID or Email; if both are supplied they must match. Optional columns: Bib ID, Status, Pillion. Blank bibs receive the next available number; blank status defaults to Initial Registration. Existing enrollments, duplicate riders or bibs, and invalid rows reject the entire batch.</p><p><a href="' . esc_url( plugins_url( 'samples/event-roster.csv', MRSA_FILE ) ) . '" download>Download sample roster CSV</a> (replace example identifiers with existing riders). Use the same column headings on the first worksheet of an XLSX file.</p><label class="mrsa-field"><span>Roster file (CSV or XLSX, maximum 10 MB / 5,000 rows)</span><input type="file" name="roster_file" accept=".csv,.xlsx" required></label><p>ClamAV must be available for roster imports. Files are scanned and checked for unsafe content; bonus-import scanning overrides do not apply.</p>';
+		self::button( 'Import Event Roster' );
+		echo '</form></div>';
 	}
 
 	private static function registrations( $event ) {
@@ -806,11 +818,11 @@ final class MRSA_Views {
 		self::button( 'Validate and Import Bonus Listing' );
 		echo '</form></div><div id="mrsa-import-images">';
 		self::form( 'bonus_import', array( 'event_id' => $event_id, 'import_step' => 'images' ), 'mrsa-panel mrsa-edit-form', '', 'multipart/form-data' );
-		echo '<h4>Step 2: Import the bonus images</h4><p>Image filenames must match Bonus IDs, for example B12.jpg. An image with a new ID creates a listing with empty attributes; import its spreadsheet attributes in step 1.</p>';
-		echo '<label class="mrsa-field"><span>Local bonus images</span><input type="file" name="bonus_images[]" accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp"><span>With JavaScript, select a folder to upload, scan, review, and import one image at a time. Without JavaScript, choose one image per import. Each image must fit the server upload limit and the 10 MB MRSA limit.</span></label>';
+		echo '<div class="mrsa-image-import-heading"><h4>Step 2: Import the bonus images</h4><details class="mrsa-url-help"><summary aria-label="Bonus image import information">Help?</summary><div class="mrsa-url-help-content"><p>Image filenames must match Bonus IDs, for example B12.jpg. An image with a new ID creates a listing with empty attributes; import its spreadsheet attributes in step 1.</p><p>With JavaScript, select a folder to upload, scan, review, and import one image at a time. Without JavaScript, choose one image per import. Each image must fit the server upload limit and the 10 MB MRSA limit.</p><p>Public URLs must use HTTPS and point to an image, a ZIP of images, or a standard web-server directory listing. Google Drive/Dropbox links must provide a public ZIP download or directory listing. Limits: 200 images, 10 MB per image, 100 MB total, and 50 MB per ZIP/download. Server upload limits may be lower. Load via URL imports only the URL source; selected local files are not included.</p><p>Local uploads: each image is imported separately after approval; earlier imports remain if a later file fails or is cancelled. With the skip-failed option, invalid files are skipped; scanner errors stop the queue. URL imports: failed images block the batch unless this option is selected. Remembered unavailable-ClamAV overrides still apply and are audited.</p></div></details></div>';
+		echo '<label class="mrsa-field"><span>Local bonus images</span><input type="file" name="bonus_images[]" accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp"></label>';
 		self::field( 'Public image, ZIP, or directory-listing URL (optional)', 'gallery_url', '', 'url', false, array( 'maxlength' => 2000, 'placeholder' => 'https://example.com/event-images/' ) );
-		echo '<div class="mrsa-url-actions"><button class="button" type="submit" name="image_source" value="url">Load via URL</button><details class="mrsa-url-help"><summary aria-label="Help for loading images via URL">Help?</summary><div class="mrsa-url-help-content">Public URLs must use HTTPS and point to an image, a ZIP of images, or a standard web-server directory listing. Google Drive/Dropbox links must provide a public ZIP download or directory listing. Limits: 200 images, 10 MB per image, 100 MB total, and 50 MB per ZIP/download. Server upload limits may be lower. Load via URL imports only the URL source; selected local files are not included.</div></details></div>';
-		echo '<label><input type="checkbox" name="allow_partial_images" value="1"> Import all successful images and skip failed images</label><p>Local uploads: each image is imported separately after approval; earlier imports remain if a later file fails or is cancelled. With this option, invalid files are skipped; scanner errors stop the queue. URL imports: failed images block the batch unless this option is selected. Remembered unavailable-ClamAV overrides still apply and are audited.</p>';
+		echo '<div class="mrsa-url-actions"><button class="button" type="submit" name="image_source" value="url">Load via URL</button></div>';
+		echo '<label><input type="checkbox" name="allow_partial_images" value="1"> Import all successful images and skip failed images</label>';
 		self::button( 'Validate and Import Bonus Images' );
 		echo '</form></div></div><section class="mrsa-import-feedback" id="mrsa-import-feedback" aria-label="Bonus import notices and scan results">';
 		foreach ( array( 'setup', 'listing', 'images' ) as $step ) {
@@ -865,6 +877,9 @@ final class MRSA_Views {
 			echo '<div class="mrsa-clamav-unconfigured">';
 		}
 		echo '<section class="mrsa-panel mrsa-edit-form" id="mrsa-clamav-setup"><h4>Step 0: Set up or verify ClamAV</h4><p>If ClamAV is already installed using the README instructions, skip installation and check the connection below. Otherwise, follow the setup guide or ask your hosting provider to configure it.</p><p>Installation requires server administrator access. These commands run in your server terminal, not WordPress; this page does not install packages, run privileged commands, or change server configuration.</p>';
+		if ( $bypassed ) {
+			echo '<div class="notice notice-warning inline"><p><strong>Your ClamAV bypass is enabled on this site.</strong> When ClamAV is unavailable, valid imports run without an approval prompt and without an antivirus security scan. Each import is logged with your username and UTC date/time. When ClamAV is available, scanning and approval remain required.</p></div>';
+		}
 		echo '<details><summary>ClamAV installation and configuration guide</summary>';
 		echo '<h5>Ubuntu / Debian (systemd)</h5><p>Run these commands on the WordPress server using an account with sudo access:</p>';
 		echo '<pre class="mrsa-setup-commands"><code>' . esc_html( "sudo apt-get update\nsudo apt-get install clamav clamav-daemon\nsudo systemctl enable --now clamav-freshclam" ) . '</code></pre><p>Wait for freshclam to download its signature databases. Configure the following settings in <code>/etc/clamav/clamd.conf</code>, updating existing values rather than adding duplicates:</p>';
@@ -906,10 +921,6 @@ final class MRSA_Views {
 			} else {
 				echo '<div class="notice notice-warning inline"><p>The connection-check result expired or is unavailable for this event. Run the check again.</p></div>';
 			}
-		}
-		if ( MRSA_Bonus::bypass_enabled() ) {
-			echo '<div class="notice notice-warning inline"><p><strong>Your ClamAV bypass is enabled on this site.</strong> When ClamAV is unavailable, valid imports run without an approval prompt and without an antivirus security scan. Each import is logged with your username and UTC date/time. When ClamAV is available, scanning and approval remain required.</p>';
-			echo '</div>';
 		}
 	}
 
@@ -1029,9 +1040,9 @@ final class MRSA_Views {
 		self::configuration_check();
 		echo '<div class="mrsa-grid">';
 		foreach ( array( 'json' => array( 'Export Data', 'Download all plugin table data as JSON.' ), 'sql' => array( 'Database Backup', 'Download plugin table definitions and data as restorable SQL.' ) ) as $type => $details ) {
-			echo '<section class="mrsa-panel"><h3>' . esc_html( $details[0] ) . '</h3><p>' . esc_html( $details[1] ) . '</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="mrsa_diagnostics_download"><input type="hidden" name="download_type" value="' . esc_attr( $type ) . '">';
+			echo '<details class="mrsa-panel mrsa-diagnostics-section" open><summary><h3>' . esc_html( $details[0] ) . '</h3></summary><p>' . esc_html( $details[1] ) . '</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="mrsa_diagnostics_download"><input type="hidden" name="download_type" value="' . esc_attr( $type ) . '">';
 			wp_nonce_field( 'mrsa_diagnostics_download' );
-			echo '<button class="button button-primary">Download ' . esc_html( strtoupper( $type ) ) . '</button></form></section>';
+			echo '<button class="button button-primary">Download ' . esc_html( strtoupper( $type ) ) . '</button></form></details>';
 		}
 		echo '</div><details class="mrsa-administrative-audit"><summary><h3>Administrative Audit</h3></summary><p>Latest 100 records, with usernames and timestamps in UTC. Exports and database backups include the full audit table. Ordinary data deletions retain audit history and recorded bypass choices. Deleting virus-scan audit data resets all overrides and leaves a new deletion record.</p>';
 		$audit_rows = $wpdb->get_results( 'SELECT user_id,username,occurred_at,event_id,action,detail FROM ' . MRSA::table( 'import_audit' ) . ' ORDER BY id DESC LIMIT 100', ARRAY_A );
@@ -1045,7 +1056,7 @@ final class MRSA_Views {
 		}
 		self::end_table();
 		echo '</details>';
-		echo '<h3>Destructive operations</h3><div class="notice notice-error inline"><p>These operations cannot be undone. Download a database backup first. Each operation requires a randomized verification string and is recorded in the audit log.</p></div><div class="mrsa-destructive-grid">';
+		echo '<details class="mrsa-diagnostics-section"><summary><h3>Destructive operations</h3></summary><div class="notice notice-error inline"><p>These operations cannot be undone. Download a database backup first. Each operation requires a randomized verification string and is recorded in the audit log.</p></div><div class="mrsa-destructive-grid">';
 		self::diagnostics_delete_form( 'diagnostics_delete_all', 'Delete All Data', 'Delete application data, including administrator assignments. Import audit records and recorded bypass choices are retained.', array() );
 		self::diagnostics_delete_form( 'diagnostics_delete_bikes', 'Delete All Bike Data', 'Delete the motorcycle catalog and every rider-motorcycle assignment.', array() );
 		$event_options = '<option value="">Choose an event</option>';
@@ -1060,11 +1071,20 @@ final class MRSA_Views {
 		}
 		self::diagnostics_delete_form( 'diagnostics_delete_rider', 'Delete Specific Rider', 'Delete one rider, their motorcycle assignments, and all event registrations.', '<label class="mrsa-field"><span>Rider</span><select name="rider_id" required>' . $rider_options . '</select></label>' );
 		self::diagnostics_delete_form( 'diagnostics_delete_audit', 'Delete Virus Scan Audit Data', 'Delete audit history and reset remembered ClamAV overrides for every administrator. A new record of this deletion will remain.', array() );
-		echo '</div>';
+		echo '</div></details>';
 	}
 
 	private static function configuration_check() {
-		echo '<section class="mrsa-panel" id="mrsa-configuration"><h3>Required Plugins and Configuration</h3><p>Check the current WordPress/PHP environment, MRSA database, local ClamAV scanner, storage, and import settings. Action Scheduler is required; Gallery for SpotWalla remains optional.</p><p><strong>MRSA limits:</strong> spreadsheets and individual images: 10 MB; remote downloads/ZIP archives: 50 MB; accepted images per queue: 100 MB / 200 images; spreadsheet rows: 5,000. Server settings are checked against these existing safety limits. Sequential image uploads need at least 11 MB post capacity including overhead for each 10 MB file.</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="mrsa_diagnostics_check">';
+		$report = get_transient( 'mrsa_configuration_' . get_current_user_id() );
+		$has_report = is_array( $report ) && ! empty( $report['rows'] ) && isset( $report['checked_at'] );
+		$state = '';
+		$labels = array( 'passed' => 'Passed', 'failed' => 'Failed', 'review' => 'Manual review' );
+		if ( $has_report ) {
+			$statuses = array_column( $report['rows'], 'status' );
+			$state = in_array( 'failed', $statuses, true ) ? 'failed' : ( in_array( 'review', $statuses, true ) ? 'review' : 'passed' );
+		}
+		$expired_pass = ! $has_report && 'passed' === get_user_option( 'mrsa_configuration_last_state', get_current_user_id() );
+		echo '<details class="mrsa-panel mrsa-diagnostics-section' . ( $state ? ' mrsa-configuration-' . esc_attr( $state ) : '' ) . '" id="mrsa-configuration"' . ( ( ! $has_report && ! $expired_pass ) || 'failed' === $state ? ' open' : '' ) . '><summary><h3>Required Plugins and Configuration</h3>' . ( $state ? ' <strong class="mrsa-check-' . esc_attr( $state ) . '">' . esc_html( $labels[ $state ] ) . '</strong>' : ( $expired_pass ? ' <span>Results expired</span>' : '' ) ) . '</summary><p>Check the current WordPress/PHP environment, MRSA database, local ClamAV scanner, storage, and import settings. Action Scheduler is required; Gallery for SpotWalla remains optional.</p><p><strong>MRSA limits:</strong> spreadsheets and individual images: 10 MB; remote downloads/ZIP archives: 50 MB; accepted images per queue: 100 MB / 200 images; spreadsheet rows: 5,000. Server settings are checked against these existing safety limits. Sequential image uploads need at least 11 MB post capacity including overhead for each 10 MB file.</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="mrsa_diagnostics_check">';
 		wp_nonce_field( 'mrsa_diagnostics_check' );
 		echo '<button type="submit" class="button button-primary">Check Required Plugins and Configuration</button></form>';
 		$plugin = MRSA_Diagnostics::action_scheduler();
@@ -1076,14 +1096,12 @@ final class MRSA_Views {
 			echo '<p>Action Scheduler is not ready. A WordPress administrator with plugin installation/activation permissions must resolve this requirement.</p>';
 		}
 		echo '<p>Installation uses the standard WordPress installer and its permissions, compatibility and filesystem checks. Return here after installing/activating and rerun the check. Server software and PHP settings must be managed by your hosting administrator.</p>';
-		$report = get_transient( 'mrsa_configuration_' . get_current_user_id() );
-		if ( is_array( $report ) && isset( $report['rows'], $report['checked_at'] ) ) {
+		if ( $has_report ) {
 			echo '<p>Last checked: ' . esc_html( $report['checked_at'] ) . ' UTC. Results expire after 15 minutes and are a snapshot, not a guarantee that all operations will succeed.</p><div class="mrsa-scroll"><table class="widefat striped"><thead><tr><th>Check</th><th>Status</th><th>Result / required action</th></tr></thead><tbody>';
 			foreach ( $report['rows'] as $row ) {
-				$labels = array( 'passed' => 'Passed', 'failed' => 'Failed', 'review' => 'Manual review' );
-				echo '<tr><td>' . esc_html( $row['name'] ) . '</td><td><strong class="mrsa-check-' . esc_attr( $row['status'] ) . '">' . esc_html( $labels[ $row['status'] ] ) . '</strong></td><td>' . esc_html( $row['detail'] );
+				echo '<tr' . ( 'failed' === $row['status'] ? ' class="mrsa-configuration-failed-row"' : '' ) . '><td>' . esc_html( $row['name'] ) . '</td><td><strong class="mrsa-check-' . esc_attr( $row['status'] ) . '">' . esc_html( $labels[ $row['status'] ] ) . '</strong></td><td>' . esc_html( $row['detail'] );
 				if ( 'passed' !== $row['status'] ) {
-					echo '<p>' . esc_html( $row['remedy'] ) . '</p>';
+					echo '<details class="mrsa-configuration-help"' . ( 'failed' === $row['status'] ? ' open' : '' ) . '><summary>' . esc_html( 'failed' === $row['status'] ? 'How to fix this requirement' : 'How to verify this requirement' ) . '</summary><p>' . esc_html( $row['remedy'] ) . '</p></details>';
 				}
 				echo '</td></tr>';
 			}
@@ -1091,19 +1109,19 @@ final class MRSA_Views {
 		} else {
 			echo '<p>No current report. Run the check to display results; no configuration changes or plugin installations occur automatically.</p>';
 		}
-		echo '</section>';
+		echo '</details>';
 	}
 
 	private static function diagnostics_delete_form( $operation, $title, $description, $fields ) {
 		$code = strtoupper( wp_generate_password( 8, false, false ) );
-		echo '<section class="mrsa-panel mrsa-destructive-action"><h4>' . esc_html( $title ) . '</h4><p>' . esc_html( $description ) . '</p>';
+		echo '<details class="mrsa-panel mrsa-destructive-action mrsa-diagnostics-section" open><summary><h4>' . esc_html( $title ) . '</h4></summary><p>' . esc_html( $description ) . '</p>';
 		self::form( $operation, array( 'verification_hash' => MRSA_Admin::diagnostics_hash( $operation, $code ) ) );
 		if ( is_string( $fields ) ) {
 			echo $fields; // Built exclusively from escaped local table values above.
 		}
 		echo '<div class="mrsa-delete-verification"><h4 id="' . esc_attr( $operation ) . '-title">Confirm: ' . esc_html( $title ) . '</h4><p>' . esc_html( $description ) . ' This cannot be undone.</p><p class="mrsa-delete-target"></p><label class="mrsa-field"><span>Type <code>' . esc_html( $code ) . '</code> to verify</span><input name="verification_code" type="text" required autocomplete="off" pattern="' . esc_attr( $code ) . '"></label><button type="button" class="button mrsa-delete-cancel" hidden>Cancel</button><button type="submit" class="button mrsa-delete-confirm" hidden>Confirm deletion</button></div>';
 		self::button( $title );
-		echo '</form></section>';
+		echo '</form></details>';
 	}
 
 	private static function about() {

@@ -20,6 +20,7 @@ final class MRSA_Admin {
 			add_submenu_page( null, 'Edit Event', 'Edit Event', 'read', 'mrsa-event-edit', array( 'MRSA_Views', 'render_event_edit' ) );
 			add_submenu_page( null, 'Event Roster', 'Event Roster', 'read', 'mrsa-event-roster', array( 'MRSA_Views', 'render_event_roster' ) );
 			add_submenu_page( null, 'Add Rider to Event', 'Add Rider to Event', 'read', 'mrsa-event-enroll', array( 'MRSA_Views', 'render_event_enroll' ) );
+			add_submenu_page( null, 'Import Riders', 'Import Riders', 'read', 'mrsa-roster-import', array( 'MRSA_Views', 'render_roster_import' ) );
 			add_submenu_page( null, 'Rider Overall Event Score Sheet', 'Rider Overall Event Score Sheet', 'read', 'mrsa-rider-score', array( 'MRSA_Views', 'render_rider_score' ) );
 			add_submenu_page( null, 'Edit Bonus Point', 'Edit Bonus Point', 'read', 'mrsa-bonus-edit', array( 'MRSA_Views', 'render_bonus_edit' ) );
 		}
@@ -30,7 +31,7 @@ final class MRSA_Admin {
 			return;
 		}
 		wp_add_inline_style( 'dashicons', '#adminmenu .toplevel_page_mrsa .wp-menu-image::before,#adminmenu .toplevel_page_mrsa:hover .wp-menu-image::before,#adminmenu .toplevel_page_mrsa.current .wp-menu-image::before{color:#ff0800}' );
-		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'admin_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit', 'admin_page_mrsa-event-roster', 'admin_page_mrsa-event-enroll', 'admin_page_mrsa-rider-score', 'admin_page_mrsa-bonus-edit' ), true ) ) {
+		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'admin_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit', 'admin_page_mrsa-event-roster', 'admin_page_mrsa-event-enroll', 'admin_page_mrsa-roster-import', 'admin_page_mrsa-rider-score', 'admin_page_mrsa-bonus-edit' ), true ) ) {
 			return;
 		}
 		// Rebuilt releases can retain their version; invalidate cached UI assets when their contents change.
@@ -99,7 +100,7 @@ final class MRSA_Admin {
 	}
 
 	public static function url( $tab, $extra = array() ) {
-		if ( in_array( $tab, array( 'rider-edit', 'event-edit', 'event-roster', 'event-enroll', 'rider-score', 'bonus-edit' ), true ) ) {
+		if ( in_array( $tab, array( 'rider-edit', 'event-edit', 'event-roster', 'event-enroll', 'roster-import', 'rider-score', 'bonus-edit' ), true ) ) {
 			return add_query_arg( array_merge( array( 'page' => 'mrsa-' . $tab ), $extra ), admin_url( 'admin.php' ) );
 		}
 		return add_query_arg( array_merge( array( 'page' => 'mrsa', 'tab' => $tab ), $extra ), admin_url( 'admin.php' ) );
@@ -825,6 +826,13 @@ final class MRSA_Admin {
 		$report = MRSA_Diagnostics::check();
 		if ( ! set_transient( 'mrsa_configuration_' . get_current_user_id(), $report, 15 * MINUTE_IN_SECONDS ) ) {
 			wp_die( esc_html( 'The configuration report could not be saved. Rerun the check.' ), '', array( 'response' => 500 ) );
+		}
+		$statuses = array_column( $report['rows'], 'status' );
+		$state = in_array( 'failed', $statuses, true ) ? 'failed' : ( in_array( 'review', $statuses, true ) ? 'review' : 'passed' );
+		// Retain only the last outcome for this administrator/site, not expired diagnostic details.
+		update_user_option( get_current_user_id(), 'mrsa_configuration_last_state', $state );
+		if ( get_user_option( 'mrsa_configuration_last_state', get_current_user_id() ) !== $state ) {
+			wp_die( esc_html( 'The last configuration outcome could not be saved. Rerun the check.' ), '', array( 'response' => 500 ) );
 		}
 		wp_safe_redirect( self::url( 'diagnostics' ) . '#mrsa-configuration' );
 		exit;

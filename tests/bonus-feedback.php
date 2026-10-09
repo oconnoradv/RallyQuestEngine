@@ -70,9 +70,20 @@ if ( in_array( '--preview', $argv ?? array(), true ) ) {
 }
 check( false !== strpos( $html, 'mrsa-image-queue' ) && false !== strpos( $html, 'data-max-image="10485760"' ) && false === strpos( $html, 'multiple webkitdirectory' ), 'sequential image queue uses server limits and falls back to a single uploaded image without JavaScript' );
 check( strpos( $html, 'Load via URL' ) < strpos( $html, 'name="allow_partial_images"' ) && strpos( $html, 'name="bonus_images[]"' ) < strpos( $html, 'name="allow_partial_images"' ), 'partial-image checkbox follows both file chooser and URL load button' );
-check( false !== strpos( $html, 'value="url">Load via URL</button><details class="mrsa-url-help">' ) && false !== strpos( $html, 'class="mrsa-url-help-content">Public URLs must use HTTPS' ), 'URL requirements live in help immediately to the right of load button' );
+$images_start = strpos( $html, 'id="mrsa-import-images"' );
+$help_start = strpos( $html, '<details class="mrsa-url-help">', $images_start );
+$help_end = strpos( $html, '</details>', $help_start );
+$help = substr( $html, $help_start, $help_end - $help_start );
+foreach ( array( 'Image filenames must match Bonus IDs', 'With JavaScript, select a folder', 'Public URLs must use HTTPS', 'Local uploads: each image is imported separately' ) as $text ) {
+	check( false !== strpos( $help, $text ) && 1 === substr_count( $html, $text ), 'Step 2 helper text appears only in heading help: ' . $text );
+}
+check( $help_start < strpos( $html, 'name="bonus_images[]"' ) && strpos( $help, 'aria-label="Bonus image import information"' ) !== false, 'Step 2 uses accessible heading help like the Bikes import panel' );
 $setup = section( $html, 'setup' );
-check( false !== strpos( $setup, 'ClamAV unavailable.' ) && false !== strpos( $setup, 'bypass is enabled' ), 'connection results and bypass warning appear in shared feedback area' );
+check( false !== strpos( $setup, 'ClamAV unavailable.' ) && false === strpos( $setup, 'bypass is enabled' ), 'connection results remain in shared feedback without the persistent bypass warning' );
+$disabled_start = strpos( $html, '<details class="mrsa-clamav-disabled">' );
+$disabled_end = strpos( $html, '</section></details>', $disabled_start );
+$disabled = substr( $html, $disabled_start, $disabled_end - $disabled_start );
+check( false !== strpos( $disabled, 'Your ClamAV bypass is enabled on this site.' ) && 1 === substr_count( $html, 'Your ClamAV bypass is enabled on this site.' ), 'bypass warning appears once inside minimized Step 0' );
 check( 1 === substr_count( $html, 'ClamAV unavailable.' ) && strpos( $html, 'id="mrsa-import-feedback"' ) > strpos( $html, 'Validate and Import Bonus Images' ), 'single feedback area immediately follows all three import columns' );
 check( false === strpos( $html, 'mrsa-clamav-enabled' ), 'unavailable scanner does not show enabled status' );
 check( false !== strpos( $html, '<details class="mrsa-clamav-disabled"><summary>ClamAV Manually Disabled</summary>' ) && false === strpos( $html, '<details class="mrsa-clamav-disabled" open' ), 'remembered bypass collapses Step 0 to orange manually disabled summary' );

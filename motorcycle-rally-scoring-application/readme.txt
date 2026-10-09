@@ -4,7 +4,7 @@ Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.1.10
+Stable tag: 0.1.11
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -26,7 +26,7 @@ Motorcycle Rally Scoring Application provides administrative tabs for:
 * Scoring: event-specific Bonus Point Library, CSV/XLSX listing import, local-folder and public-URL image import, and event-roster scoring summaries in the remaining workspace tabs.
 * Results: score ordering, computed overall placing, read-only result status, and rider score-sheet placeholders.
 * Bikes: side-by-side manual entry and motorcycle make/model import on wide screens, stacked on narrow screens, plus transactional bulk deletion of unassigned catalog rows.
-* Rosters: selected-event CSV/XLSX import of existing riders by Rider ID or Email, with a downloadable sample CSV. Optional Bib ID, Status and Pillion columns; blank bibs receive the next available number. Global administrators only, maximum 10 MB / 5,000 rows. ClamAV is required; invalid or conflicting rows reject the whole batch.
+* Rosters: Import Riders beside Add Rider opens a separate selected-event CSV/XLSX import screen for existing riders by Rider ID or Email, with a downloadable sample CSV and a Back to Rosters link. Optional Bib ID, Status and Pillion columns; blank bibs receive the next available number. Global administrators only, maximum 10 MB / 5,000 rows. ClamAV is required; invalid or conflicting rows reject the whole batch.
 * Diagnostics: on-demand required-plugin/environment checks with native WordPress install/activate controls for required Action Scheduler; Gallery for SpotWalla remains optional. PHP, database/InnoDB/schema, ClamAV, private staging/storage and upload capacity are checked against current MRSA limits (10 MB spreadsheets/images, 50 MB ZIP/download, 100 MB / 200 images per batch). Unverifiable hosting and scanner policies are labeled Manual review. JSON export, restorable SQL backup, and verification-string-protected scoped deletion are also available. Gallery image files are stored separately and are not included in database exports or backups.
 * About: version, licensing, attribution, scope, and an optional Gallery for SpotWalla recommendation with documentation and download links.
 
@@ -52,6 +52,24 @@ use a responsive three-column layout with randomized-string verification in a
 confirmation pop-up (inline without JavaScript or dialog support).
 Remove ClamAV Scanning Override in Step 0 revokes the choice for your account. Manual image
 replacement still requires ClamAV.
+The persistent ClamAV bypass warning is inside the minimized Step 0 panel.
+Step 2 collects filename, local upload, URL, limit and skip-failed guidance in
+Help? beside its heading, available on hover, keyboard focus or click/tap.
+
+Each Diagnostics section has a native expand/collapse control. Administrative
+Audit and Destructive operations default to minimized. Failed configuration
+checks keep their section expanded and highlight failed rows red. With no
+failures, Manual review results have an orange outline and all-passed results
+have a green outline; both default to minimized. Once an all-passed report
+expires, the section remains minimized without highlighting and says Results
+expired. Only the last outcome is retained per administrator/site; expired
+diagnostic details are not retained. Missing reports or expired failed/manual
+review reports remain neutral and expanded so the check can be rerun.
+Failed checks include expanded How to fix this requirement instructions;
+Manual review items have expandable How to verify this requirement guidance.
+Instructions cover WordPress/plugin menus, web-serving PHP settings, database
+repair precautions, private storage, ClamAV and hosting/cron configuration.
+Back up and test server changes on staging; rerun the check after repairs.
 Step 0 on the import screen provides optional setup commands and configuration
 guidance plus a Check ClamAV Connection button. Run installation commands in
 the server terminal with server-administrator access, not WordPress. Existing
@@ -208,6 +226,15 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.1.11 =
+* Added Import Riders beside the renamed Add Rider roster button, opening a dedicated event-specific CSV/XLSX import screen with sample download and return navigation.
+* Moved the persistent ClamAV bypass warning inside minimized Step 0 and consolidated Step 2 image-import guidance into heading help, matching the Bikes page.
+* Added specific remediation instructions for every diagnostic requirement and verification guidance for manual-review results.
+* Made every Diagnostics section collapsible and minimized Destructive operations by default.
+* Added result-based configuration outlines and defaults: green/minimized for all passed, orange/minimized for manual review without failures, expanded with red failed rows for failures.
+* Retained minimized neutral presentation after an all-passed report expires, with an explicit expired label and site/user-scoped last outcome.
+* Expanded regression coverage for import navigation, collapsed warning/help placement and diagnostic status, expiration and persistence behavior.
 
 = 0.1.10 =
 * Rebuilt this release with one-at-a-time local scoring image uploads, individual scan review/approval, progress, stop/skip controls and saved-review recovery links.
