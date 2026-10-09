@@ -13,10 +13,10 @@ Manage motorcycle rally administrators, motorcycles, riders, and event registrat
 
 Motorcycle Rally Scoring Application provides administrative tabs for:
 
-* Global Setup: global and event administrator assignments using existing WordPress users.
-* Bike Setup: motorcycle make, model, and year catalog.
+* Global Setup: global administrator assignments using existing WordPress users.
+* Bike Setup: manual motorcycle records and model-specific NHTSA motorcycle import.
 * Rider Registration: rider details, multiple motorcycles, emergency contacts, insurance information, and registered events.
-* Event Setup: event configuration, media-library logos, enrollment, pillion information, and unique per-event bib numbers.
+* Event Setup: event configuration, event administrator assignments, roster enrollment, pillion information, and unique per-event bib numbers.
 * About: version, licensing, attribution, and scope.
 
 The dedicated Event Scoring page has Bonus Point Library, Submissions - Pending Review,
@@ -57,22 +57,20 @@ on each site when using multisite; network activation is not supported.
 
 == Motorcycle data and external services ==
 
-Source reference: https://github.com/arthurkao/vehicle-make-model-data
+Source reference: https://vpic.nhtsa.dot.gov/api/
 
-The MIT-licensed source contains factual year, make, and model data for cars,
-motorcycles, trucks, and UTVs from 2001 through 2015. An administrator must
-explicitly initiate and confirm retrieval; no remote import runs on activation.
-The importer retrieves one pinned CSV revision, selects recognized motorcycle
-manufacturers, sorts newest years first, and imports at most 500 rows.
-Manufacturers that also produce cars may include non-motorcycle models, so
-review imported labels.
+The NHTSA Product Information Catalog and Vehicle Listing (vPIC) API provides
+vehicle make and model data. An administrator supplies a make, exact model, and
+model year and must explicitly initiate and confirm retrieval; no remote import
+runs on activation. The request is restricted to NHTSA's motorcycle vehicle
+type. The importer requires an exact model match explicitly returned as a
+Motorcycle and stores only that one record.
 
 An authorized retrieval discloses the site's server IP and ordinary HTTP
-request metadata to GitHub. Rider details and administrator contact information
-are not sent. The request is limited to 1 MB, follows no redirects, and fails
-closed if the source is unavailable or has an unexpected format. Use the manual
-catalog controls or CSV import when remote retrieval is unavailable. CSV columns
-are make,model,year, with an optional matching header row.
+request metadata plus the entered make and year to NHTSA. Rider, administrator,
+and event data are not sent. The request is limited to 256 KB, follows no
+redirects, and fails closed if the source is unavailable, malformed,
+non-motorcycle, or inexact. Manual motorcycle entry remains available.
 
 == Privacy and retention ==
 
@@ -95,7 +93,8 @@ Review exports and erasures against your legal retention obligations.
 Erasure anonymizes the rider and removes motorcycle and pillion details;
 registration identifiers, bibs, statuses, scores, and placing remain for event integrity.
 Administrator assignments remain for access control, while secondary contact
-details are cleared. Remove assignments separately in Global Setup if needed.
+details are cleared. Remove global assignments in Global Setup and event
+assignments in Event Setup if needed.
 Removing plugin data does not delete WordPress users or media attachments.
 Deactivation preserves data. Destructive uninstall requires explicit opt-in
 through the plugin's data-removal setting; back up before enabling it.
@@ -132,6 +131,12 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= Next =
+* Restrict external import to one exact NHTSA motorcycle make/model/year record.
+* Move event administrator assignments into Event Setup behind Add Administrator.
+* Separate event configuration, roster, and scoring pages and links.
+* Add a branded application header throughout plugin administration.
 
 = 0.1.1 =
 * Switched the optional catalog import to arthurkao/vehicle-make-model-data.

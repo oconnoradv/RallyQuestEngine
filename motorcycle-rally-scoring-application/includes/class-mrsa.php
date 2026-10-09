@@ -255,7 +255,7 @@ final class MRSA {
 			$assigned = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'global_admins' ) . ' WHERE user_id=%d', $user->ID ) ) || $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'event_admins' ) . ' WHERE user_id=%d LIMIT 1', $user->ID ) );
 			if ( $assigned ) {
 				$retained = true;
-				$messages[] = 'Administrator assignments retained for access control; remove assignments in Global Setup if appropriate. WordPress user profiles are managed by WordPress.';
+				$messages[] = 'Administrator assignments retained for access control; remove global assignments in Global Setup and event assignments in Event Setup if appropriate. WordPress user profiles are managed by WordPress.';
 			}
 		}
 		return array( 'items_removed' => $removed, 'items_retained' => $retained, 'messages' => $messages, 'done' => true );

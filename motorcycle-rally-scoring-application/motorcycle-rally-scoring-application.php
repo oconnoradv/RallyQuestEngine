@@ -1,11 +1,13 @@
 <?php
 /**
  * Plugin Name: Motorcycle Rally Scoring Application
+ * Plugin URI: https://github.com/oconnoradv/MotorcycleRallyScoringApp
  * Description: Site-scoped rally administration, motorcycle catalog and rider registration.
  * Version: 0.1.1
  * Requires at least: 6.2
  * Requires PHP: 7.4
- * Author: Motorcycle Rally Scoring Application contributors
+ * Author: Brian O'Connor
+ * Author URI: https://github.com/oconnoradv
  * License: GPL-3.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  * Text Domain: motorcycle-rally-scoring-application

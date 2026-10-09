@@ -3,74 +3,35 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MRSA_Importer {
-	const SOURCE = 'https://github.com/arthurkao/vehicle-make-model-data';
-	const DATA_URL = 'https://raw.githubusercontent.com/arthurkao/vehicle-make-model-data/d7e14ab7f3ffec5f7527055fd5ce2377dade6306/csv_data.csv';
+	const SOURCE = 'https://vpic.nhtsa.dot.gov/api/';
+	const API = 'https://vpic.nhtsa.dot.gov/api/vehicles';
 
-	public static function import() {
-		$response = wp_safe_remote_get( self::DATA_URL, array( 'timeout' => 15, 'redirection' => 0, 'limit_response_size' => 1048576, 'headers' => array( 'Accept' => 'text/csv' ) ) );
+	public static function import( $make, $model, $year ) {
+		$make = MRSA_Admin::text( $make, 80, true );
+		$model = MRSA_Admin::text( $model, 120, true );
+		$year = MRSA_Admin::integer( $year, 1900, 2100 );
+		$url = self::API . '/GetModelsForMakeYear/make/' . rawurlencode( $make ) . '/modelyear/' . $year . '/vehicletype/motorcycle?format=json';
+		$response = wp_safe_remote_get( $url, array( 'timeout' => 15, 'redirection' => 0, 'limit_response_size' => 262144, 'headers' => array( 'Accept' => 'application/json' ) ) );
 		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
-			throw new RuntimeException( 'The vehicle catalog source is unavailable. No records were imported. Use manual entry or the factual CSV fallback.' );
+			throw new RuntimeException( 'The NHTSA motorcycle catalog is unavailable. No record was imported; use manual entry instead.' );
 		}
-		$lines = preg_split( '/\r\n|\r|\n/', trim( wp_remote_retrieve_body( $response ) ) );
-		if ( ! $lines || str_getcsv( array_shift( $lines ), ',', '"', '' ) !== array( 'year', 'make', 'model' ) ) {
-			throw new RuntimeException( 'The vehicle catalog source returned an unrecognized CSV format. No records were imported.' );
-		}
-		$makes = array( 'AMERICAN IRONHORSE', 'APRILIA', 'ATK', 'BENELLI', 'BETA', 'BIG DOG', 'BMW', 'BUELL', 'CAN-AM', 'CFMOTO', 'DUCATI', 'GAS GAS', 'HARLEY-DAVIDSON', 'HONDA', 'HUSABERG', 'HUSQVARNA', 'HYOSUNG', 'INDIAN', 'KAWASAKI', 'KTM', 'KYMCO', 'MOTO GUZZI', 'MV AGUSTA', 'PIAGGIO', 'POLARIS', 'ROYAL ENFIELD', 'SUZUKI', 'TRIUMPH', 'URAL', 'VESPA', 'VICTORY', 'YAMAHA', 'ZERO' );
-		$rows = array();
-		foreach ( $lines as $line ) {
-			if ( '' === trim( $line ) ) {
-				continue;
-			}
-			$cols = str_getcsv( $line, ',', '"', '' );
-			if ( 3 !== count( $cols ) || ! in_array( strtoupper( trim( $cols[1] ) ), $makes, true ) ) {
-				continue;
-			}
-			$year = trim( $cols[0] );
-			$make = trim( $cols[1] );
-			$model = trim( $cols[2] );
-			if ( ! preg_match( '/^\d{4}$/D', $year ) || strlen( $make ) > 80 || strlen( $model ) > 120 || '' === $model ) {
-				continue;
-			}
-			$key = strtolower( $make . '/' . $model . '/' . $year );
-			$rows[ $key ] = array( 'make' => sanitize_text_field( $make ), 'model' => sanitize_text_field( $model ), 'year' => (int) $year, 'source' => self::SOURCE );
-		}
-		if ( ! $rows ) {
-			throw new RuntimeException( 'No motorcycle make/model/year rows were found in the vehicle catalog source. No records were imported.' );
-		}
-		usort( $rows, static function ( $a, $b ) {
-			$year_order = $b['year'] <=> $a['year'];
-			return $year_order ?: array( $a['make'], $a['model'] ) <=> array( $b['make'], $b['model'] );
-		} );
-		return self::store( array_slice( $rows, 0, 500 ) );
-	}
-
-	public static function csv( $text ) {
-		if ( strlen( $text ) > 100000 ) {
-			throw new RuntimeException( 'CSV exceeds 100 KB.' );
-		}
-		$lines = preg_split( '/\r\n|\r|\n/', trim( $text ) );
-		if ( count( $lines ) > 501 ) {
-			throw new RuntimeException( 'Import at most 500 rows plus a header.' );
+		$data = json_decode( wp_remote_retrieve_body( $response ), true );
+		if ( ! is_array( $data ) || ! isset( $data['Results'] ) || ! is_array( $data['Results'] ) ) {
+			throw new RuntimeException( 'The NHTSA motorcycle catalog returned an unrecognized response. No record was imported.' );
 		}
 		$rows = array();
-		foreach ( $lines as $i => $line ) {
-			if ( '' === trim( $line ) ) {
+		foreach ( $data['Results'] as $result ) {
+			if ( ! is_array( $result ) || 'Motorcycle' !== ( $result['VehicleTypeName'] ?? '' ) || 0 !== strcasecmp( trim( (string) ( $result['Model_Name'] ?? '' ) ), $model ) ) {
 				continue;
 			}
-			$cols = str_getcsv( $line, ',', '"', '' );
-			if ( 0 === $i && array_map( 'strtolower', array_map( 'trim', $cols ) ) === array( 'make', 'model', 'year' ) ) {
-				continue;
+			$source_make = trim( sanitize_text_field( (string) ( $result['Make_Name'] ?? '' ) ) );
+			$source_model = trim( sanitize_text_field( (string) $result['Model_Name'] ) );
+			if ( '' !== $source_make && strlen( $source_make ) <= 80 && strlen( $source_model ) <= 120 ) {
+				$rows[] = array( 'make' => $source_make, 'model' => $source_model, 'year' => $year, 'source' => self::SOURCE );
 			}
-			if ( count( $cols ) !== 3 ) {
-				throw new RuntimeException( 'Each CSV row must contain make,model,year. Row ' . ( $i + 1 ) . ' is invalid.' );
-			}
-			$make = MRSA_Admin::text( $cols[0], 80, true );
-			$model = MRSA_Admin::text( $cols[1], 120, true );
-			$year = MRSA_Admin::integer( trim( $cols[2] ), 1900, 2100 );
-			$rows[] = array( 'make' => $make, 'model' => $model, 'year' => $year, 'source' => 'Admin-provided factual CSV' );
 		}
 		if ( ! $rows ) {
-			throw new RuntimeException( 'No factual CSV rows supplied.' );
+			throw new RuntimeException( 'No exact NHTSA motorcycle match was found for that make, model, and year. No record was imported.' );
 		}
 		return self::store( $rows );
 	}
