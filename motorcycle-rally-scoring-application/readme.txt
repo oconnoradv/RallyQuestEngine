@@ -27,10 +27,12 @@ rollback remain part of the operation contracts. Standalone PHP regression
 suites exercise these contracts; no new production dependencies are required.
 
 Release publication requires successful CodeQL JavaScript security analysis
-and no open repository Dependabot alerts, in addition to the existing gates.
+for public repositories and no open repository Dependabot alerts, in addition
+to the existing gates. Private repositories skip CodeQL with an Actions notice,
+job summary and release-note disclosure; the other gates remain mandatory.
 Repository owners must enable the security features and configure the
 read-only RELEASE_SECURITY_TOKEN Actions secret as documented in README.md.
-Unavailable alert access or failed analysis blocks publication. CodeQL does
+Unavailable alert access or failed required analysis blocks publication. CodeQL does
 not analyze PHP; PHP remains covered by Semgrep.
 
 Motorcycle Rally Scoring Application provides administrative tabs for:

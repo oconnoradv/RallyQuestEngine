@@ -134,27 +134,49 @@ jobs:
     name: CodeQL release-source analysis
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    outputs:
+      notice: ${{ steps.policy.outputs.notice }}
     permissions:
       contents: read
       security-events: write
       actions: read
     steps:
+      - name: Report CodeQL visibility policy
+        id: policy
+        env:
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          if [ "$REPOSITORY_PRIVATE" = "true" ]; then
+            notice="CodeQL was skipped because the repository is private. Publication remains permitted when the other security gates pass."
+            echo "::notice::$notice"
+            echo "$notice" >> "$GITHUB_STEP_SUMMARY"
+            echo "notice=$notice" >> "$GITHUB_OUTPUT"
+          elif [ "$REPOSITORY_PRIVATE" = "false" ]; then
+            echo "notice=CodeQL JavaScript security analysis passed." >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Repository visibility was unavailable; cannot determine the CodeQL policy."
+            exit 1
+          fi
       - name: Check out release source
+        if: github.event.repository.private == false
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
       - name: Initialize CodeQL
+        if: github.event.repository.private == false
         uses: github/codeql-action/init@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
         with:
           languages: javascript-typescript
           build-mode: none
           queries: security-extended
       - name: Analyze the checked-out commit
+        if: github.event.repository.private == false
         id: analyze
         uses: github/codeql-action/analyze@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
         with:
           output: ${{ runner.temp }}/codeql-results
       - name: Reject CodeQL findings or incomplete reports
+        if: github.event.repository.private == false
         env:
           SARIF_DIRECTORY: ${{ steps.analyze.outputs.sarif-output }}
         run: |
@@ -228,6 +250,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
+          CODEQL_NOTICE: ${{ needs.codeql.outputs.notice }}
         run: |
           set -euo pipefail
           sha256sum --check SHA256SUMS
@@ -235,4 +258,4 @@ jobs:
             "motorcycle-rally-scoring-application-$RELEASE_TAG.zip" SHA256SUMS \
             --verify-tag \
             --title "Motorcycle Rally Scoring Application $RELEASE_TAG" \
-            --notes "Install the ZIP through WordPress Plugins > Add New > Upload Plugin. See the bundled readme changelog for this version's changes. This source passed syntax, Semgrep static security (including WordPress exploit rules), CodeQL JavaScript security analysis, Trivy dependency/secret, and Gitleaks history/working-tree secret checks. Publication also required no open repository Dependabot alerts. These checks do not certify NIST compliance or absence of all CVEs; deployed WordPress, PHP, and other plugins require separate assessment. The Event Bonus Point Library supports listing and image imports; bonus scoring calculations and submission review remain future work. Back up the database and event gallery files separately before upgrading."
+            --notes "Install the ZIP through WordPress Plugins > Add New > Upload Plugin. See the bundled readme changelog for this version's changes. This source passed syntax, Semgrep static security (including WordPress exploit rules), Trivy dependency/secret, and Gitleaks history/working-tree secret checks. $CODEQL_NOTICE Publication also required no open repository Dependabot alerts. These checks do not certify NIST compliance or absence of all CVEs; deployed WordPress, PHP, and other plugins require separate assessment. The Event Bonus Point Library supports listing and image imports; bonus scoring calculations and submission review remain future work. Back up the database and event gallery files separately before upgrading."
