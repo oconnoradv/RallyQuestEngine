@@ -23,7 +23,11 @@ final class MRSA_Admin {
 	}
 
 	public static function assets( $hook ) {
-		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'admin_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit', 'admin_page_mrsa-event-roster', 'admin_page_mrsa-event-enroll', 'admin_page_mrsa-rider-score' ), true ) || ! MRSA::access() ) {
+		if ( ! MRSA::access() ) {
+			return;
+		}
+		wp_add_inline_style( 'dashicons', '#adminmenu .toplevel_page_mrsa .wp-menu-image::before,#adminmenu .toplevel_page_mrsa:hover .wp-menu-image::before,#adminmenu .toplevel_page_mrsa.current .wp-menu-image::before{color:#ff0800}' );
+		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'admin_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit', 'admin_page_mrsa-event-roster', 'admin_page_mrsa-event-enroll', 'admin_page_mrsa-rider-score' ), true ) ) {
 			return;
 		}
 		$asset_version = MRSA_VERSION . '.' . MRSA_DB_VERSION;
