@@ -20,7 +20,7 @@ final class MRSA {
 	}
 
 	public static function init() {
-		if ( get_option( 'mrsa_db_version' ) !== MRSA_VERSION ) {
+		if ( get_option( 'mrsa_db_version' ) !== MRSA_DB_VERSION ) {
 			self::install();
 		}
 		if ( is_admin() ) {
@@ -32,6 +32,7 @@ final class MRSA {
 
 	public static function install() {
 		global $wpdb;
+		$previous_db_version = get_option( 'mrsa_db_version' );
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		$c = $wpdb->get_charset_collate();
 		$t = self::table( 'global_admins' );
@@ -53,7 +54,7 @@ final class MRSA {
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			make varchar(80) NOT NULL,
 			model varchar(120) NOT NULL,
-			year smallint(5) unsigned NOT NULL,
+			year smallint(5) unsigned NOT NULL DEFAULT 0,
 			source varchar(255) NOT NULL DEFAULT '',
 			PRIMARY KEY  (id),
 			UNIQUE KEY catalog (make,model,year)
@@ -78,11 +79,15 @@ final class MRSA {
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			rider_id bigint(20) unsigned NOT NULL,
 			bike_id bigint(20) unsigned NOT NULL,
+			model_year smallint(5) unsigned NOT NULL DEFAULT 0,
 			fuel_capacity varchar(100) NOT NULL DEFAULT '',
 			PRIMARY KEY  (id),
 			KEY rider_id (rider_id),
 			KEY bike_id (bike_id)
 		) ENGINE=InnoDB $c;" );
+		if ( MRSA_DB_VERSION !== $previous_db_version ) {
+			$wpdb->query( 'UPDATE ' . self::table( 'rider_bikes' ) . ' rb JOIN ' . self::table( 'bikes' ) . ' b ON b.id=rb.bike_id SET rb.model_year=b.year WHERE rb.model_year=0 AND b.year BETWEEN 1000 AND 9999' );
+		}
 		$t = self::table( 'events' );
 		dbDelta( "CREATE TABLE $t (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -109,7 +114,9 @@ final class MRSA {
 			rider_id bigint(20) unsigned NOT NULL,
 			bib int(10) unsigned NOT NULL,
 			pillion varchar(160) NOT NULL DEFAULT '',
+			registration_status varchar(20) NOT NULL DEFAULT 'Initial Registration',
 			status varchar(20) NOT NULL DEFAULT 'Registered',
+			status_manual tinyint(1) unsigned NOT NULL DEFAULT 0,
 			score bigint(20) NOT NULL DEFAULT 0,
 			placing int(10) unsigned DEFAULT NULL,
 			PRIMARY KEY  (id),
@@ -117,7 +124,7 @@ final class MRSA {
 			UNIQUE KEY event_rider (event_id,rider_id),
 			KEY rider_id (rider_id)
 		) ENGINE=InnoDB $c;" );
-		update_option( 'mrsa_db_version', MRSA_VERSION, false );
+		update_option( 'mrsa_db_version', MRSA_DB_VERSION, false );
 	}
 
 	public static function begin_transaction() {
@@ -195,14 +202,15 @@ final class MRSA {
 			foreach ( $rider as $key => $value ) {
 				$fields[] = array( 'name' => ucwords( str_replace( '_', ' ', $key ) ), 'value' => $value );
 			}
-			$bikes = $wpdb->get_results( $wpdb->prepare( 'SELECT b.make,b.model,b.year,rb.fuel_capacity FROM ' . self::table( 'rider_bikes' ) . ' rb JOIN ' . self::table( 'bikes' ) . ' b ON b.id=rb.bike_id WHERE rb.rider_id=%d', $rider['id'] ), ARRAY_A );
+			$bikes = $wpdb->get_results( $wpdb->prepare( 'SELECT b.make,b.model,rb.model_year,rb.fuel_capacity FROM ' . self::table( 'rider_bikes' ) . ' rb JOIN ' . self::table( 'bikes' ) . ' b ON b.id=rb.bike_id WHERE rb.rider_id=%d', $rider['id'] ), ARRAY_A );
 			foreach ( $bikes as $bike ) {
-				$fields[] = array( 'name' => 'Motorcycle', 'value' => $bike['make'] . ' / ' . $bike['model'] . ' / ' . $bike['year'] );
+				$fields[] = array( 'name' => 'Motorcycle', 'value' => $bike['make'] . ' / ' . $bike['model'] . ' / ' . ( (int) $bike['model_year'] ? $bike['model_year'] : 'Unspecified year' ) );
 				$fields[] = array( 'name' => 'Fuel capacity', 'value' => $bike['fuel_capacity'] );
 			}
-			$events = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,r.bib,r.pillion,r.status,r.score,r.placing FROM ' . self::table( 'registrations' ) . ' r JOIN ' . self::table( 'events' ) . ' e ON e.id=r.event_id WHERE r.rider_id=%d', $rider['id'] ), ARRAY_A );
+			$events = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,r.bib,r.pillion,r.registration_status,r.status,r.status_manual,r.score,r.placing,e.min_finisher_points FROM ' . self::table( 'registrations' ) . ' r JOIN ' . self::table( 'events' ) . ' e ON e.id=r.event_id WHERE r.rider_id=%d', $rider['id'] ), ARRAY_A );
 			foreach ( $events as $event ) {
-				$fields[] = array( 'name' => 'Event / bib / pillion / status / score / placing', 'value' => implode( ' / ', $event ) );
+				$result_status = $event['status_manual'] ? $event['status'] : ( (int) $event['score'] > (int) $event['min_finisher_points'] ? 'Preliminary Finisher' : 'Registered' );
+				$fields[] = array( 'name' => 'Event / bib / pillion / registration status / result status / score / placing', 'value' => implode( ' / ', array( $event['name'], $event['bib'], $event['pillion'], $event['registration_status'], $result_status, $event['score'], $event['placing'] ) ) );
 			}
 			$data[] = array( 'group_id' => 'mrsa', 'group_label' => 'Rally registrations', 'item_id' => 'mrsa-rider-' . $rider['id'], 'data' => $fields );
 		}
@@ -255,7 +263,7 @@ final class MRSA {
 			$assigned = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'global_admins' ) . ' WHERE user_id=%d', $user->ID ) ) || $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'event_admins' ) . ' WHERE user_id=%d LIMIT 1', $user->ID ) );
 			if ( $assigned ) {
 				$retained = true;
-				$messages[] = 'Administrator assignments retained for access control; remove assignments in Global Setup if appropriate. WordPress user profiles are managed by WordPress.';
+				$messages[] = 'Administrator assignments retained for access control; remove global assignments in Administrators and event assignments from the event Configure page if appropriate. WordPress user profiles are managed by WordPress.';
 			}
 		}
 		return array( 'items_removed' => $removed, 'items_retained' => $retained, 'messages' => $messages, 'done' => true );

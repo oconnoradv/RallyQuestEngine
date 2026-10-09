@@ -1,9 +1,16 @@
 .mrsa { max-width: 1500px; }
 .mrsa h1 small { font-size: 14px; font-weight: normal; }
+.mrsa .mrsa-header { display: flex; align-items: center; gap: 18px; margin: 16px 0 12px; }
+.mrsa .mrsa-header .dashicons { display: grid; place-items: center; width: 96px; height: 96px; border-radius: 18px; background: #1d4f7a; color: #fff; font-size: 64px; line-height: 1; box-shadow: inset 0 0 0 4px rgba(255, 255, 255, .18); }
+.mrsa .mrsa-header h1 { margin: 0 0 4px; padding: 0; font-size: 30px; line-height: 1.2; }
+.mrsa .mrsa-header p { margin: 0; color: #50575e; font-size: 16px; }
+.mrsa .mrsa-header p span { margin-left: 8px; font-size: 13px; }
 .mrsa .mrsa-panel { background: #fff; border: 1px solid #c3c4c7; padding: 18px; margin: 16px 0; }
 .mrsa .mrsa-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px 18px; margin-bottom: 12px; }
 .mrsa .mrsa-field { display: flex; flex-direction: column; gap: 5px; margin: 8px 0; }
 .mrsa .mrsa-field input, .mrsa .mrsa-field select, .mrsa .mrsa-field textarea { width: 100%; max-width: 100%; }
+.mrsa .mrsa-edit-form { max-width: 760px; }
+.mrsa .mrsa-edit-form .mrsa-bike-row, .mrsa .mrsa-edit-form .mrsa-dependent { flex-direction: column; align-items: stretch; }
 .mrsa textarea { min-height: 90px; }
 .mrsa .mrsa-profile { margin: 12px 0; }
 .mrsa .mrsa-note { background: #f0f6fc; border-left: 4px solid #2271b1; padding: 12px; }
@@ -29,6 +36,8 @@
 .mrsa .mrsa-logo-preview img { width: auto; max-width: 150px; max-height: 150px; margin: 10px 0; }
 .mrsa [hidden] { display: none !important; }
 @media (max-width: 782px) {
+	.mrsa .mrsa-header .dashicons { width: 64px; height: 64px; border-radius: 12px; font-size: 42px; }
+	.mrsa .mrsa-header h1 { font-size: 24px; }
 	.mrsa .mrsa-table-tools, .mrsa .mrsa-table-tools label { align-items: start; }
 	.mrsa .mrsa-grid { grid-template-columns: 1fr; }
 	.mrsa .nav-tab { margin-top: 8px; }
