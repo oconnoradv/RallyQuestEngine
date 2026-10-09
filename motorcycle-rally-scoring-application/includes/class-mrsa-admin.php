@@ -8,6 +8,7 @@ final class MRSA_Admin {
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'admin_post_mrsa_save', array( __CLASS__, 'save' ) );
 		add_action( 'admin_post_mrsa_diagnostics_download', array( __CLASS__, 'diagnostics_download' ) );
+		add_action( 'admin_post_mrsa_diagnostics_check', array( __CLASS__, 'diagnostics_check' ) );
 	}
 
 	public static function menu() {
@@ -756,6 +757,19 @@ final class MRSA_Admin {
 
 	public static function diagnostics_hash( $operation, $code ) {
 		return wp_hash( get_current_user_id() . '|' . $operation . '|' . $code );
+	}
+
+	public static function diagnostics_check() {
+		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! MRSA::global_access() ) {
+			wp_die( esc_html( 'Only global administrators may check MRSA configuration.' ), '', array( 'response' => 403 ) );
+		}
+		check_admin_referer( 'mrsa_diagnostics_check' );
+		$report = MRSA_Diagnostics::check();
+		if ( ! set_transient( 'mrsa_configuration_' . get_current_user_id(), $report, 15 * MINUTE_IN_SECONDS ) ) {
+			wp_die( esc_html( 'The configuration report could not be saved. Rerun the check.' ), '', array( 'response' => 500 ) );
+		}
+		wp_safe_redirect( self::url( 'diagnostics' ) . '#mrsa-configuration' );
+		exit;
 	}
 
 	private static function verify_diagnostics( $operation ) {

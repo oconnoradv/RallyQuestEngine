@@ -3,7 +3,8 @@ Contributors: oconnoradv
 Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
-Stable tag: 0.1.9
+Requires Plugins: action-scheduler
+Stable tag: 0.1.10
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -20,7 +21,7 @@ Motorcycle Rally Scoring Application provides administrative tabs for:
 * Results: score ordering, computed overall placing, read-only result status, and rider score-sheet placeholders.
 * Bikes: side-by-side manual entry and motorcycle make/model import on wide screens, stacked on narrow screens, plus transactional bulk deletion of unassigned catalog rows.
 * Rosters: selected-event CSV/XLSX import of existing riders by Rider ID or Email, with a downloadable sample CSV. Optional Bib ID, Status and Pillion columns; blank bibs receive the next available number. Global administrators only, maximum 10 MB / 5,000 rows. ClamAV is required; invalid or conflicting rows reject the whole batch.
-* Diagnostics: JSON export, restorable SQL backup, and verification-string-protected scoped deletion. Gallery image files are stored separately and are not included in database exports or backups.
+* Diagnostics: on-demand required-plugin/environment checks with native WordPress install/activate controls for required Action Scheduler; Gallery for SpotWalla remains optional. PHP, database/InnoDB/schema, ClamAV, private staging/storage and upload capacity are checked against current MRSA limits (10 MB spreadsheets/images, 50 MB ZIP/download, 100 MB / 200 images per batch). Unverifiable hosting and scanner policies are labeled Manual review. JSON export, restorable SQL backup, and verification-string-protected scoped deletion are also available. Gallery image files are stored separately and are not included in database exports or backups.
 * About: version, licensing, attribution, scope, and an optional Gallery for SpotWalla recommendation with documentation and download links.
 
 The Bonus Point Library stores event-specific bonus IDs, descriptions,
@@ -196,6 +197,13 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.1.10 =
+* Added an on-demand Required Plugins and Configuration check above Diagnostics export and backup controls.
+* Declared Action Scheduler as a required plugin and added permission-checked native WordPress installation and activation links; Gallery for SpotWalla remains optional.
+* Checked WordPress/PHP requirements, import functions, database version, InnoDB tables/schema, upload limits, gallery storage, private staging and a live ClamAV scan.
+* Displayed existing MRSA import safety limits and marked unverifiable hosting resources, cron delivery and antivirus policies/signatures for manual review.
+* Added private expiring configuration reports and regression coverage for permissions, nonces, dependency controls and exact upload thresholds.
 
 = 0.1.9 =
 * Added selected-event CSV/XLSX roster imports for existing riders, automatic available-bib assignment, batch validation and a downloadable sample CSV.

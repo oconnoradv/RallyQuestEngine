@@ -6,6 +6,9 @@
 .mrsa .mrsa-header p { margin: 0; color: #50575e; font-size: 16px; }
 .mrsa .mrsa-header p span { margin-left: 8px; font-size: 13px; }
 .mrsa .mrsa-panel { background: #fff; border: 1px solid #c3c4c7; padding: 18px; margin: 16px 0; }
+.mrsa .mrsa-check-passed { color: #006b1b; }
+.mrsa .mrsa-check-failed { color: #b32d2e; }
+.mrsa .mrsa-check-review { color: #924500; }
 .mrsa .mrsa-recommended-plugins { border-color: #008a20; background: #edfaef; color: #004d16; }
 .mrsa .mrsa-recommended-plugins h2 { margin-top: 0; }
 .mrsa .mrsa-recommended-plugins h2, .mrsa .mrsa-recommended-plugins h3 { color: #006b1b; }

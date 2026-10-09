@@ -628,6 +628,18 @@ final class MRSA_Bonus {
 		return 'mrsa_bonus_pending_' . get_current_user_id() . '_' . $token;
 	}
 
+	public static function check_staging() {
+		try {
+			$directory = self::make_stage_dir();
+			if ( ! rmdir( $directory ) ) {
+				throw new RuntimeException( 'The empty diagnostic staging directory could not be removed.' );
+			}
+			return array( 'passed' => true, 'message' => 'A private staging directory was created and removed successfully.' );
+		} catch ( RuntimeException $exception ) {
+			return array( 'passed' => false, 'message' => $exception->getMessage() );
+		}
+	}
+
 	public static function bypass_enabled() {
 		global $wpdb;
 		return 'bypass_enabled' === $wpdb->get_var( $wpdb->prepare(

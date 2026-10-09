@@ -1026,6 +1026,7 @@ final class MRSA_Views {
 		$events = $wpdb->get_results( 'SELECT id,name,event_date FROM ' . MRSA::table( 'events' ) . ' ORDER BY event_date DESC,id DESC', ARRAY_A );
 		$riders = $wpdb->get_results( 'SELECT id,name,email FROM ' . MRSA::table( 'riders' ) . ' ORDER BY name,id', ARRAY_A );
 		echo '<h2>Diagnostics</h2><p>Export application data, create a restorable database backup, or permanently remove scoped plugin data.</p>';
+		self::configuration_check();
 		echo '<div class="mrsa-grid">';
 		foreach ( array( 'json' => array( 'Export Data', 'Download all plugin table data as JSON.' ), 'sql' => array( 'Database Backup', 'Download plugin table definitions and data as restorable SQL.' ) ) as $type => $details ) {
 			echo '<section class="mrsa-panel"><h3>' . esc_html( $details[0] ) . '</h3><p>' . esc_html( $details[1] ) . '</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="mrsa_diagnostics_download"><input type="hidden" name="download_type" value="' . esc_attr( $type ) . '">';
@@ -1060,6 +1061,37 @@ final class MRSA_Views {
 		self::diagnostics_delete_form( 'diagnostics_delete_rider', 'Delete Specific Rider', 'Delete one rider, their motorcycle assignments, and all event registrations.', '<label class="mrsa-field"><span>Rider</span><select name="rider_id" required>' . $rider_options . '</select></label>' );
 		self::diagnostics_delete_form( 'diagnostics_delete_audit', 'Delete Virus Scan Audit Data', 'Delete audit history and reset remembered ClamAV overrides for every administrator. A new record of this deletion will remain.', array() );
 		echo '</div>';
+	}
+
+	private static function configuration_check() {
+		echo '<section class="mrsa-panel" id="mrsa-configuration"><h3>Required Plugins and Configuration</h3><p>Check the current WordPress/PHP environment, MRSA database, local ClamAV scanner, storage, and import settings. Action Scheduler is required; Gallery for SpotWalla remains optional.</p><p><strong>MRSA limits:</strong> spreadsheets and individual images: 10 MB; remote downloads/ZIP archives: 50 MB; accepted images per batch: 100 MB / 200 images; spreadsheet rows: 5,000. Server settings are checked against these existing safety limits. Multipart image uploads need at least 101 MB post capacity including overhead.</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="mrsa_diagnostics_check">';
+		wp_nonce_field( 'mrsa_diagnostics_check' );
+		echo '<button type="submit" class="button button-primary">Check Required Plugins and Configuration</button></form>';
+		$plugin = MRSA_Diagnostics::action_scheduler();
+		if ( ! $plugin['installed'] && current_user_can( 'install_plugins' ) ) {
+			echo '<p><a class="button" href="' . esc_url( wp_nonce_url( self_admin_url( 'update.php?action=install-plugin&plugin=action-scheduler' ), 'install-plugin_action-scheduler' ) ) . '">Install Action Scheduler</a></p>';
+		} elseif ( $plugin['installed'] && ! $plugin['active'] && current_user_can( 'activate_plugin', 'action-scheduler/action-scheduler.php' ) ) {
+			echo '<p><a class="button" href="' . esc_url( wp_nonce_url( self_admin_url( 'plugins.php?action=activate&plugin=' . rawurlencode( 'action-scheduler/action-scheduler.php' ) ), 'activate-plugin_action-scheduler/action-scheduler.php' ) ) . '">Activate Action Scheduler</a></p>';
+		} elseif ( ! $plugin['ready'] ) {
+			echo '<p>Action Scheduler is not ready. A WordPress administrator with plugin installation/activation permissions must resolve this requirement.</p>';
+		}
+		echo '<p>Installation uses the standard WordPress installer and its permissions, compatibility and filesystem checks. Return here after installing/activating and rerun the check. Server software and PHP settings must be managed by your hosting administrator.</p>';
+		$report = get_transient( 'mrsa_configuration_' . get_current_user_id() );
+		if ( is_array( $report ) && isset( $report['rows'], $report['checked_at'] ) ) {
+			echo '<p>Last checked: ' . esc_html( $report['checked_at'] ) . ' UTC. Results expire after 15 minutes and are a snapshot, not a guarantee that all operations will succeed.</p><div class="mrsa-scroll"><table class="widefat striped"><thead><tr><th>Check</th><th>Status</th><th>Result / required action</th></tr></thead><tbody>';
+			foreach ( $report['rows'] as $row ) {
+				$labels = array( 'passed' => 'Passed', 'failed' => 'Failed', 'review' => 'Manual review' );
+				echo '<tr><td>' . esc_html( $row['name'] ) . '</td><td><strong class="mrsa-check-' . esc_attr( $row['status'] ) . '">' . esc_html( $labels[ $row['status'] ] ) . '</strong></td><td>' . esc_html( $row['detail'] );
+				if ( 'passed' !== $row['status'] ) {
+					echo '<p>' . esc_html( $row['remedy'] ) . '</p>';
+				}
+				echo '</td></tr>';
+			}
+			echo '</tbody></table></div>';
+		} else {
+			echo '<p>No current report. Run the check to display results; no configuration changes or plugin installations occur automatically.</p>';
+		}
+		echo '</section>';
 	}
 
 	private static function diagnostics_delete_form( $operation, $title, $description, $fields ) {
