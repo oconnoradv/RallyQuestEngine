@@ -4,7 +4,7 @@ Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.1.15
+Stable tag: 0.1.16
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -267,7 +267,7 @@ No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
 
-= Unreleased =
+= 0.1.16 =
 * List all locally uploaded scoring images that pass scanning and authorize their import with one bulk action instead of approving each image separately.
 
 = 0.1.15 =
