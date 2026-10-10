@@ -8,7 +8,7 @@
 
 A WordPress plugin for administering motorcycle rallies, including administrator assignments, a motorcycle catalog, master rider records, event configuration, and event enrollment. Requires WordPress 6.2+, PHP 7.4+, MySQL 8.0+ or MariaDB 10.6+ with InnoDB, and the installed/active [Action Scheduler plugin](https://wordpress.org/plugins/action-scheduler/). Licensed under the GNU General Public License v3 or later (see [LICENSE](LICENSE)).
 
-> **Version status:** The current development version adds event-scoped IMAP, Gmail API, and Microsoft 365 bonus-submission inboxes; separate Event Scorer assignments; pending/reviewed submission workspaces; and transactional point awards to the existing rally setup, Bonus Point Library, results, exports, and backups.
+> **Version status:** The current release provides rally administration, rider and event management, event-scoped email bonus-submission inboxes, submission review, exports, and backups. Scoring and overall rankings are planned future features.
 
 ## Installation
 
