@@ -300,6 +300,16 @@
 			if (event.key === 'Escape') { help.open = false; event.stopPropagation(); }
 		});
 	});
+	root.querySelectorAll('.mrsa-email-config').forEach(form => {
+		const provider = form.querySelector('[name="provider"]');
+		const refreshProviderHelp = () => {
+			form.querySelectorAll('[data-email-provider-only]').forEach(help => {
+				help.hidden = help.dataset.emailProviderOnly !== provider.value;
+			});
+		};
+		provider.addEventListener('change', refreshProviderHelp);
+		refreshProviderHelp();
+	});
 	const galleryDialog = root.querySelector('.mrsa-gallery-dialog');
 	if (galleryDialog && typeof galleryDialog.showModal === 'function') {
 		const image = galleryDialog.querySelector('.mrsa-gallery-full-image');

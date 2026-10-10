@@ -166,7 +166,9 @@ and About for their assigned events.
 
 Event inbox secrets are encrypted with AES-256-GCM using the WordPress
 authentication salts. IMAP requires the PHP IMAP extension. Gmail requires a
-refresh token authorized for gmail.modify. Microsoft 365 requires delegated
+refresh token authorized for gmail.modify; selecting Gmail API displays a
+Help? hover/focus panel with Google Cloud project, Gmail API, OAuth consent,
+credential, scope, and refresh-token setup steps. Microsoft 365 requires delegated
 Mail.ReadWrite and offline_access consent. Administrators provide refresh
 tokens; this plugin does not implement interactive OAuth consent callbacks.
 Changing WordPress authentication salts requires re-entering saved inbox
@@ -285,6 +287,9 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= Unreleased =
+* Added Gmail API setup guidance in a provider-specific Help? hover/focus panel on the event inbox configuration page.
 
 = 0.1.17 =
 * Removed the plugin-defined site-wide administrator assignment and legacy storage. WordPress administrators now manage shared application data, while plugin administrator assignments exist only at the event level.

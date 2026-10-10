@@ -122,6 +122,11 @@
 .mrsa .mrsa-url-help > summary { color: #135e96; text-decoration: underline; padding: 6px; }
 .mrsa .mrsa-url-help-content { display: none; position: absolute; z-index: 10; right: 0; top: 100%; width: 280px; max-width: calc(100vw - 64px); padding: 12px; border: 1px solid #8c8f94; background: #fff; color: #1d2327; box-shadow: 0 4px 12px rgba(0, 0, 0, .15); }
 .mrsa .mrsa-url-help[open] > .mrsa-url-help-content { display: block; }
+.mrsa .mrsa-email-provider-help { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; max-width: 760px; margin: 12px 0; font-weight: 600; }
+.mrsa .mrsa-email-provider-help .mrsa-url-help-content { width: 520px; max-height: 65vh; overflow-y: auto; font-weight: 400; }
+.mrsa .mrsa-email-provider-help .mrsa-url-help-content h4 { margin-top: 0; }
+.mrsa .mrsa-email-provider-help .mrsa-url-help-content h5 { margin-bottom: 4px; }
+.mrsa .mrsa-email-provider-help .mrsa-url-help-content ol { margin-top: 4px; }
 .mrsa .mrsa-import-feedback { min-width: 0; overflow-wrap: anywhere; }
 .mrsa .mrsa-import-feedback:empty { display: none; }
 .mrsa .mrsa-import-feedback .notice-success { border-left-color: #008a20; background: #edfaef; color: #004d16; }
