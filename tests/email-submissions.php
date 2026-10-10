@@ -162,6 +162,19 @@ MRSA_Email_Submissions::save_configuration( 7, array(
 check( 'first-secret' === MRSA_Email_Submissions::configuration( 7, true )['settings']['password'], 'blank secret fields preserve the saved credential' );
 $status = MRSA_Email_Submissions::configuration_status( 7 );
 check( $status['configured'] && ! $status['connected'] && 'IMAP' === $status['provider_label'], 'a complete saved inbox is displayed but remains unverified before a connection test' );
+try {
+	MRSA_Email_Submissions::save_configuration( 7, array(
+		'provider' => 'gmail',
+		'enabled' => '1',
+		'mailbox' => 'submissions@example.test',
+		'client_id' => 'gmail-client-id',
+		'client_secret' => '',
+		'refresh_token' => '',
+	) );
+	throw new RuntimeException( 'Incomplete Gmail configuration unexpectedly succeeded.' );
+} catch ( RuntimeException $exception ) {
+	check( false !== strpos( $exception->getMessage(), 'OAuth client secret' ), 'Gmail setup identifies the exact missing OAuth credential' );
+}
 MRSA_Email_Submissions::save_configuration( 7, array(
 	'provider' => 'gmail',
 	'enabled' => '1',

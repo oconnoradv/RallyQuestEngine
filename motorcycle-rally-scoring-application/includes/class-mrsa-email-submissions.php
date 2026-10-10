@@ -125,18 +125,18 @@ final class MRSA_Email_Submissions {
 			if ( ! in_array( $settings['encryption'], array( 'ssl', 'tls', 'none' ), true ) ) {
 				throw new RuntimeException( 'Select a supported IMAP encryption mode.' );
 			}
-			$settings['username'] = self::plain( $input, 'username', 254, true );
+			$settings['username'] = self::plain( $input, 'username', 254, true, 'IMAP username' );
 			$settings['folder'] = self::mail_folder( $input['folder'] ?? '' );
-			$settings['password'] = self::secret( $input, $old, 'password' );
+			$settings['password'] = self::secret( $input, $old, 'password', 'IMAP password' );
 		} elseif ( 'gmail' === $provider ) {
-			$settings['client_id'] = self::plain( $input, 'client_id', 255, true );
-			$settings['client_secret'] = self::secret( $input, $old, 'client_secret' );
-			$settings['refresh_token'] = self::secret( $input, $old, 'refresh_token' );
+			$settings['client_id'] = self::plain( $input, 'client_id', 255, true, 'OAuth client ID' );
+			$settings['client_secret'] = self::secret( $input, $old, 'client_secret', 'OAuth client secret' );
+			$settings['refresh_token'] = self::secret( $input, $old, 'refresh_token', 'OAuth refresh token' );
 		} else {
-			$settings['tenant_id'] = self::plain( $input, 'tenant_id', 100, true );
-			$settings['client_id'] = self::plain( $input, 'client_id', 255, true );
-			$settings['client_secret'] = self::secret( $input, $old, 'client_secret' );
-			$settings['refresh_token'] = self::secret( $input, $old, 'refresh_token' );
+			$settings['tenant_id'] = self::plain( $input, 'tenant_id', 100, true, 'Microsoft tenant ID' );
+			$settings['client_id'] = self::plain( $input, 'client_id', 255, true, 'OAuth client ID' );
+			$settings['client_secret'] = self::secret( $input, $old, 'client_secret', 'OAuth client secret' );
+			$settings['refresh_token'] = self::secret( $input, $old, 'refresh_token', 'OAuth refresh token' );
 			$settings['folder'] = self::mail_folder( $input['folder'] ?? '' );
 		}
 		$data = array(
@@ -195,21 +195,27 @@ final class MRSA_Email_Submissions {
 		}
 	}
 
-	private static function plain( array $input, $key, $limit, $required = false ) {
+	private static function plain( array $input, $key, $limit, $required = false, $label = '' ) {
 		$value = trim( sanitize_text_field( (string) ( $input[ $key ] ?? '' ) ) );
-		if ( strlen( $value ) > $limit || ( $required && '' === $value ) ) {
-			throw new RuntimeException( 'A required email configuration field is empty or too long.' );
+		if ( $required && '' === $value ) {
+			throw new RuntimeException( 'Enter the required ' . ( $label ?: 'email configuration field' ) . '.' );
+		}
+		if ( strlen( $value ) > $limit ) {
+			throw new RuntimeException( 'The ' . ( $label ?: 'email configuration field' ) . ' exceeds its maximum length.' );
 		}
 		return $value;
 	}
 
-	private static function secret( array $input, array $old, $key ) {
+	private static function secret( array $input, array $old, $key, $label = '' ) {
 		$value = trim( (string) ( $input[ $key ] ?? '' ) );
 		if ( '' === $value && ! empty( $old[ $key ] ) ) {
 			return $old[ $key ];
 		}
-		if ( '' === $value || strlen( $value ) > 4096 ) {
-			throw new RuntimeException( 'Enter the required email credential.' );
+		if ( '' === $value ) {
+			throw new RuntimeException( 'Enter the required ' . ( $label ?: 'email credential' ) . '.' );
+		}
+		if ( strlen( $value ) > 4096 ) {
+			throw new RuntimeException( 'The ' . ( $label ?: 'email credential' ) . ' exceeds its maximum length.' );
 		}
 		return $value;
 	}
