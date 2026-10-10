@@ -27,6 +27,22 @@
 	const requests = [];
 	window.fetch = async (url, options) => {
 		requests.push({ url, options });
+		const body = options.body;
+		if (body.get('queue_operation') === 'upload') {
+			const file = body.get('bonus_images[]');
+			return { ok: true, status: 200, json: async () => ({
+				success: true, data: {
+					state: 'review',
+					token: file.name === 'B1.jpg' ? 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' : 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+					message: 'Scan complete.',
+					scans: [{ file: file.name, status: 'Passed', detail: 'No threats found.' }],
+					errors: [],
+					can_approve: true,
+					unscanned: false,
+					scanner_error: false
+				}
+			}) };
+		}
 		return { ok: true, status: 200, json: async () => ({
 			success: true, data: { state: 'imported', message: 'Imported.', errors: [] }
 		}) };
@@ -41,18 +57,27 @@
 			if (!(form.action instanceof HTMLInputElement)) throw new Error('Fixture must reproduce the named-control collision.');
 			const files = new DataTransfer();
 			files.items.add(new File(['image data'], 'B1.jpg', { type: 'image/jpeg' }));
+			files.items.add(new File(['image data'], 'B2.jpg', { type: 'image/jpeg' }));
 			form.querySelector('[type="file"]').files = files.files;
 			form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 			await new Promise(resolve => setTimeout(resolve, 50));
-			if (requests.length !== 1) throw new Error('Expected exactly one upload request.');
+			if (requests.length !== 2) throw new Error('Expected both images to be scanned before authorization.');
 			const request = requests[0];
 			if (request.url !== form.getAttribute('action')) throw new Error('Upload used the hidden action control instead of the form destination.');
 			if (request.options.method !== 'POST' || request.options.credentials !== 'same-origin') throw new Error('Upload must retain authenticated POST behavior.');
 			const body = request.options.body;
 			if (body.get('action') !== 'mrsa_image_queue' || body.get('_wpnonce') !== 'test-nonce' || body.get('event_id') !== '7') throw new Error('Queue routing, nonce or event scope was lost.');
 			if (body.getAll('bonus_images[]').length !== 1 || body.get('bonus_images[]').name !== 'B1.jpg') throw new Error('Expected one named image.');
-			if (!document.querySelector('.mrsa-queue-progress').textContent.includes('1 images imported')) throw new Error('Queue did not complete.');
-			result.textContent = 'PASS: named action control does not shadow the upload endpoint; authenticated single-image request completes.';
+			if (document.querySelectorAll('.mrsa-queue-review section').length !== 2) throw new Error('Successful scans were not listed together.');
+			if (requests.some(item => item.options.body.get('queue_operation') === 'approve')) throw new Error('An image was approved before bulk authorization.');
+			const reviewForm = document.querySelector('.mrsa-queue-review form');
+			reviewForm.querySelector('[type="checkbox"]').checked = true;
+			reviewForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+			await new Promise(resolve => setTimeout(resolve, 50));
+			const approvals = requests.filter(item => item.options.body.get('queue_operation') === 'approve');
+			if (approvals.length !== 2) throw new Error('One bulk authorization did not import both passed images.');
+			if (!document.querySelector('.mrsa-queue-progress').textContent.includes('2 images imported')) throw new Error('Bulk queue did not complete.');
+			result.textContent = 'PASS: all successful scans are listed before one bulk authorization imports each staged image.';
 		} catch (error) {
 			result.textContent = 'FAIL: ' + error.message;
 		}

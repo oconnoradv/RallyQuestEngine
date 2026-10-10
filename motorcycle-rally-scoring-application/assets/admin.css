@@ -93,6 +93,9 @@
 .mrsa .mrsa-gallery-full-image { display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 160px); object-fit: contain; }
 .mrsa .mrsa-import-errors { overflow-wrap: anywhere; }
 .mrsa .mrsa-image-queue { overflow-wrap: anywhere; }
+.mrsa .mrsa-queue-review section { margin: 12px 0; padding: 10px 12px; border-left: 4px solid #00a32a; background: #f6f7f7; }
+.mrsa .mrsa-queue-review section h5 { margin: 0 0 6px; font-size: 14px; }
+.mrsa .mrsa-queue-review section p { margin: 4px 0; }
 .mrsa .mrsa-queue-review form { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .mrsa .mrsa-queue-review form label { flex-basis: 100%; }
 .mrsa .mrsa-queue-success { color: #004d16; background: #edfaef; padding: 8px; }

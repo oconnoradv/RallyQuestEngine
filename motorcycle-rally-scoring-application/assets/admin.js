@@ -53,31 +53,33 @@
 			}
 			return payload.data;
 		};
-		const decision = report => new Promise(resolve => {
+		const decision = reports => new Promise(resolve => {
 			review.replaceChildren();
-			node('h4', 'Review this image before importing', review);
-			node('p', report.message + ' Review expires after 15 minutes.', review);
-			report.scans.forEach(scan => node('p', scan.file + ': ' + scan.status + ' — ' + scan.detail, review));
-			report.errors.forEach(error => node('p', error, review));
+			node('h4', 'Review all images that passed before bulk importing', review);
+			node('p', reports.length + ' images passed validation. Their private reviews expire 15 minutes after each scan.', review);
+			reports.forEach(item => {
+				const section = node('section', '', review);
+				node('h5', item.file.name, section);
+				item.report.scans.forEach(scan => node('p', scan.file + ': ' + scan.status + ' — ' + scan.detail, section));
+				item.report.errors.forEach(error => node('p', error, section));
+			});
 			const controls = node('form', '', review);
-			let consent;
-			if (report.can_approve) {
-				const label = node('label', '', controls);
-				consent = document.createElement('input');
-				consent.type = 'checkbox';
-				consent.required = true;
-				label.append(consent, document.createTextNode(report.unscanned ?
-					' I accept importing this image without antivirus scanning. Record my consent and remember the unavailable-scanner override for my account.' :
-					' I have reviewed the scan results and approve importing this image.'));
-				const approve = node('button', report.unscanned ? 'Confirm Bypass and Import Image' : 'Approve and Import Image', controls);
-				approve.type = 'submit';
-				approve.className = 'button';
-				controls.addEventListener('submit', event => {
-					event.preventDefault();
-					if (consent.checked) finish(report.unscanned ? 'bypass' : 'approve');
-				});
-			}
-			const skip = node('button', 'Skip Image and Remove Staged File', controls);
+			const unscanned = reports.some(item => item.report.unscanned);
+			const label = node('label', '', controls);
+			const consent = document.createElement('input');
+			consent.type = 'checkbox';
+			consent.required = true;
+			label.append(consent, document.createTextNode(unscanned ?
+				' I accept bulk importing these images without antivirus scanning. Record my consent and remember the unavailable-scanner override for my account.' :
+				' I have reviewed the successful scan results and approve bulk importing all listed images.'));
+			const approve = node('button', unscanned ? 'Confirm Bypass and Bulk Import Images' : 'Approve and Bulk Import Images', controls);
+			approve.type = 'submit';
+			approve.className = 'button button-primary';
+			controls.addEventListener('submit', event => {
+				event.preventDefault();
+				if (consent.checked) finish(unscanned ? 'bypass' : 'approve');
+			});
+			const skip = node('button', 'Cancel Bulk Import and Remove Staged Files', controls);
 			skip.type = 'button';
 			skip.className = 'button';
 			const finish = operation => {
@@ -89,6 +91,17 @@
 			resolveReview = () => finish('cancel');
 			skip.focus();
 		});
+		const cancelReports = async reports => {
+			for (const item of reports) {
+				if (!item.report.token) continue;
+				try {
+					await request('cancel', null, item.report.token, item.report.unscanned);
+					item.report.token = '';
+				} catch (error) {
+					node('li', item.file.name + ': staged-file cleanup could not be confirmed; use the saved review link or wait for expiry.', log);
+				}
+			}
+		};
 		stop.addEventListener('click', () => {
 			stopping = true;
 			progress.textContent = 'Stopping after the current request; earlier imports are retained.';
@@ -128,6 +141,8 @@
 			stopping = false;
 			stop.disabled = false;
 			let imported = 0;
+			let failed = false;
+			const passed = [];
 			const controls = Array.from(root.querySelectorAll('.mrsa-import-header input, .mrsa-import-header button'));
 			const originalDisabled = controls.map(control => control.disabled);
 			controls.forEach(control => { control.disabled = true; });
@@ -147,18 +162,17 @@
 						galleryLink.href = recovery.href + '#mrsa-import-feedback';
 						galleryLink.textContent = 'Open saved scan review / check gallery';
 						const report = result;
-						let operation;
-						if (stopping || !report.can_approve) {
+						if (!report.can_approve) {
 							report.scans.forEach(scan => node('li', file.name + ': ' + scan.status + ' — ' + scan.detail, log));
 							report.errors.forEach(error => node('li', file.name + ': ' + error, log));
-							operation = 'cancel';
+							await request('cancel', null, report.token, report.unscanned);
+							failed = true;
 							if (!partial || report.scanner_error) stopping = true;
 						} else {
-							progress.textContent = 'Awaiting approval for ' + (index + 1) + ' of ' + files.length + ': ' + file.name;
-							operation = await decision(report);
-							if (operation === 'cancel' && !partial) stopping = true;
+							passed.push({ file, report });
+							node('li', file.name + ': passed scan and is ready for bulk import.', log).className = 'mrsa-queue-success';
 						}
-						result = await request(operation, null, report.token, report.unscanned);
+						continue;
 					}
 					if (result.state === 'imported') imported++;
 					const entry = node('li', file.name + ': ' + result.message, log);
@@ -170,8 +184,45 @@
 					galleryLink.href = galleryUrl;
 					galleryLink.textContent = 'Refresh event gallery';
 				}
-				progress.textContent = (stopping ? 'Queue stopped. ' : 'Queue complete. ') + imported + ' images imported. Refresh the gallery to view saved images.';
+				if (passed.length && (stopping || (failed && !partial))) {
+					await cancelReports(passed);
+					progress.textContent = 'Queue stopped before authorization. No successfully scanned staged images were imported.';
+				} else if (passed.length) {
+					progress.textContent = 'Scan complete. Review ' + passed.length + ' successful images and authorize one bulk import.';
+					const operation = await decision(passed);
+					if (operation === 'cancel') {
+						await cancelReports(passed);
+						progress.textContent = 'Bulk import cancelled. Staged images were removed.';
+					} else {
+						progress.textContent = 'Bulk importing ' + passed.length + ' approved images.';
+						for (let index = 0; index < passed.length; index++) {
+							if (stopping) break;
+							const item = passed[index];
+							progress.textContent = 'Bulk importing ' + (index + 1) + ' of ' + passed.length + ': ' + item.file.name;
+							const result = await request(operation, null, item.report.token, item.report.unscanned);
+							if (result.state === 'imported') {
+								imported++;
+								item.report.token = '';
+							}
+							const entry = node('li', item.file.name + ': ' + result.message, log);
+							entry.className = result.message.includes('WARNING:') ? 'mrsa-queue-warning' : 'mrsa-queue-success';
+							(result.errors || []).forEach(error => node('li', item.file.name + ': ' + error, log));
+						}
+						review.replaceChildren();
+						galleryLink.href = galleryUrl;
+						galleryLink.textContent = 'Refresh event gallery';
+						if (passed.some(item => item.report.token)) {
+							await cancelReports(passed);
+							progress.textContent = 'Bulk import stopped. ' + imported + ' images imported; remaining staged images were cancelled.';
+						} else {
+							progress.textContent = 'Bulk import complete. ' + imported + ' images imported. Refresh the gallery to view saved images.';
+						}
+					}
+				} else {
+					progress.textContent = (stopping ? 'Queue stopped. ' : 'Queue complete. ') + imported + ' images imported. Refresh the gallery to view saved images.';
+				}
 			} catch (error) {
+				await cancelReports(passed);
 				node('p', error.message, review).className = 'notice notice-error inline';
 				progress.textContent = 'Queue stopped after an error. ' + imported + ' confirmed image imports; check the gallery before retrying.';
 			} finally {

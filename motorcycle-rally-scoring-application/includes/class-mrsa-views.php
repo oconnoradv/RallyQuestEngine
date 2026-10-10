@@ -791,7 +791,7 @@ final class MRSA_Views {
 				echo '<div class="mrsa-import-feedback-group"><h4>' . esc_html( $labels[ $step ] ) . '</h4>' . $feedback . '</div>';
 			}
 		}
-		echo '</section><section class="mrsa-panel mrsa-image-queue" hidden data-max-image="' . esc_attr( MRSA_Bonus::MAX_IMAGE_SIZE ) . '" data-max-total="' . esc_attr( MRSA_Bonus::MAX_IMAGE_TOTAL ) . '" data-max-count="' . esc_attr( MRSA_Bonus::MAX_IMAGES ) . '" aria-label="Sequential image upload"><h4>One-at-a-time image import</h4><p class="mrsa-queue-progress" role="status" aria-live="polite"></p><div class="mrsa-queue-review"></div><p><button type="button" class="button mrsa-queue-stop">Stop after current file</button><a class="button" href="' . esc_url( MRSA_Admin::url( 'scoring', array( 'event_id' => $event_id, 'score_tab' => 'library' ) ) ) . '">Refresh event gallery</a></p><ol class="mrsa-queue-log"></ol></section>';
+		echo '</section><section class="mrsa-panel mrsa-image-queue" hidden data-max-image="' . esc_attr( MRSA_Bonus::MAX_IMAGE_SIZE ) . '" data-max-total="' . esc_attr( MRSA_Bonus::MAX_IMAGE_TOTAL ) . '" data-max-count="' . esc_attr( MRSA_Bonus::MAX_IMAGES ) . '" aria-label="Sequential image scan and bulk import"><h4>Scan queue and bulk image import</h4><p class="mrsa-queue-progress" role="status" aria-live="polite"></p><div class="mrsa-queue-review"></div><p><button type="button" class="button mrsa-queue-stop">Stop after current file</button><a class="button" href="' . esc_url( MRSA_Admin::url( 'scoring', array( 'event_id' => $event_id, 'score_tab' => 'library' ) ) ) . '">Refresh event gallery</a></p><ol class="mrsa-queue-log"></ol></section>';
 		$rows = self::queries()->bonus_gallery( $event_id );
 		echo '<h4>Event Bonus Point Gallery</h4>';
 		if ( ! $rows ) {

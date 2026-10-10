@@ -12,10 +12,10 @@ Manage motorcycle rally administrators, motorcycles, riders, and event registrat
 
 == Description ==
 
-Local scoring bonus images upload one file per request with JavaScript, with
-individual scan review and approval before continuing. Without JavaScript,
-choose one image per import. Previously approved images remain imported if a
-later image fails or the queue is stopped. Current per-file limits still apply.
+Local scoring bonus images upload and scan one file per request with JavaScript.
+After scanning, every successful image appears in one combined review and one
+bulk authorization imports the passing set. Without JavaScript, choose one image
+per import. Current per-file limits still apply.
 Diagnostics checks post capacity against one 10 MB file plus 1 MB overhead.
 
 Development separates administrative request handling from import services,
@@ -124,11 +124,13 @@ Cancellation deletes staged files; WordPress cron cleans expired imports.
 Formulas, macros, embedded files, script markers, and appended image data
 are rejected. A passed scan is not a guarantee that a file is harmless.
 URL image imports are all-or-nothing by default. Local folder imports use
-one-image requests with individual approval and persistence; a later failure
-does not undo earlier approved images. Optionally skip invalid images with
-filename/source-specific errors. Scanner errors stop further uploads.
-Stop after current file finishes an in-flight request or cancels a pending
-review, then stops the queue. Network failures stop without automatic retries:
+one-image scan requests, list all passing images, and require one bulk
+authorization. Without skip-failed enabled, an invalid image cancels the staged
+passing set before authorization. With skip-failed enabled, invalid images are
+excluded with filename/source-specific errors. Scanner errors stop further
+uploads and cancel the staged set. Stop after current file finishes an in-flight
+request and cancels staged reviews before authorization. During the bulk update,
+earlier confirmed imports remain if a later request fails. Network failures stop without automatic retries:
 inspect the gallery or saved scan review before retrying an uncertain result.
 Error reports are private to the importing administrator and expire after
 15 minutes. Recovery failures stop the import. Click gallery images to open
@@ -264,6 +266,9 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= Unreleased =
+* List all locally uploaded scoring images that pass scanning and authorize their import with one bulk action instead of approving each image separately.
 
 = 0.1.15 =
 * Replaced the image-import URL field and Load via URL button with a single Load by URL button that prompts for the URL.
