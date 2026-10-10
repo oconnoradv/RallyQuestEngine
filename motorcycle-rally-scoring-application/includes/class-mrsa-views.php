@@ -43,6 +43,10 @@ final class MRSA_Views {
 	}
 
 	private static function notice() {
+		$error = MRSA_Admin::query( 'error' );
+		if ( $error ) {
+			echo '<div class="notice notice-error"><p>' . esc_html( $error ) . '</p></div>';
+		}
 		$notice = MRSA_Admin::query( 'notice' );
 		if ( $notice ) {
 			$class = false !== strpos( $notice, 'WARNING: imported without an antivirus security scan' ) ? 'notice-warning' : 'notice-success';
@@ -501,7 +505,24 @@ final class MRSA_Views {
 		self::notice();
 		self::event_form( $id, $event );
 		if ( $id ) {
-			echo '<section class="mrsa-panel"><h2>Email Bonus Submissions</h2><p>Configure the event inbox used for rider bonus submissions.</p><p><a class="button button-primary" href="' . esc_url( MRSA_Admin::url( 'event-email', array( 'event_id' => $id ) ) ) . '">Configure Submission Inbox</a></p></section>';
+			$email_status = MRSA_Email_Submissions::configuration_status( $id );
+			$panel_class = $email_status['connected'] ? ' mrsa-email-connected' : ( $email_status['last_test_error'] ? ' mrsa-email-connection-failed' : '' );
+			echo '<section class="mrsa-panel' . esc_attr( $panel_class ) . '"><h2>Email Bonus Submissions</h2><p>Configure the event inbox used for rider bonus submissions.</p><div class="mrsa-email-actions"><a class="button button-primary" href="' . esc_url( MRSA_Admin::url( 'event-email', array( 'event_id' => $id ) ) ) . '">Configure Submission Inbox</a>';
+			if ( $email_status['configured'] ) {
+				echo '<span class="mrsa-email-summary"><strong>' . esc_html( $email_status['mailbox'] ) . '</strong><span>' . esc_html( $email_status['provider_label'] ) . '</span></span>';
+				self::form( 'event_email_test', array( 'event_id' => $id ), 'mrsa-inline-form' );
+				self::button( 'Test Email Inbox' );
+				echo '</form>';
+			}
+			echo '</div>';
+			if ( $email_status['connected'] ) {
+				echo '<p class="mrsa-email-status"><strong>Connection verified:</strong> ' . esc_html( $email_status['last_tested_at'] ) . ' UTC</p>';
+			} elseif ( $email_status['last_test_error'] ) {
+				echo '<p class="mrsa-email-status"><strong>Connection test failed:</strong> ' . esc_html( $email_status['last_test_error'] ) . '</p>';
+			} elseif ( $email_status['configured'] ) {
+				echo '<p class="mrsa-email-status">Configuration saved. Test the inbox connection to verify the credentials and mailbox access.</p>';
+			}
+			echo '</section>';
 		}
 		if ( $id && MRSA::site_access() ) {
 			self::event_administrators( $event );
@@ -549,6 +570,10 @@ final class MRSA_Views {
 		self::button( 'Save inbox configuration' );
 		echo '</form>';
 		echo '<p><strong>Last checked:</strong> ' . esc_html( $config['last_checked_at'] ?: 'Never' ) . '</p>';
+		echo '<p><strong>Last connection test:</strong> ' . esc_html( $config['last_tested_at'] ?: 'Never' ) . '</p>';
+		if ( $config['last_test_error'] ) {
+			echo '<div class="notice notice-error inline"><p>' . esc_html( $config['last_test_error'] ) . '</p></div>';
+		}
 		if ( $config['last_error'] ) {
 			echo '<div class="notice notice-error inline"><p>' . esc_html( $config['last_error'] ) . '</p></div>';
 		}

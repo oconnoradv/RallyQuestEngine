@@ -2,7 +2,7 @@
 /** Standalone diagnostics regression tests: php tests/diagnostics.php */
 define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
-define( 'MRSA_DB_VERSION', '8' );
+define( 'MRSA_DB_VERSION', '9' );
 define( 'MINUTE_IN_SECONDS', 60 );
 final class MRSA {
 	public static function table( $name ) { return $name; }
@@ -105,7 +105,7 @@ function wp_convert_hr_to_bytes( $value ) {
 	return (int) ( $number * ( 'g' === $unit ? 1073741824 : ( 'm' === $unit ? 1048576 : ( 'k' === $unit ? 1024 : 1 ) ) ) );
 }
 function size_format( $bytes ) { return ( $bytes / 1048576 ) . ' MB'; }
-function get_option( $key, $default = '' ) { return $GLOBALS['schema_version'] ?? '8'; }
+function get_option( $key, $default = '' ) { return $GLOBALS['schema_version'] ?? '9'; }
 function wp_max_upload_size() { return $GLOBALS['upload_limit'] ?? 10485760; }
 function get_temp_dir() { return sys_get_temp_dir(); }
 function wp_normalize_path( $value ) { return str_replace( '\\', '/', $value ); }

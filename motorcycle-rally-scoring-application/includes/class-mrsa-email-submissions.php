@@ -46,7 +46,7 @@ final class MRSA_Email_Submissions {
 		global $wpdb;
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'event_email_settings' ) . ' WHERE event_id=%d', $event_id ), ARRAY_A );
 		if ( ! $row ) {
-			return array( 'provider' => 'imap', 'enabled' => 0, 'settings' => array(), 'last_checked_at' => null, 'last_error' => '' );
+			return array( 'provider' => 'imap', 'enabled' => 0, 'settings' => array(), 'last_checked_at' => null, 'last_error' => '', 'last_tested_at' => null, 'last_test_error' => '' );
 		}
 		$settings = self::decrypt( $row['encrypted_settings'] );
 		if ( ! $include_secrets ) {
@@ -60,7 +60,49 @@ final class MRSA_Email_Submissions {
 			'settings' => $settings,
 			'last_checked_at' => $row['last_checked_at'],
 			'last_error' => $row['last_error'],
+			'last_tested_at' => $row['last_tested_at'] ?? null,
+			'last_test_error' => $row['last_test_error'] ?? '',
 		);
+	}
+
+	public static function configuration_status( $event_id ) {
+		try {
+			$config = self::configuration( $event_id, true );
+			$settings = $config['settings'];
+			$required = array( 'mailbox' );
+			if ( 'imap' === $config['provider'] ) {
+				$required = array_merge( $required, array( 'host', 'port', 'encryption', 'username', 'folder', 'password' ) );
+			} elseif ( 'gmail' === $config['provider'] ) {
+				$required = array_merge( $required, array( 'client_id', 'client_secret', 'refresh_token' ) );
+			} elseif ( 'microsoft' === $config['provider'] ) {
+				$required = array_merge( $required, array( 'tenant_id', 'client_id', 'client_secret', 'refresh_token', 'folder' ) );
+			} else {
+				return array( 'configured' => false, 'connected' => false, 'mailbox' => '', 'provider' => '', 'provider_label' => '', 'last_tested_at' => null, 'last_test_error' => 'The saved mailbox provider is unsupported.' );
+			}
+			$configured = true;
+			foreach ( $required as $key ) {
+				if ( ! isset( $settings[ $key ] ) || '' === (string) $settings[ $key ] ) {
+					$configured = false;
+					break;
+				}
+			}
+			$labels = array(
+				'imap' => 'IMAP',
+				'gmail' => 'Gmail API (OAuth)',
+				'microsoft' => 'Microsoft 365 / Graph API (OAuth)',
+			);
+			return array(
+				'configured' => $configured,
+				'connected' => $configured && ! empty( $config['last_tested_at'] ) && empty( $config['last_test_error'] ),
+				'mailbox' => $configured ? $settings['mailbox'] : '',
+				'provider' => $config['provider'],
+				'provider_label' => $labels[ $config['provider'] ],
+				'last_tested_at' => $config['last_tested_at'],
+				'last_test_error' => $config['last_test_error'],
+			);
+		} catch ( RuntimeException $exception ) {
+			return array( 'configured' => false, 'connected' => false, 'mailbox' => '', 'provider' => '', 'provider_label' => '', 'last_tested_at' => null, 'last_test_error' => $exception->getMessage() );
+		}
 	}
 
 	public static function save_configuration( $event_id, array $input ) {
@@ -102,6 +144,8 @@ final class MRSA_Email_Submissions {
 			'enabled' => ! empty( $input['enabled'] ) ? 1 : 0,
 			'encrypted_settings' => self::encrypt( $settings ),
 			'last_error' => '',
+			'last_tested_at' => null,
+			'last_test_error' => '',
 		);
 		$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT event_id FROM ' . MRSA::table( 'event_email_settings' ) . ' WHERE event_id=%d', $event_id ) );
 		$result = $exists ? $wpdb->update( MRSA::table( 'event_email_settings' ), $data, array( 'event_id' => $event_id ) ) : $wpdb->insert( MRSA::table( 'event_email_settings' ), array_merge( array( 'event_id' => $event_id ), $data ) );
@@ -109,6 +153,46 @@ final class MRSA_Email_Submissions {
 			throw new RuntimeException( 'The event email configuration could not be saved.' );
 		}
 		return 'Event submission email configuration saved.';
+	}
+
+	public static function test_connection( $event_id ) {
+		$config = self::configuration( $event_id, true );
+		$status = self::configuration_status( $event_id );
+		if ( ! $status['configured'] ) {
+			throw new RuntimeException( 'Save a complete event submission inbox configuration before testing the connection.' );
+		}
+		try {
+			if ( 'imap' === $config['provider'] ) {
+				$mailbox = self::open_imap( $config['settings'] );
+				imap_close( $mailbox );
+			} elseif ( 'gmail' === $config['provider'] ) {
+				$token = self::gmail_token( $config['settings'] );
+				self::http_json( 'https://gmail.googleapis.com/gmail/v1/users/' . rawurlencode( $config['settings']['mailbox'] ) . '/profile', array( 'method' => 'GET', 'headers' => array( 'Authorization' => 'Bearer ' . $token ) ) );
+			} elseif ( 'microsoft' === $config['provider'] ) {
+				$token = self::microsoft_token( $config['settings'] );
+				$user = rawurlencode( $config['settings']['mailbox'] );
+				$folder = rawurlencode( $config['settings']['folder'] ?: 'inbox' );
+				self::http_json( 'https://graph.microsoft.com/v1.0/users/' . $user . '/mailFolders/' . $folder . '?$select=id,displayName', array( 'method' => 'GET', 'headers' => array( 'Authorization' => 'Bearer ' . $token ) ) );
+			} else {
+				throw new RuntimeException( 'The saved mailbox provider is unsupported.' );
+			}
+			self::record_connection_test( $event_id, '' );
+			return 'Submission inbox connection test passed for ' . $status['mailbox'] . ' using ' . $status['provider_label'] . '.';
+		} catch ( RuntimeException $exception ) {
+			try {
+				self::record_connection_test( $event_id, $exception->getMessage() );
+			} catch ( RuntimeException $status_exception ) {
+				throw new RuntimeException( $exception->getMessage() . ' The connection-test result also could not be saved: ' . $status_exception->getMessage() );
+			}
+			throw $exception;
+		}
+	}
+
+	private static function record_connection_test( $event_id, $error ) {
+		global $wpdb;
+		if ( false === $wpdb->update( MRSA::table( 'event_email_settings' ), array( 'last_tested_at' => gmdate( 'Y-m-d H:i:s' ), 'last_test_error' => substr( (string) $error, 0, 65535 ) ), array( 'event_id' => $event_id ) ) ) {
+			throw new RuntimeException( 'The inbox connection-test result could not be saved.' );
+		}
 	}
 
 	private static function plain( array $input, $key, $limit, $required = false ) {
@@ -417,12 +501,7 @@ final class MRSA_Email_Submissions {
 	}
 
 	private static function gmail_messages( array $settings ) {
-		$token = self::oauth_token( 'https://oauth2.googleapis.com/token', array(
-			'client_id' => $settings['client_id'],
-			'client_secret' => $settings['client_secret'],
-			'refresh_token' => $settings['refresh_token'],
-			'grant_type' => 'refresh_token',
-		) );
+		$token = self::gmail_token( $settings );
 		$headers = array( 'Authorization' => 'Bearer ' . $token );
 		$user = rawurlencode( $settings['mailbox'] );
 		$list = self::http_json( 'https://gmail.googleapis.com/gmail/v1/users/' . $user . '/messages?q=is%3Aunread%20has%3Aattachment&maxResults=' . self::MAX_MESSAGES, array( 'method' => 'GET', 'headers' => $headers ) );
@@ -455,6 +534,15 @@ final class MRSA_Email_Submissions {
 			);
 		}
 		return $messages;
+	}
+
+	private static function gmail_token( array $settings ) {
+		return self::oauth_token( 'https://oauth2.googleapis.com/token', array(
+			'client_id' => $settings['client_id'],
+			'client_secret' => $settings['client_secret'],
+			'refresh_token' => $settings['refresh_token'],
+			'grant_type' => 'refresh_token',
+		) );
 	}
 
 	private static function gmail_parts( array $part, array &$attachments, $fetch ) {
@@ -503,13 +591,7 @@ final class MRSA_Email_Submissions {
 	}
 
 	private static function microsoft_messages( array $settings ) {
-		$tenant = rawurlencode( $settings['tenant_id'] );
-		$token = self::oauth_token( 'https://login.microsoftonline.com/' . $tenant . '/oauth2/v2.0/token', array(
-			'client_id' => $settings['client_id'],
-			'client_secret' => $settings['client_secret'],
-			'refresh_token' => $settings['refresh_token'],
-			'grant_type' => 'refresh_token',
-		) );
+		$token = self::microsoft_token( $settings );
 		$headers = array( 'Authorization' => 'Bearer ' . $token );
 		$user = rawurlencode( $settings['mailbox'] );
 		$folder = rawurlencode( $settings['folder'] ?: 'inbox' );
@@ -554,23 +636,18 @@ final class MRSA_Email_Submissions {
 		return $messages;
 	}
 
+	private static function microsoft_token( array $settings ) {
+		$tenant = rawurlencode( $settings['tenant_id'] );
+		return self::oauth_token( 'https://login.microsoftonline.com/' . $tenant . '/oauth2/v2.0/token', array(
+			'client_id' => $settings['client_id'],
+			'client_secret' => $settings['client_secret'],
+			'refresh_token' => $settings['refresh_token'],
+			'grant_type' => 'refresh_token',
+		) );
+	}
+
 	private static function imap_messages( array $settings ) {
-		if ( ! function_exists( 'imap_open' ) ) {
-			throw new RuntimeException( 'The PHP IMAP extension is required for IMAP inboxes.' );
-		}
-		$flags = '/imap';
-		if ( 'ssl' === $settings['encryption'] ) {
-			$flags .= '/ssl';
-		} elseif ( 'tls' === $settings['encryption'] ) {
-			$flags .= '/tls';
-		} else {
-			$flags .= '/notls';
-		}
-		$mailbox_name = '{' . $settings['host'] . ':' . (int) $settings['port'] . $flags . '}' . $settings['folder'];
-		$mailbox = @imap_open( $mailbox_name, $settings['username'], $settings['password'], 0, 1 );
-		if ( ! $mailbox ) {
-			throw new RuntimeException( 'The IMAP mailbox could not be opened: ' . ( imap_last_error() ?: 'unknown error' ) );
-		}
+		$mailbox = self::open_imap( $settings );
 		$messages = array();
 		$uids = imap_search( $mailbox, 'UNSEEN', SE_UID ) ?: array();
 		$uids = array_slice( array_reverse( $uids ), 0, self::MAX_MESSAGES );
@@ -605,6 +682,26 @@ final class MRSA_Email_Submissions {
 			imap_close( $mailbox );
 		}
 		return $messages;
+	}
+
+	private static function open_imap( array $settings ) {
+		if ( ! function_exists( 'imap_open' ) ) {
+			throw new RuntimeException( 'The PHP IMAP extension is required for IMAP inboxes.' );
+		}
+		$flags = '/imap';
+		if ( 'ssl' === $settings['encryption'] ) {
+			$flags .= '/ssl';
+		} elseif ( 'tls' === $settings['encryption'] ) {
+			$flags .= '/tls';
+		} else {
+			$flags .= '/notls';
+		}
+		$mailbox_name = '{' . $settings['host'] . ':' . (int) $settings['port'] . $flags . '}' . $settings['folder'];
+		$mailbox = @imap_open( $mailbox_name, $settings['username'], $settings['password'], 0, 1 );
+		if ( ! $mailbox ) {
+			throw new RuntimeException( 'The IMAP mailbox could not be opened: ' . ( imap_last_error() ?: 'unknown error' ) );
+		}
+		return $mailbox;
 	}
 
 	private static function imap_parts( $mailbox, $uid, $part, $prefix, array &$attachments ) {

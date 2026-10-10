@@ -127,6 +127,14 @@
 .mrsa .mrsa-email-provider-help .mrsa-url-help-content h4 { margin-top: 0; }
 .mrsa .mrsa-email-provider-help .mrsa-url-help-content h5 { margin-bottom: 4px; }
 .mrsa .mrsa-email-provider-help .mrsa-url-help-content ol { margin-top: 4px; }
+.mrsa .mrsa-email-connected { border-color: #008a20; border-left-width: 4px; background: #edfaef; }
+.mrsa .mrsa-email-connected h2, .mrsa .mrsa-email-connected .mrsa-email-status { color: #006b1b; }
+.mrsa .mrsa-email-connection-failed { border-color: #b32d2e; border-left-width: 4px; background: #fcf0f1; }
+.mrsa .mrsa-email-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.mrsa .mrsa-email-summary { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 5px 10px; overflow-wrap: anywhere; }
+.mrsa .mrsa-email-summary span { color: #50575e; }
+.mrsa .mrsa-inline-form { display: inline; margin: 0; }
+.mrsa .mrsa-email-status { margin-bottom: 0; }
 .mrsa .mrsa-import-feedback { min-width: 0; overflow-wrap: anywhere; }
 .mrsa .mrsa-import-feedback:empty { display: none; }
 .mrsa .mrsa-import-feedback .notice-success { border-left-color: #008a20; background: #edfaef; color: #004d16; }

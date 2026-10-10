@@ -68,6 +68,8 @@ final class MRSA {
 			encrypted_settings longtext NOT NULL,
 			last_checked_at datetime DEFAULT NULL,
 			last_error text NOT NULL,
+			last_tested_at datetime DEFAULT NULL,
+			last_test_error text NOT NULL,
 			PRIMARY KEY  (event_id)
 		) ENGINE=InnoDB $c;" );
 		$t = self::table( 'bikes' );

@@ -209,6 +209,12 @@ final class MRSA_Admin {
 					$message = MRSA_Email_Submissions::process_event( $extra['event_id'] );
 					$tab = 'event-email';
 					break;
+				case 'event_email_test':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					self::require_event( $extra['event_id'] );
+					$message = MRSA_Email_Submissions::test_connection( $extra['event_id'] );
+					$tab = 'event-edit';
+					break;
 				case 'submission_review':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_scoring_event( $extra['event_id'] );
@@ -378,6 +384,10 @@ final class MRSA_Admin {
 			wp_safe_redirect( $redirect );
 			exit;
 		} catch ( RuntimeException $e ) {
+			if ( 'event_email_test' === $op && ! empty( $extra['event_id'] ) && MRSA::event_access( $extra['event_id'] ) && MRSA::row( 'events', $extra['event_id'] ) ) {
+				wp_safe_redirect( self::url( 'event-edit', array( 'event_id' => $extra['event_id'], 'error' => $e->getMessage() ) ) );
+				exit;
+			}
 			if ( null !== $bonus_step && ! empty( $extra['event_id'] ) && MRSA::event_access( $extra['event_id'] ) && MRSA::row( 'events', $extra['event_id'] ) ) {
 				self::bonus_redirect( array( 'event_id' => $extra['event_id'] ), $bonus_step, $e->getMessage(), 'error' );
 			}

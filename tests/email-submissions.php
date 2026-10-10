@@ -108,6 +108,18 @@ function sanitize_email( $value ) { return filter_var( $value, FILTER_VALIDATE_E
 function sanitize_text_field( $value ) { return trim( strip_tags( (string) $value ) ); }
 function sanitize_textarea_field( $value ) { return trim( strip_tags( (string) $value ) ); }
 function get_current_user_id() { return 22; }
+function wp_safe_remote_request( $url, $args ) {
+	if ( false !== strpos( $url, 'oauth2.googleapis.com/token' ) ) {
+		return array( 'response' => array( 'code' => 200 ), 'body' => json_encode( array( 'access_token' => 'test-access-token' ) ) );
+	}
+	if ( false !== strpos( $url, '/profile' ) ) {
+		return array( 'response' => array( 'code' => 200 ), 'body' => json_encode( array( 'emailAddress' => 'submissions@example.test' ) ) );
+	}
+	return array( 'response' => array( 'code' => 404 ), 'body' => '{}' );
+}
+function is_wp_error( $value ) { return false; }
+function wp_remote_retrieve_response_code( $response ) { return $response['response']['code']; }
+function wp_remote_retrieve_body( $response ) { return $response['body']; }
 
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-email-submissions.php';
 
@@ -148,6 +160,19 @@ MRSA_Email_Submissions::save_configuration( 7, array(
 	'password' => '',
 ) );
 check( 'first-secret' === MRSA_Email_Submissions::configuration( 7, true )['settings']['password'], 'blank secret fields preserve the saved credential' );
+$status = MRSA_Email_Submissions::configuration_status( 7 );
+check( $status['configured'] && ! $status['connected'] && 'IMAP' === $status['provider_label'], 'a complete saved inbox is displayed but remains unverified before a connection test' );
+MRSA_Email_Submissions::save_configuration( 7, array(
+	'provider' => 'gmail',
+	'enabled' => '1',
+	'mailbox' => 'submissions@example.test',
+	'client_id' => 'gmail-client-id',
+	'client_secret' => 'gmail-client-secret',
+	'refresh_token' => 'gmail-refresh-token',
+) );
+check( false !== strpos( MRSA_Email_Submissions::test_connection( 7 ), 'passed' ), 'the email inbox test authenticates without processing messages' );
+$status = MRSA_Email_Submissions::configuration_status( 7 );
+check( $status['connected'] && 'Gmail API (OAuth)' === $status['provider_label'] && $status['last_tested_at'], 'a successful current connection test marks the inbox as connected' );
 check( 'B12' === invoke_private( 'subject_bonus_id', 7, 'Rider submission B12' ), 'one subject bonus code resolves to its library ID' );
 check( '' === invoke_private( 'subject_bonus_id', 7, 'B12 and B13' ), 'multiple subject bonus codes are rejected' );
 check( '' === invoke_private( 'subject_bonus_id', 7, 'B120' ), 'partial bonus-code matches are rejected' );

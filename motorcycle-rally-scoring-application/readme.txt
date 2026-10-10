@@ -290,6 +290,7 @@ No. Rider and pillion prices are event configuration values only.
 
 = Unreleased =
 * Added Gmail API setup guidance in a provider-specific Help? hover/focus panel on the event inbox configuration page.
+* Added event inbox connection testing, verified-connection highlighting, and mailbox/provider status on Event Configuration.
 
 = 0.1.17 =
 * Removed the plugin-defined site-wide administrator assignment and legacy storage. WordPress administrators now manage shared application data, while plugin administrator assignments exist only at the event level.
