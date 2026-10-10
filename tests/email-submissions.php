@@ -109,6 +109,7 @@ function sanitize_text_field( $value ) { return trim( strip_tags( (string) $valu
 function sanitize_textarea_field( $value ) { return trim( strip_tags( (string) $value ) ); }
 function get_current_user_id() { return 22; }
 function wp_safe_remote_request( $url, $args ) {
+	$GLOBALS['email_test_requests'][] = $url;
 	if ( false !== strpos( $url, 'oauth2.googleapis.com/token' ) ) {
 		return array( 'response' => array( 'code' => 200 ), 'body' => json_encode( array( 'access_token' => 'test-access-token' ) ) );
 	}
@@ -184,6 +185,7 @@ MRSA_Email_Submissions::save_configuration( 7, array(
 	'refresh_token' => 'gmail-refresh-token',
 ) );
 check( false !== strpos( MRSA_Email_Submissions::test_connection( 7 ), 'passed' ), 'the email inbox test authenticates without processing messages' );
+check( in_array( 'https://gmail.googleapis.com/gmail/v1/users/me/profile', $GLOBALS['email_test_requests'], true ), 'Gmail connection tests address the authenticated OAuth account' );
 $status = MRSA_Email_Submissions::configuration_status( 7 );
 check( $status['connected'] && 'Gmail API (OAuth)' === $status['provider_label'] && $status['last_tested_at'], 'a successful current connection test marks the inbox as connected' );
 check( 'B12' === invoke_private( 'subject_bonus_id', 7, 'Rider submission B12' ), 'one subject bonus code resolves to its library ID' );

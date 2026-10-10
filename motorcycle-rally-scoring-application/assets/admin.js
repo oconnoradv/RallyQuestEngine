@@ -302,13 +302,17 @@
 	});
 	root.querySelectorAll('.mrsa-email-config').forEach(form => {
 		const provider = form.querySelector('[name="provider"]');
-		const refreshProviderHelp = () => {
-			form.querySelectorAll('[data-email-provider-only]').forEach(help => {
-				help.hidden = help.dataset.emailProviderOnly !== provider.value;
+		const refreshProviderFields = () => {
+			form.querySelectorAll('[data-email-provider-types]').forEach(group => {
+				const visible = group.dataset.emailProviderTypes.split(/\s+/).includes(provider.value);
+				group.hidden = !visible;
+				group.querySelectorAll('input, select, textarea, button').forEach(field => {
+					field.disabled = !visible;
+				});
 			});
 		};
-		provider.addEventListener('change', refreshProviderHelp);
-		refreshProviderHelp();
+		provider.addEventListener('change', refreshProviderFields);
+		refreshProviderFields();
 	});
 	const galleryDialog = root.querySelector('.mrsa-gallery-dialog');
 	if (galleryDialog && typeof galleryDialog.showModal === 'function') {

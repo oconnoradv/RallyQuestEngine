@@ -167,7 +167,7 @@ final class MRSA_Email_Submissions {
 				imap_close( $mailbox );
 			} elseif ( 'gmail' === $config['provider'] ) {
 				$token = self::gmail_token( $config['settings'] );
-				self::http_json( 'https://gmail.googleapis.com/gmail/v1/users/' . rawurlencode( $config['settings']['mailbox'] ) . '/profile', array( 'method' => 'GET', 'headers' => array( 'Authorization' => 'Bearer ' . $token ) ) );
+				self::http_json( 'https://gmail.googleapis.com/gmail/v1/users/me/profile', array( 'method' => 'GET', 'headers' => array( 'Authorization' => 'Bearer ' . $token ) ) );
 			} elseif ( 'microsoft' === $config['provider'] ) {
 				$token = self::microsoft_token( $config['settings'] );
 				$user = rawurlencode( $config['settings']['mailbox'] );
@@ -509,7 +509,7 @@ final class MRSA_Email_Submissions {
 	private static function gmail_messages( array $settings ) {
 		$token = self::gmail_token( $settings );
 		$headers = array( 'Authorization' => 'Bearer ' . $token );
-		$user = rawurlencode( $settings['mailbox'] );
+		$user = 'me';
 		$list = self::http_json( 'https://gmail.googleapis.com/gmail/v1/users/' . $user . '/messages?q=is%3Aunread%20has%3Aattachment&maxResults=' . self::MAX_MESSAGES, array( 'method' => 'GET', 'headers' => $headers ) );
 		$messages = array();
 		foreach ( $list['messages'] ?? array() as $item ) {
