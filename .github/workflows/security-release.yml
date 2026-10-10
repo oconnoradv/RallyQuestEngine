@@ -23,6 +23,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Check PHP and JavaScript syntax
@@ -32,6 +33,22 @@ jobs:
           find motorcycle-rally-scoring-application -name '*.php' -print0 |
             xargs -0 -r -n 1 php -l
           node --check motorcycle-rally-scoring-application/assets/admin.js
+          node tests/release-security.cjs
+
+      - name: Check bonus image import behavior
+        run: |
+          php tests/bonus-import.php
+          php tests/bonus-feedback.php
+          php tests/diagnostics.php
+          php tests/configuration-check.php
+          php tests/image-queue.php
+          php tests/roster-import.php
+          php tests/backend-services.php
+          php tests/jpeg-policy.php
+          php tests/raster-policy.php
+          php tests/read-models.php
+          php tests/diagnostic-contracts.php
+          php tests/email-submissions.php
 
       - name: Install static security scanner
         shell: bash
@@ -40,17 +57,39 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/semgrep"
           "$RUNNER_TEMP/semgrep/bin/pip" install semgrep==1.180.0
 
+      - name: Verify WordPress exploit rules against regression fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/semgrep/bin/semgrep" --test \
+            --config .github/semgrep/wordpress.yml tests/security/wordpress.php \
+            --metrics=off --disable-version-check --strict
+
       - name: Scan PHP and JavaScript for security findings
         shell: bash
         run: |
           set -euo pipefail
           "$RUNNER_TEMP/semgrep/bin/semgrep" scan \
-            --config p/php --config p/javascript \
+            --config p/php --config p/javascript --config .github/semgrep/wordpress.yml \
             --metrics=off --disable-version-check \
             --strict --error --timeout 0 \
             motorcycle-rally-scoring-application
 
-      - name: Scan for known dependency vulnerabilities and secrets
+      - name: Check full Git history and working tree with Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/gitleaks_8.24.3_linux_x64.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz \
+            --output "$archive"
+          echo "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c  $archive" | sha256sum --check
+          mkdir "$RUNNER_TEMP/gitleaks"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/gitleaks" gitleaks
+          "$RUNNER_TEMP/gitleaks/gitleaks" git --config .github/gitleaks.toml --redact --exit-code 1 --log-opts="--all" .
+          "$RUNNER_TEMP/gitleaks/gitleaks" dir --config .github/gitleaks.toml --redact --exit-code 1 .
+
+      - name: Scan dependencies and secrets with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: v0.71.1
@@ -94,15 +133,113 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  codeql:
+    name: CodeQL release-source analysis
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      notice: ${{ steps.policy.outputs.notice }}
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Report CodeQL visibility policy
+        id: policy
+        env:
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          if [ "$REPOSITORY_PRIVATE" = "true" ]; then
+            notice="CodeQL was skipped because the repository is private. Publication remains permitted when the other security gates pass."
+            echo "::notice::$notice"
+            echo "$notice" >> "$GITHUB_STEP_SUMMARY"
+            echo "notice=$notice" >> "$GITHUB_OUTPUT"
+          elif [ "$REPOSITORY_PRIVATE" = "false" ]; then
+            echo "notice=CodeQL JavaScript security analysis passed." >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Repository visibility was unavailable; cannot determine the CodeQL policy."
+            exit 1
+          fi
+      - name: Check out release source
+        if: github.event.repository.private == false
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Initialize CodeQL
+        if: github.event.repository.private == false
+        uses: github/codeql-action/init@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+      - name: Analyze the checked-out commit
+        if: github.event.repository.private == false
+        id: analyze
+        uses: github/codeql-action/analyze@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
+        with:
+          output: ${{ runner.temp }}/codeql-results
+      - name: Reject CodeQL findings or incomplete reports
+        if: github.event.repository.private == false
+        env:
+          SARIF_DIRECTORY: ${{ steps.analyze.outputs.sarif-output }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const { checkCodeQL } = require('./.github/scripts/release-security.cjs');
+          const directory = process.env.SARIF_DIRECTORY;
+          if (!directory) throw new Error('CodeQL did not return an output directory.');
+          const reports = fs.readdirSync(directory).filter(file => file.endsWith('.sarif'))
+            .map(file => JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8')));
+          checkCodeQL(reports);
+          NODE
+
+  dependabot:
+    name: Dependabot release gate
+    if: github.event_name == 'workflow_dispatch' || (startsWith(github.ref, 'refs/tags/v') && github.event_name != 'pull_request')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Require Dependabot alert access
+        env:
+          ALERT_TOKEN: ${{ secrets.RELEASE_SECURITY_TOKEN }}
+        run: |
+          if [ -z "$ALERT_TOKEN" ]; then
+            echo "::error::Configure RELEASE_SECURITY_TOKEN with Dependabot alerts read permission and enable repository Dependabot alerts."
+            exit 1
+          fi
+      - name: Block all open Dependabot alerts
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          github-token: ${{ secrets.RELEASE_SECURITY_TOKEN }}
+          script: |
+            const { checkDependabot } = require('./.github/scripts/release-security.cjs');
+            await checkDependabot(github, context.repo);
+
   release:
     name: Publish ZIP release
-    needs: security
+    needs: [security, codeql, dependabot]
     if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: write
     steps:
+      - name: Check out verified release source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Recheck Dependabot immediately before publication
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          github-token: ${{ secrets.RELEASE_SECURITY_TOKEN }}
+          script: |
+            const { checkDependabot } = require('./.github/scripts/release-security.cjs');
+            await checkDependabot(github, context.repo);
       - name: Download verified release package
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -116,6 +253,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
+          CODEQL_NOTICE: ${{ needs.codeql.outputs.notice }}
         run: |
           set -euo pipefail
           sha256sum --check SHA256SUMS
@@ -123,4 +261,4 @@ jobs:
             "motorcycle-rally-scoring-application-$RELEASE_TAG.zip" SHA256SUMS \
             --verify-tag \
             --title "Motorcycle Rally Scoring Application $RELEASE_TAG" \
-            --notes "Install the ZIP through WordPress Plugins > Add New > Upload Plugin. This source passed the workflow's syntax, Semgrep static security, and Trivy dependency/secret checks. These checks do not certify NIST compliance or absence of all CVEs; deployed WordPress, PHP, and other plugins require separate assessment. Scoring tabs remain placeholders."
+            --notes "Install the ZIP through WordPress Plugins > Add New > Upload Plugin. See the bundled readme changelog for this version's changes. This source passed syntax, Semgrep static security (including WordPress exploit rules), Trivy dependency/secret, and Gitleaks history/working-tree secret checks. $CODEQL_NOTICE Publication also required no open repository Dependabot alerts. These checks do not certify NIST compliance or absence of all CVEs; deployed WordPress, PHP, and other plugins require separate assessment. Event-scoped IMAP, Gmail API, and Microsoft 365 inboxes can ingest rider bonus submissions for Administrator or Scorer review with transactional point awards. Back up the database and event gallery files separately before upgrading."

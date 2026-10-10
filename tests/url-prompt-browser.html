@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Load by URL prompt regression</title>
+<div class="mrsa">
+	<div id="mrsa-import-images">
+		<form action="https://example.test/wp-admin/admin-post.php" method="post">
+			<input type="hidden" name="action" value="mrsa_save">
+			<input type="file" name="bonus_images[]">
+			<div class="mrsa-url-source"><button type="button" class="button mrsa-url-open" hidden>Load by URL</button><div class="mrsa-url-prompt"><h4 id="mrsa-url-prompt-title" hidden>Load bonus images by URL</h4><p class="mrsa-url-prompt-hint" hidden>Hint</p><label class="mrsa-field"><span>URL</span><input type="url" name="gallery_url" value=""></label><div class="mrsa-url-actions"><button type="button" class="button mrsa-url-cancel" hidden>Cancel</button><button class="button mrsa-url-submit" type="submit" name="image_source" value="url">Load by URL</button></div></div></div>
+			<button type="submit" class="button">Validate and Import Bonus Images</button>
+		</form>
+	</div>
+</div>
+<pre id="result">RUNNING</pre>
+<script src="../motorcycle-rally-scoring-application/assets/admin.js"></script>
+<script>
+	'use strict';
+	(async () => {
+		const result = document.querySelector('#result');
+		const form = document.querySelector('form');
+		const opener = document.querySelector('.mrsa-url-open');
+		const dialog = document.querySelector('.mrsa-url-dialog');
+		const input = form.querySelector('[name="gallery_url"]');
+		const submit = form.querySelector('.mrsa-url-submit');
+		const submissions = [];
+		form.addEventListener('submit', event => {
+			event.preventDefault();
+			submissions.push(new FormData(form, event.submitter));
+		});
+		const assert = (condition, message) => { if (!condition) throw new Error(message); };
+		try {
+			assert(dialog && !opener.hidden, 'Load by URL button must be the only visible URL control.');
+			assert(!dialog.open && dialog.contains(input) && form.contains(dialog), 'URL field must be inside a closed dialog that remains part of the form.');
+			assert(!input.required, 'Closed prompt must not block the local-file import button.');
+			form.querySelector('button:not(.mrsa-url-open):not(.mrsa-url-cancel):not(.mrsa-url-submit)').click();
+			assert(submissions.length === 1 && !submissions[0].get('image_source'), 'Local import must submit without requiring a URL.');
+			opener.click();
+			assert(dialog.open && input.required && document.activeElement === input, 'Load by URL must open a focused URL prompt.');
+			assert(submit.textContent === 'Load Images' && !dialog.querySelector('.mrsa-url-cancel').hidden, 'Prompt must show Cancel and Load Images actions.');
+			submit.click();
+			assert(submissions.length === 1, 'Empty URL must not submit.');
+			input.value = 'not a url';
+			submit.click();
+			assert(submissions.length === 1, 'Invalid URL must not submit.');
+			input.value = 'https://example.com/event-images/';
+			submit.click();
+			assert(submissions.length === 2 && submissions[1].get('image_source') === 'url' && submissions[1].get('gallery_url') === 'https://example.com/event-images/', 'Prompt must submit the URL with the URL import source.');
+			dialog.querySelector('.mrsa-url-cancel').click();
+			await new Promise(resolve => setTimeout(resolve, 50));
+			assert(!dialog.open && input.value === '' && !input.required && document.activeElement === opener, 'Cancel must close, clear the URL and return focus.');
+			result.textContent = 'PASS: Load by URL prompts for a validated URL, submits it with the URL source, and cancel clears it without blocking local imports.';
+		} catch (error) {
+			result.textContent = 'FAIL: ' + error.message;
+		}
+	})();
+</script>
+</html>
