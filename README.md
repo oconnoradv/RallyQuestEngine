@@ -1,4 +1,10 @@
+<p align="center">
+  <img src="docs/mrsa-header.svg" alt="Motorcycle Rally Scoring Application" width="100%">
+</p>
+
 # Motorcycle Rally Scoring Application
+
+**Current release: [v0.1.18](https://github.com/oconnoradv/MotorcycleRallyScoringApp/releases/tag/v0.1.18)**
 
 A WordPress plugin for administering motorcycle rallies, including administrator assignments, a motorcycle catalog, master rider records, event configuration, and event enrollment. Requires WordPress 6.2+, PHP 7.4+, MySQL 8.0+ or MariaDB 10.6+ with InnoDB, and the installed/active [Action Scheduler plugin](https://wordpress.org/plugins/action-scheduler/). Licensed under the GNU General Public License v3 or later (see [LICENSE](LICENSE)).
 
