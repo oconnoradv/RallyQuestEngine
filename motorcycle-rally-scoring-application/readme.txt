@@ -4,7 +4,7 @@ Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.1.17
+Stable tag: 0.1.18
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -288,7 +288,7 @@ No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
 
-= Unreleased =
+= 0.1.18 =
 * Added Gmail API setup guidance in a provider-specific Help? hover/focus panel on the event inbox configuration page.
 * Added event inbox connection testing, verified-connection highlighting, and mailbox/provider status on Event Configuration.
 * Improved inbox configuration validation errors to identify the exact missing or oversized provider credential.
