@@ -127,6 +127,14 @@
 .mrsa .mrsa-email-provider-help .mrsa-url-help-content h4 { margin-top: 0; }
 .mrsa .mrsa-email-provider-help .mrsa-url-help-content h5 { margin-bottom: 4px; }
 .mrsa .mrsa-email-provider-help .mrsa-url-help-content ol { margin-top: 4px; }
+.mrsa .mrsa-email-config { max-width: 1200px; }
+.mrsa .mrsa-email-setup-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr); gap: 28px; align-items: start; margin-top: 16px; }
+.mrsa .mrsa-email-setup-fields { min-width: 0; }
+.mrsa .mrsa-email-setup-instructions { min-width: 0; padding: 16px 18px; border-left: 4px solid #2271b1; background: #f0f6fc; overflow-wrap: anywhere; }
+.mrsa .mrsa-email-setup-instructions h3 { margin-top: 0; }
+.mrsa .mrsa-email-setup-instructions ol { margin: 0 0 14px 20px; }
+.mrsa .mrsa-email-setup-instructions li { margin-bottom: 7px; }
+.mrsa .mrsa-email-security-note { margin-bottom: 0; padding-top: 12px; border-top: 1px solid #c3c4c7; }
 .mrsa .mrsa-email-connected { border-color: #008a20; border-left-width: 4px; background: #edfaef; }
 .mrsa .mrsa-email-connected h2, .mrsa .mrsa-email-connected .mrsa-email-status { color: #006b1b; }
 .mrsa .mrsa-email-connection-failed { border-color: #b32d2e; border-left-width: 4px; background: #fcf0f1; }
@@ -164,4 +172,5 @@
 	.mrsa .mrsa-roster-event-select .mrsa-field { min-width: min(100%, 240px); }
 	.mrsa .mrsa-roster-toolbar__actions { justify-content: space-between; }
 	.mrsa .mrsa-submission-comparison { grid-template-columns: 1fr; }
+	.mrsa .mrsa-email-setup-layout { grid-template-columns: 1fr; }
 }

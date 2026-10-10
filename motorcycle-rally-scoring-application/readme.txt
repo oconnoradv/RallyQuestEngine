@@ -291,6 +291,7 @@ No. Rider and pillion prices are event configuration values only.
 = Unreleased =
 * Show only the settings required by the selected IMAP, Gmail API, or Microsoft 365 inbox provider.
 * Address Gmail API requests through the authenticated account to avoid mailbox user-resource 404 responses.
+* Display provider-specific IMAP, Gmail OAuth, and Microsoft 365 setup instructions beside the inbox fields.
 
 = 0.1.18 =
 * Added Gmail API setup guidance in a provider-specific Help? hover/focus panel on the event inbox configuration page.
