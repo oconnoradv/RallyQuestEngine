@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
 final class MRSA {
 	public static function table( $name ) {
 		global $wpdb;
-		$allowed = array( 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'import_audit' );
+		$allowed = array( 'event_admins', 'event_scorers', 'event_email_settings', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
 		if ( ! in_array( $name, $allowed, true ) ) {
 			throw new InvalidArgumentException( 'Unknown MRSA table.' );
 		}
@@ -19,14 +19,22 @@ final class MRSA {
 		self::install();
 	}
 
+	public static function deactivate() {
+		if ( function_exists( 'as_unschedule_all_actions' ) ) {
+			as_unschedule_all_actions( 'mrsa_process_submission_inboxes', array(), 'mrsa' );
+		}
+	}
+
 	public static function init() {
 		add_action( 'mrsa_bonus_expire', array( 'MRSA_Bonus', 'expire' ), 10, 3 );
+		add_action( 'mrsa_process_submission_inboxes', array( 'MRSA_Email_Submissions', 'process_all' ) );
 		if ( get_option( 'mrsa_db_version' ) !== MRSA_DB_VERSION ) {
 			self::install();
 		}
 		if ( is_admin() ) {
 			MRSA_Admin::init();
 		}
+		MRSA_Email_Submissions::schedule();
 		add_filter( 'wp_privacy_personal_data_exporters', array( __CLASS__, 'exporters' ) );
 		add_filter( 'wp_privacy_personal_data_erasers', array( __CLASS__, 'erasers' ) );
 	}
@@ -44,6 +52,23 @@ final class MRSA {
 			user_id bigint(20) unsigned NOT NULL,
 			PRIMARY KEY  (event_id,user_id),
 			KEY user_id (user_id)
+		) ENGINE=InnoDB $c;" );
+		$t = self::table( 'event_scorers' );
+		dbDelta( "CREATE TABLE $t (
+			event_id bigint(20) unsigned NOT NULL,
+			user_id bigint(20) unsigned NOT NULL,
+			PRIMARY KEY  (event_id,user_id),
+			KEY user_id (user_id)
+		) ENGINE=InnoDB $c;" );
+		$t = self::table( 'event_email_settings' );
+		dbDelta( "CREATE TABLE $t (
+			event_id bigint(20) unsigned NOT NULL,
+			provider varchar(20) NOT NULL,
+			enabled tinyint(1) unsigned NOT NULL DEFAULT 0,
+			encrypted_settings longtext NOT NULL,
+			last_checked_at datetime DEFAULT NULL,
+			last_error text NOT NULL,
+			PRIMARY KEY  (event_id)
 		) ENGINE=InnoDB $c;" );
 		$t = self::table( 'bikes' );
 		dbDelta( "CREATE TABLE $t (
@@ -134,6 +159,34 @@ final class MRSA {
 			UNIQUE KEY event_bonus (event_id,bonus_id),
 			KEY event_id (event_id)
 		) ENGINE=InnoDB $c;" );
+		$t = self::table( 'bonus_submissions' );
+		dbDelta( "CREATE TABLE $t (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			event_id bigint(20) unsigned NOT NULL,
+			registration_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			rider_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			bib int(10) unsigned NOT NULL DEFAULT 0,
+			bonus_id varchar(64) NOT NULL DEFAULT '',
+			sender_email varchar(254) NOT NULL DEFAULT '',
+			provider varchar(20) NOT NULL,
+			provider_message_id varchar(191) NOT NULL,
+			provider_message_hash char(64) NOT NULL,
+			email_subject varchar(255) NOT NULL DEFAULT '',
+			submission_description text NOT NULL,
+			submitted_at datetime NOT NULL,
+			image_file varchar(255) NOT NULL DEFAULT '',
+			status varchar(20) NOT NULL DEFAULT 'pending',
+			points_awarded bigint(20) unsigned NOT NULL DEFAULT 0,
+			reviewed_by bigint(20) unsigned NOT NULL DEFAULT 0,
+			reviewed_at datetime DEFAULT NULL,
+			rejection_code varchar(32) NOT NULL DEFAULT '',
+			rejection_description text NOT NULL,
+			created_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY provider_message (event_id,provider,provider_message_hash),
+			KEY event_status (event_id,status,id),
+			KEY rider_history (event_id,rider_id,id)
+		) ENGINE=InnoDB $c;" );
 		$t = self::table( 'import_audit' );
 		dbDelta( "CREATE TABLE $t (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -181,12 +234,36 @@ final class MRSA {
 		return array_map( 'intval', $wpdb->get_col( $wpdb->prepare( 'SELECT a.event_id FROM ' . self::table( 'event_admins' ) . ' a INNER JOIN ' . self::table( 'events' ) . ' e ON e.id=a.event_id WHERE a.user_id=%d', get_current_user_id() ) ) );
 	}
 
+	public static function scoring_event_ids() {
+		global $wpdb;
+		if ( self::site_access() ) {
+			return array_map( 'intval', $wpdb->get_col( 'SELECT id FROM ' . self::table( 'events' ) ) );
+		}
+		return array_map( 'intval', $wpdb->get_col( $wpdb->prepare(
+			'SELECT event_id FROM ' . self::table( 'event_admins' ) . ' WHERE user_id=%d UNION SELECT event_id FROM ' . self::table( 'event_scorers' ) . ' WHERE user_id=%d',
+			get_current_user_id(),
+			get_current_user_id()
+		) ) );
+	}
+
 	public static function event_access( $id ) {
 		return $id > 0 && in_array( (int) $id, self::event_ids(), true );
 	}
 
+	public static function scoring_access( $id ) {
+		return $id > 0 && in_array( (int) $id, self::scoring_event_ids(), true );
+	}
+
+	public static function scorer_access( $id ) {
+		global $wpdb;
+		if ( self::site_access() || self::event_access( $id ) ) {
+			return true;
+		}
+		return $id > 0 && (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'event_scorers' ) . ' WHERE event_id=%d AND user_id=%d', $id, get_current_user_id() ) );
+	}
+
 	public static function access() {
-		return is_user_logged_in() && ( self::site_access() || count( self::event_ids() ) > 0 );
+		return is_user_logged_in() && ( self::site_access() || count( self::scoring_event_ids() ) > 0 );
 	}
 
 	public static function row( $table, $id ) {
@@ -231,15 +308,29 @@ final class MRSA {
 				$result_status = $event['status_manual'] ? $event['status'] : ( (int) $event['score'] > (int) $event['min_finisher_points'] ? 'Preliminary Finisher' : 'Registered' );
 				$fields[] = array( 'name' => 'Event / bib / pillion / registration status / result status / score / placing', 'value' => implode( ' / ', array( $event['name'], $event['bib'], $event['pillion'], $event['registration_status'], $result_status, $event['score'], $event['placing'] ) ) );
 			}
+			$submissions = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,s.bib,s.bonus_id,s.email_subject,s.submission_description,s.submitted_at,s.status,s.points_awarded,s.rejection_code,s.rejection_description FROM ' . self::table( 'bonus_submissions' ) . ' s JOIN ' . self::table( 'events' ) . ' e ON e.id=s.event_id WHERE s.rider_id=%d ORDER BY s.submitted_at', $rider['id'] ), ARRAY_A );
+			foreach ( $submissions as $submission ) {
+				$fields[] = array( 'name' => 'Bonus email submission', 'value' => implode( ' / ', array( $submission['name'], $submission['bib'], $submission['bonus_id'], $submission['email_subject'], $submission['submission_description'], $submission['submitted_at'], $submission['status'], $submission['points_awarded'], $submission['rejection_code'], $submission['rejection_description'] ) ) );
+			}
 			$data[] = array( 'group_id' => 'mrsa', 'group_label' => 'Rally registrations', 'item_id' => 'mrsa-rider-' . $rider['id'], 'data' => $fields );
 		}
 		$user = get_user_by( 'email', $email );
 		if ( $user ) {
-			$assignments = $wpdb->get_col( $wpdb->prepare( 'SELECT e.name FROM ' . self::table( 'event_admins' ) . ' a JOIN ' . self::table( 'events' ) . ' e ON e.id=a.event_id WHERE a.user_id=%d', $user->ID ) );
-			if ( $assignments ) {
+			$admin_assignments = $wpdb->get_col( $wpdb->prepare( 'SELECT e.name FROM ' . self::table( 'event_admins' ) . ' a JOIN ' . self::table( 'events' ) . ' e ON e.id=a.event_id WHERE a.user_id=%d', $user->ID ) );
+			$scorer_assignments = $wpdb->get_col( $wpdb->prepare( 'SELECT e.name FROM ' . self::table( 'event_scorers' ) . ' s JOIN ' . self::table( 'events' ) . ' e ON e.id=s.event_id WHERE s.user_id=%d', $user->ID ) );
+			if ( $admin_assignments || $scorer_assignments ) {
 				$data[] = array( 'group_id' => 'mrsa', 'group_label' => 'Event administration', 'item_id' => 'mrsa-user-' . $user->ID, 'data' => array(
-					array( 'name' => 'Assigned events', 'value' => implode( ', ', $assignments ) ),
+					array( 'name' => 'Event Administrator assignments', 'value' => implode( ', ', $admin_assignments ) ),
+					array( 'name' => 'Event Scorer assignments', 'value' => implode( ', ', $scorer_assignments ) ),
 				) );
+			}
+			$reviews = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,s.id,s.status,s.bonus_id,s.reviewed_at,s.rejection_code,s.rejection_description FROM ' . self::table( 'bonus_submissions' ) . ' s JOIN ' . self::table( 'events' ) . ' e ON e.id=s.event_id WHERE s.reviewed_by=%d ORDER BY s.reviewed_at', $user->ID ), ARRAY_A );
+			if ( $reviews ) {
+				$review_fields = array();
+				foreach ( $reviews as $review ) {
+					$review_fields[] = array( 'name' => 'Submission review', 'value' => implode( ' / ', array( $review['name'], $review['id'], $review['bonus_id'], $review['status'], $review['reviewed_at'], $review['rejection_code'], $review['rejection_description'] ) ) );
+				}
+				$data[] = array( 'group_id' => 'mrsa', 'group_label' => 'Event scoring reviews', 'item_id' => 'mrsa-reviews-' . $user->ID, 'data' => $review_fields );
 			}
 		}
 		return array( 'data' => $data, 'done' => true );
@@ -254,29 +345,49 @@ final class MRSA {
 		if ( $rider ) {
 			$id = (int) $rider['id'];
 			$success = false;
+			$staged_submission_files = array( 'root' => '', 'files' => array() );
 			try {
+				$submission_files = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,image_file FROM ' . self::table( 'bonus_submissions' ) . ' WHERE rider_id=%d', $id ), ARRAY_A );
+				$staged_submission_files = MRSA_Bonus::stage_submission_files( $submission_files ?: array() );
 				self::begin_transaction();
 				$success = false !== $wpdb->update( self::table( 'riders' ), array( 'name' => 'Erased rider ' . $id, 'alias' => '', 'email' => 'erased-' . $id . '@example.invalid', 'phone' => '', 'emergency_name' => '', 'emergency_email' => '', 'emergency_phone' => '', 'insurance' => '', 'other' => '' ), array( 'id' => $id ) );
 				$success = false !== $wpdb->delete( self::table( 'rider_bikes' ), array( 'rider_id' => $id ) ) && $success;
 				$success = false !== $wpdb->update( self::table( 'registrations' ), array( 'pillion' => '' ), array( 'rider_id' => $id ) ) && $success;
+				$success = false !== $wpdb->update( self::table( 'bonus_submissions' ), array( 'sender_email' => 'erased-' . $id . '@example.invalid', 'submission_description' => '', 'image_file' => '' ), array( 'rider_id' => $id ) ) && $success;
 				if ( ! $success ) {
 					throw new RuntimeException( 'Privacy erasure storage failed.' );
 				}
 				self::commit_transaction();
 			} catch ( RuntimeException $e ) {
 				self::rollback_transaction();
+				if ( ! empty( $staged_submission_files['root'] ) ) {
+					try {
+						MRSA_Bonus::restore_submission_files( $staged_submission_files );
+					} catch ( RuntimeException $restore_exception ) {
+						error_log( 'MRSA privacy erasure image restoration failed for rider #' . $id . ': ' . $restore_exception->getMessage() );
+					}
+				}
 				$success = false;
+			}
+			if ( $success && ! empty( $staged_submission_files['root'] ) ) {
+				try {
+					MRSA_Bonus::finish_staged_submission_files( $staged_submission_files );
+				} catch ( RuntimeException $cleanup_exception ) {
+					error_log( 'MRSA privacy erasure staged image cleanup failed for rider #' . $id . ': ' . $cleanup_exception->getMessage() );
+					$success = false;
+				}
 			}
 			$removed = $success;
 			$retained = true;
-			$messages[] = $success ? 'Rider personal information erased; event registration IDs, bibs, statuses, scores and placing retained for event integrity.' : 'Unable to erase rider information; please retry or contact the site administrator.';
+			$messages[] = $success ? 'Rider personal information and submission photos/descriptions erased; event registration IDs, bibs, submission decisions, statuses, scores and placing retained for event integrity.' : 'Unable to erase rider information; please retry or contact the site administrator.';
 		}
 		$user = get_user_by( 'email', $email );
 		if ( $user ) {
 			$assigned = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'event_admins' ) . ' WHERE user_id=%d LIMIT 1', $user->ID ) );
-			if ( $assigned ) {
+			$scorer = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'event_scorers' ) . ' WHERE user_id=%d LIMIT 1', $user->ID ) );
+			if ( $assigned || $scorer ) {
 				$retained = true;
-				$messages[] = 'Event administrator assignments retained for access control. Assignments can be removed from the event Configure page. WordPress user profiles and site-administrator access are managed by WordPress.';
+				$messages[] = 'Event Administrator and Event Scorer assignments retained for access control. Assignments can be removed from the event Configure page. WordPress user profiles and site-administrator access are managed by WordPress.';
 			}
 		}
 		return array( 'items_removed' => $removed, 'items_retained' => $retained, 'messages' => $messages, 'done' => true );

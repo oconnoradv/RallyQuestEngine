@@ -60,6 +60,48 @@ final class MRSA_Bonus {
 		return trailingslashit( $uploads['baseurl'] ) . 'mrsa-event-gallery/' . absint( $event_id ) . '/' . rawurlencode( $image_file );
 	}
 
+	public static function store_submission_image( $source_path, $original_name, $bonus_id, $event_id, $storage_key ) {
+		if ( ! self::valid_id( $bonus_id ) || ! preg_match( '/^[a-f0-9]{32}$/D', $storage_key ) ) {
+			throw new RuntimeException( 'The submission image identifier is invalid.' );
+		}
+		$extension = strtolower( pathinfo( basename( (string) $original_name ), PATHINFO_EXTENSION ) );
+		if ( 'jpeg' === $extension ) {
+			$extension = 'jpg';
+		}
+		if ( ! in_array( $extension, array( 'jpg', 'png', 'gif', 'webp' ), true ) ) {
+			throw new RuntimeException( 'The email attachment must be a JPEG, PNG, GIF, or WebP image with a matching file extension.' );
+		}
+		$stage_dir = self::create_stage_directory();
+		$images = array();
+		$total_size = 0;
+		try {
+			self::stage_image( $source_path, $bonus_id . '.' . $extension, $stage_dir, $images, $total_size, new MRSA_Scan_Session() );
+			$image = reset( $images );
+			$directory = trailingslashit( self::event_dir( $event_id ) ) . 'submissions';
+			self::ensure_directory( $directory );
+			$file_name = $storage_key . '.' . pathinfo( $image['image_file'], PATHINFO_EXTENSION );
+			$destination = trailingslashit( $directory ) . $file_name;
+			if ( ! self::filesystem()->move( $image['stage_path'], $destination ) ) {
+				throw new RuntimeException( 'The validated submission image could not be stored.' );
+			}
+			self::remove_directory( $stage_dir );
+			return $file_name;
+		} catch ( RuntimeException $exception ) {
+			if ( self::filesystem()->is_dir( $stage_dir ) ) {
+				self::remove_directory( $stage_dir );
+			}
+			throw $exception;
+		}
+	}
+
+	public static function submission_image_url( $event_id, $image_file ) {
+		if ( ! preg_match( '/^[a-f0-9]{32}\.(?:jpg|png|gif|webp)$/D', (string) $image_file ) ) {
+			return '';
+		}
+		$uploads = wp_upload_dir();
+		return trailingslashit( $uploads['baseurl'] ) . 'mrsa-event-gallery/' . absint( $event_id ) . '/submissions/' . rawurlencode( $image_file );
+	}
+
 	private static function valid_id( $bonus_id ) {
 		return is_string( $bonus_id ) && 1 === preg_match( '/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/D', $bonus_id );
 	}
@@ -1058,6 +1100,49 @@ final class MRSA_Bonus {
 			throw new RuntimeException( 'The selected event gallery could not be safely staged for deletion.' );
 		}
 		return $staged;
+	}
+
+	public static function stage_submission_files( array $rows ) {
+		$staged_root = trailingslashit( self::storage_root() ) . '.submission-deleting-' . wp_generate_password( 12, false, false );
+		$moved = array();
+		foreach ( $rows as $row ) {
+			$event_id = absint( $row['event_id'] ?? 0 );
+			$image_file = (string) ( $row['image_file'] ?? '' );
+			if ( ! $event_id || ! preg_match( '/^[a-f0-9]{32}\.(?:jpg|png|gif|webp)$/D', $image_file ) ) {
+				continue;
+			}
+			$source = trailingslashit( self::event_dir( $event_id ) ) . 'submissions/' . $image_file;
+			if ( ! self::filesystem()->is_file( $source ) ) {
+				continue;
+			}
+			$directory = trailingslashit( $staged_root ) . $event_id;
+			self::ensure_directory( $directory );
+			$destination = trailingslashit( $directory ) . $image_file;
+			if ( ! self::filesystem()->move( $source, $destination ) ) {
+				self::restore_submission_files( array( 'root' => $staged_root, 'files' => $moved ) );
+				throw new RuntimeException( 'A rider submission image could not be safely staged for deletion.' );
+			}
+			$moved[] = array( 'source' => $source, 'staged' => $destination );
+		}
+		return array( 'root' => $moved ? $staged_root : '', 'files' => $moved );
+	}
+
+	public static function restore_submission_files( array $staged ) {
+		foreach ( array_reverse( $staged['files'] ?? array() ) as $file ) {
+			self::ensure_directory( dirname( $file['source'] ) );
+			if ( self::filesystem()->is_file( $file['staged'] ) && ( self::filesystem()->exists( $file['source'] ) || ! self::filesystem()->move( $file['staged'], $file['source'] ) ) ) {
+				throw new RuntimeException( 'A rider submission image could not be restored after deletion failed.' );
+			}
+		}
+		if ( ! empty( $staged['root'] ) && self::filesystem()->is_dir( $staged['root'] ) ) {
+			self::remove_directory( $staged['root'] );
+		}
+	}
+
+	public static function finish_staged_submission_files( array $staged ) {
+		if ( ! empty( $staged['root'] ) && self::filesystem()->is_dir( $staged['root'] ) ) {
+			self::remove_directory( $staged['root'] );
+		}
 	}
 
 	public static function stage_all_storage_removal() {

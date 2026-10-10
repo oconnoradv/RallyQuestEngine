@@ -52,6 +52,8 @@ $queries->events( 7, false, 99 );
 check( $wpdb->query[1] === array( 7, 99 ) && strpos( $wpdb->query[0], 'a.user_id=%d' ) !== false, 'event query retains rider and assigned-administrator restrictions' );
 $queries->events( 0, true, 99 );
 check( is_string( $wpdb->query ) && strpos( $wpdb->query, 'event_admins' ) === false, 'site-administrator event query retains full access' );
+$queries->scoring_events( false, 99 );
+check( $wpdb->query[1] === array( 99, 99 ) && strpos( $wpdb->query[0], 'event_admins' ) !== false && strpos( $wpdb->query[0], 'event_scorers' ) !== false, 'scoring event query includes both event administrator and separate scorer assignments' );
 $wpdb->data = array( array( 'score' => 100 ), array( 'score' => 50 ), array( 'score' => 100 ) );
 $roster = $queries->roster( 7 );
 check( array_column( $roster, 'overall_placing' ) === array( 1, 3, 1 ) && $wpdb->query[1] === array( 7 ), 'roster read model computes ranks without changing bib order or event scope' );

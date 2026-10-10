@@ -48,6 +48,7 @@ jobs:
           php tests/raster-policy.php
           php tests/read-models.php
           php tests/diagnostic-contracts.php
+          php tests/email-submissions.php
 
       - name: Install static security scanner
         shell: bash

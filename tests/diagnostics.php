@@ -2,7 +2,7 @@
 /** Standalone diagnostics regression tests: php tests/diagnostics.php */
 define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
-define( 'MRSA_DB_VERSION', '7' );
+define( 'MRSA_DB_VERSION', '8' );
 define( 'MINUTE_IN_SECONDS', 60 );
 final class MRSA {
 	public static function table( $name ) { return $name; }
@@ -25,6 +25,7 @@ final class Diagnostics_Test_DB {
 	public $table_engine = 'InnoDB';
 	public $missing_table = '';
 	public function query( $sql ) {
+		if ( is_array( $sql ) ) { return 1; }
 		$table = substr( $sql, strlen( 'DELETE FROM ' ) );
 		$this->tables[ $table ] = array();
 		return 1;
@@ -43,9 +44,10 @@ final class Diagnostics_Test_DB {
 		$this->tables[ $table ][] = $data;
 		return 1;
 	}
-	public function prepare( $sql, ...$args ) { return $args; }
+	public function prepare( $sql, ...$args ) { return array_merge( array( $sql ), $args ); }
 	public function get_var( $args ) {
 		if ( 'SELECT VERSION()' === $args ) { return $this->database_version; }
+		if ( is_array( $args ) ) { array_shift( $args ); }
 		foreach ( array_reverse( $this->tables['import_audit'] ) as $row ) {
 			if ( $row['user_id'] === $args[0] && in_array( $row['action'], array( 'bypass_enabled', 'bypass_disabled' ), true ) ) {
 				return $row['action'];
@@ -54,9 +56,20 @@ final class Diagnostics_Test_DB {
 		return null;
 	}
 	public function get_row( $query, $format ) {
-		return $query[0] === $this->missing_table ? null : array( 'Engine' => $this->table_engine );
+		$table = is_array( $query ) ? end( $query ) : $query;
+		return $table === $this->missing_table ? null : array( 'Engine' => $this->table_engine );
 	}
 	public function get_results( $sql, $format ) {
+		$args = array();
+		if ( is_array( $sql ) ) {
+			$args = array_slice( $sql, 1 );
+			$sql = $sql[0];
+		}
+		if ( strpos( $sql, 'FROM bonus_submissions' ) !== false ) {
+			$rows = $this->tables['bonus_submissions'] ?? array();
+			$key = strpos( $sql, 'event_id=' ) !== false ? 'event_id' : 'rider_id';
+			return array_values( array_filter( $rows, function ( $row ) use ( $key, $args ) { return (int) ( $row[ $key ] ?? 0 ) === (int) ( $args[0] ?? 0 ); } ) );
+		}
 		if ( strpos( $sql, 'FROM events' ) !== false ) {
 			return array( array( 'id' => 7, 'name' => 'Autumn Rally', 'event_date' => '2026-10-09' ) );
 		}
@@ -92,7 +105,7 @@ function wp_convert_hr_to_bytes( $value ) {
 	return (int) ( $number * ( 'g' === $unit ? 1073741824 : ( 'm' === $unit ? 1048576 : ( 'k' === $unit ? 1024 : 1 ) ) ) );
 }
 function size_format( $bytes ) { return ( $bytes / 1048576 ) . ' MB'; }
-function get_option( $key, $default = '' ) { return $GLOBALS['schema_version'] ?? '7'; }
+function get_option( $key, $default = '' ) { return $GLOBALS['schema_version'] ?? '8'; }
 function wp_max_upload_size() { return $GLOBALS['upload_limit'] ?? 10485760; }
 function get_temp_dir() { return sys_get_temp_dir(); }
 function wp_normalize_path( $value ) { return str_replace( '\\', '/', $value ); }
@@ -151,7 +164,7 @@ check( strpos( $html, 'id="mrsa-configuration"' ) < strpos( $html, '<h3>Database
 $operations = array( 'all', 'bikes', 'roster', 'bonus_points', 'rider', 'audit' );
 foreach ( $operations as $suffix ) {
 	$operation = 'diagnostics_delete_' . $suffix;
-	$wpdb->tables = array_fill_keys( array( 'registrations', 'rider_bikes', 'event_admins', 'events', 'riders', 'bikes', 'bonus_points' ), array( array( 'id' => 9, 'event_id' => 7, 'rider_id' => 9 ) ) );
+	$wpdb->tables = array_fill_keys( array( 'registrations', 'rider_bikes', 'event_admins', 'event_scorers', 'event_email_settings', 'events', 'riders', 'bikes', 'bonus_points', 'bonus_submissions' ), array( array( 'id' => 9, 'event_id' => 7, 'rider_id' => 9, 'image_file' => '' ) ) );
 	$wpdb->tables['import_audit'] = array(
 		array( 'user_id' => 1, 'action' => 'bypass_enabled' ),
 		array( 'user_id' => 2, 'action' => 'bypass_enabled' ),

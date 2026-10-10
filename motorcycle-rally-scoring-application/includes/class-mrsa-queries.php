@@ -28,6 +28,16 @@ final class MRSA_Queries {
 		return $this->rows( $sql . ' ORDER BY e.event_date DESC,e.id DESC', $args );
 	}
 
+	public function scoring_events( $site_access, $user_id ) {
+		$sql = 'SELECT e.* FROM ' . MRSA::table( 'events' ) . ' e';
+		$args = array();
+		if ( ! $site_access ) {
+			$sql .= ' WHERE EXISTS (SELECT 1 FROM ' . MRSA::table( 'event_admins' ) . ' a WHERE a.event_id=e.id AND a.user_id=%d) OR EXISTS (SELECT 1 FROM ' . MRSA::table( 'event_scorers' ) . ' s WHERE s.event_id=e.id AND s.user_id=%d)';
+			$args = array( $user_id, $user_id );
+		}
+		return $this->rows( $sql . ' ORDER BY e.event_date DESC,e.id DESC', $args );
+	}
+
 	public function roster( $event_id ) {
 		$rows = $this->rows( 'SELECT reg.rider_id,reg.bib,reg.registration_status,reg.score,r.name,r.email FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=reg.rider_id WHERE reg.event_id=%d ORDER BY reg.bib', array( $event_id ) );
 		return $this->ranked( $rows );
@@ -132,6 +142,34 @@ final class MRSA_Queries {
 
 	public function event_administrators( $event_id ) {
 		return $this->rows( 'SELECT * FROM ' . MRSA::table( 'event_admins' ) . ' WHERE event_id=%d ORDER BY user_id', array( $event_id ) );
+	}
+
+	public function event_scorers( $event_id ) {
+		return $this->rows( 'SELECT * FROM ' . MRSA::table( 'event_scorers' ) . ' WHERE event_id=%d ORDER BY user_id', array( $event_id ) );
+	}
+
+	public function pending_submissions( $event_id, $rider_id = 0 ) {
+		$sql = 'SELECT s.*,r.name rider_name,b.description bonus_description,b.points bonus_points,b.image_file bonus_image FROM ' . MRSA::table( 'bonus_submissions' ) . ' s JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=s.rider_id LEFT JOIN ' . MRSA::table( 'bonus_points' ) . " b ON b.event_id=s.event_id AND b.bonus_id=s.bonus_id WHERE s.event_id=%d AND s.status='pending'";
+		$args = array( $event_id );
+		if ( $rider_id ) {
+			$sql .= ' AND s.rider_id=%d';
+			$args[] = $rider_id;
+		}
+		return $this->rows( $sql . ' ORDER BY s.submitted_at,s.id', $args );
+	}
+
+	public function reviewed_submissions( $event_id, $rider_id = 0 ) {
+		$sql = 'SELECT s.*,r.name rider_name,b.description bonus_description,b.image_file bonus_image FROM ' . MRSA::table( 'bonus_submissions' ) . ' s LEFT JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=s.rider_id LEFT JOIN ' . MRSA::table( 'bonus_points' ) . " b ON b.event_id=s.event_id AND b.bonus_id=s.bonus_id WHERE s.event_id=%d AND s.status IN ('accepted','rejected','invalid')";
+		$args = array( $event_id );
+		if ( $rider_id ) {
+			$sql .= ' AND s.rider_id=%d';
+			$args[] = $rider_id;
+		}
+		return $this->rows( $sql . ' ORDER BY COALESCE(s.reviewed_at,s.submitted_at) DESC,s.id DESC', $args );
+	}
+
+	public function rider_submission_history( $event_id, $rider_id ) {
+		return $this->rows( 'SELECT s.*,b.description bonus_description FROM ' . MRSA::table( 'bonus_submissions' ) . ' s LEFT JOIN ' . MRSA::table( 'bonus_points' ) . ' b ON b.event_id=s.event_id AND b.bonus_id=s.bonus_id WHERE s.event_id=%d AND s.rider_id=%d ORDER BY s.submitted_at DESC,s.id DESC', array( $event_id, $rider_id ) );
 	}
 
 	public function bonus( $event_id, $bonus_id ) {

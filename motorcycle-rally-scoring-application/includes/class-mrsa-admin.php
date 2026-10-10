@@ -18,6 +18,7 @@ final class MRSA_Admin {
 			add_submenu_page( null, 'Event Scoring', 'Event Scoring', 'read', 'mrsa-scoring', array( 'MRSA_Views', 'render_scoring' ) );
 			add_submenu_page( null, 'Edit Rider', 'Edit Rider', 'read', 'mrsa-rider-edit', array( 'MRSA_Views', 'render_rider_edit' ) );
 			add_submenu_page( null, 'Edit Event', 'Edit Event', 'read', 'mrsa-event-edit', array( 'MRSA_Views', 'render_event_edit' ) );
+			add_submenu_page( null, 'Event Email Submissions', 'Event Email Submissions', 'read', 'mrsa-event-email', array( 'MRSA_Views', 'render_event_email' ) );
 			add_submenu_page( null, 'Event Roster', 'Event Roster', 'read', 'mrsa-event-roster', array( 'MRSA_Views', 'render_event_roster' ) );
 			add_submenu_page( null, 'Add Rider to Event', 'Add Rider to Event', 'read', 'mrsa-event-enroll', array( 'MRSA_Views', 'render_event_enroll' ) );
 			add_submenu_page( null, 'Import Riders', 'Import Riders', 'read', 'mrsa-roster-import', array( 'MRSA_Views', 'render_roster_import' ) );
@@ -31,7 +32,7 @@ final class MRSA_Admin {
 			return;
 		}
 		wp_add_inline_style( 'dashicons', '#adminmenu .toplevel_page_mrsa .wp-menu-image::before,#adminmenu .toplevel_page_mrsa:hover .wp-menu-image::before,#adminmenu .toplevel_page_mrsa.current .wp-menu-image::before{color:#ff0800}' );
-		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'admin_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit', 'admin_page_mrsa-event-roster', 'admin_page_mrsa-event-enroll', 'admin_page_mrsa-roster-import', 'admin_page_mrsa-rider-score', 'admin_page_mrsa-bonus-edit' ), true ) ) {
+		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'admin_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit', 'admin_page_mrsa-event-email', 'admin_page_mrsa-event-roster', 'admin_page_mrsa-event-enroll', 'admin_page_mrsa-roster-import', 'admin_page_mrsa-rider-score', 'admin_page_mrsa-bonus-edit' ), true ) ) {
 			return;
 		}
 		// Rebuilt releases can retain their version; invalidate cached UI assets when their contents change.
@@ -109,7 +110,7 @@ final class MRSA_Admin {
 	}
 
 	public static function url( $tab, $extra = array() ) {
-		if ( in_array( $tab, array( 'rider-edit', 'event-edit', 'event-roster', 'event-enroll', 'roster-import', 'rider-score', 'bonus-edit' ), true ) ) {
+		if ( in_array( $tab, array( 'rider-edit', 'event-edit', 'event-email', 'event-roster', 'event-enroll', 'roster-import', 'rider-score', 'bonus-edit' ), true ) ) {
 			return add_query_arg( array_merge( array( 'page' => 'mrsa-' . $tab ), $extra ), admin_url( 'admin.php' ) );
 		}
 		return add_query_arg( array_merge( array( 'page' => 'mrsa', 'tab' => $tab ), $extra ), admin_url( 'admin.php' ) );
@@ -124,6 +125,12 @@ final class MRSA_Admin {
 	public static function require_event( $id ) {
 		if ( ! MRSA::event_access( $id ) || ! MRSA::row( 'events', $id ) ) {
 			throw new RuntimeException( 'Event not found or you are not assigned to it.' );
+		}
+	}
+
+	private static function require_scoring_event( $id ) {
+		if ( ! MRSA::scorer_access( $id ) || ! MRSA::row( 'events', $id ) ) {
+			throw new RuntimeException( 'Scoring event not found or you are not assigned to it.' );
 		}
 	}
 
@@ -178,6 +185,42 @@ final class MRSA_Admin {
 					self::event_admin( 'remove_event_admin' === $op );
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					$tab = 'event-edit';
+					break;
+				case 'event_scorer':
+				case 'remove_event_scorer':
+					self::require_site_admin();
+					self::event_assignment( 'event_scorers', 'remove_event_scorer' === $op );
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					$tab = 'event-edit';
+					break;
+				case 'event_email':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					self::require_event( $extra['event_id'] );
+					$input = array();
+					foreach ( array( 'provider', 'enabled', 'mailbox', 'host', 'port', 'encryption', 'username', 'folder', 'password', 'client_id', 'client_secret', 'refresh_token', 'tenant_id' ) as $key ) {
+						$input[ $key ] = self::posted( $key );
+					}
+					$message = MRSA_Email_Submissions::save_configuration( $extra['event_id'], $input );
+					$tab = 'event-email';
+					break;
+				case 'event_email_check':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					self::require_event( $extra['event_id'] );
+					$message = MRSA_Email_Submissions::process_event( $extra['event_id'] );
+					$tab = 'event-email';
+					break;
+				case 'submission_review':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					self::require_scoring_event( $extra['event_id'] );
+					$message = MRSA_Email_Submissions::review(
+						$extra['event_id'],
+						self::integer( self::posted( 'submission_id' ), 1 ),
+						self::posted( 'decision' ),
+						self::posted( 'rejection_code' ),
+						self::posted( 'rejection_description' )
+					);
+					$tab = 'scoring';
+					$extra['score_tab'] = 'pending';
 					break;
 				case 'bike':
 					self::require_site_admin();
@@ -357,6 +400,10 @@ final class MRSA_Admin {
 	}
 
 	private static function event_admin( $remove ) {
+		self::event_assignment( 'event_admins', $remove );
+	}
+
+	private static function event_assignment( $table, $remove ) {
 		global $wpdb;
 		$event_id = self::integer( self::posted( 'event_id' ), 1 );
 		$id = self::integer( self::posted( 'user_id' ), 1 );
@@ -365,11 +412,11 @@ final class MRSA_Admin {
 			self::require_user( $id );
 		}
 		$where = array( 'event_id' => $event_id, 'user_id' => $id );
-		$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . MRSA::table( 'event_admins' ) . ' WHERE event_id=%d AND user_id=%d', $event_id, $id ) );
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . MRSA::table( $table ) . ' WHERE event_id=%d AND user_id=%d', $event_id, $id ) );
 		if ( $remove ) {
-			self::checked( $wpdb->delete( MRSA::table( 'event_admins' ), $where ) );
+			self::checked( $wpdb->delete( MRSA::table( $table ), $where ) );
 		} elseif ( ! $exists ) {
-			self::checked( $wpdb->insert( MRSA::table( 'event_admins' ), $where ) );
+			self::checked( $wpdb->insert( MRSA::table( $table ), $where ) );
 		}
 	}
 
@@ -545,6 +592,7 @@ final class MRSA_Admin {
 
 	private static function registration( $event_id, $op ) {
 		global $wpdb;
+		$staged_submission_files = array( 'root' => '', 'files' => array() );
 		MRSA::begin_transaction();
 		try {
 			$event = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $event_id ), ARRAY_A );
@@ -557,6 +605,9 @@ final class MRSA_Admin {
 				throw new RuntimeException( 'Registration not found in the selected event.' );
 			}
 			if ( 'remove_registration' === $op ) {
+				$submission_rows = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,image_file FROM ' . MRSA::table( 'bonus_submissions' ) . ' WHERE registration_id=%d', $id ), ARRAY_A );
+				$staged_submission_files = MRSA_Bonus::stage_submission_files( $submission_rows ?: array() );
+				self::checked( $wpdb->delete( MRSA::table( 'bonus_submissions' ), array( 'registration_id' => $id ) ) );
 				self::checked( $wpdb->delete( MRSA::table( 'registrations' ), array( 'id' => $id, 'event_id' => $event_id ) ) );
 			} else {
 				$data = array( 'bib' => self::integer( self::posted( 'bib' ), 1, (int) $event['max_bib'] ), 'pillion' => self::text( self::posted( 'pillion' ), 160 ) );
@@ -578,7 +629,13 @@ final class MRSA_Admin {
 			MRSA::commit_transaction();
 		} catch ( RuntimeException $e ) {
 			MRSA::rollback_transaction();
+			if ( ! empty( $staged_submission_files['root'] ) ) {
+				MRSA_Bonus::restore_submission_files( $staged_submission_files );
+			}
 			throw $e;
+		}
+		if ( ! empty( $staged_submission_files['root'] ) ) {
+			MRSA_Bonus::finish_staged_submission_files( $staged_submission_files );
 		}
 	}
 
@@ -741,7 +798,7 @@ final class MRSA_Admin {
 			wp_die( esc_html( 'Unsupported diagnostics download.' ), '', array( 'response' => 400 ) );
 		}
 		global $wpdb;
-		$tables = array( 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'import_audit' );
+		$tables = array( 'event_admins', 'event_scorers', 'event_email_settings', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
 		$stamp = gmdate( 'Ymd-His' );
 		nocache_headers();
 		if ( 'json' === $type ) {

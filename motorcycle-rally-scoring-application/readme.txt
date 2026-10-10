@@ -38,10 +38,10 @@ not analyze PHP; PHP remains covered by Semgrep.
 Motorcycle Rally Scoring Application provides administrative tabs for:
 
 * Riders: rider details, make/model-filtered motorcycles with optional manually entered four-digit years, emergency contacts, insurance information, and registered events.
-* Events: event configuration, per-event administrator assignments, and Roster links.
+* Events: event configuration, separate per-event Administrator and Scorer assignments, encrypted event inbox configuration, and Roster links.
 * Rosters: event selection and a read-only roster table with rider ID, bib ID, registration status, name, email, score, and overall placing. Rider IDs open rider details/editing, bibs open event scoring, and enrollment remains a separate screen.
-* Scoring: event-specific Bonus Point Library, CSV/XLSX listing import, local-folder and public-URL image import, and event-roster scoring summaries in the remaining workspace tabs.
-* Results: score ordering, computed overall placing, read-only result status, and rider score-sheet placeholders.
+* Scoring: event-specific Bonus Point Library, CSV/XLSX listing import, local-folder and public-URL image import, email submission review, required rejection reasons, and transactional point awards.
+* Results: score ordering, computed overall placing, read-only result status, and rider score sheets with submission history.
 * Bikes: side-by-side manual entry and motorcycle make/model import on wide screens, stacked on narrow screens, plus transactional bulk deletion of unassigned catalog rows.
 * Rosters: Import Riders beside Add Rider opens a separate selected-event CSV/XLSX import screen for existing riders by Rider ID or Email, with a downloadable sample CSV and a Back to Rosters link. Optional Bib ID, Status and Pillion columns; blank bibs receive the next available number. WordPress administrators only, maximum 10 MB / 5,000 rows. ClamAV is required; invalid or conflicting rows reject the whole batch.
 * Diagnostics: on-demand required-plugin/environment checks with native WordPress install/activate controls for required Action Scheduler; Gallery for SpotWalla remains optional. PHP, database/InnoDB/schema, ClamAV, private staging/storage and upload capacity are checked against current MRSA limits (10 MB spreadsheets/images, 50 MB ZIP/download, 100 MB / 200 images per batch). Unverifiable hosting and scanner policies are labeled Manual review. JSON export, restorable SQL backup, and verification-string-protected scoped deletion are also available. Gallery image files are stored separately and are not included in database exports or backups.
@@ -137,24 +137,41 @@ Error reports are private to the importing administrator and expire after
 a larger overlay preview; Close image, Escape, or clicking outside the preview
 returns to the listing. Re-importing an ID updates its
 listing without removing other event listings. Images are stored in a dedicated
-event folder and are not registered in the WordPress media library. Submissions
-- Pending Review, Submissions - Reviewed, and Submissions - Contested remain
-placeholders. Bib links provide event/rider context; this release does not
-calculate bonus scores. Results orders existing total scores using competition
+event folder and are not registered in the WordPress media library. Each event
+may poll an encrypted IMAP, Gmail API, or Microsoft 365 inbox configuration.
+Unread messages are accepted only when the sender matches one registered rider,
+the subject contains exactly one existing Bonus ID, and exactly one supported
+image passes format, executable-content, and ClamAV checks. Pending Review shows
+the rider image beside the matching Bonus Point Library ID and image. Event
+Administrators or separately assigned Event Scorers can accept or reject the
+submission. Accepted library points update the rider total transactionally and
+exactly once. Rejections require a reason and remain in Reviewed and rider
+history. Results orders total scores using competition
 ranking and displays the automatically derived Preliminary Finisher status
 when a score is greater than the event minimum. Status is read-only on that
 page. New registrations have lifecycle status Initial Registration, result
 status Registered, score 0, and unset stored placing. Gallery files live in
 the dedicated uploads/mrsa-event-gallery directory and must be backed up
 separately from the JSON and SQL database exports.
-Diagnostics can delete all bonus listings and images for a selected event.
+Diagnostics can delete all bonus listings, submissions, scoring images, and
+submission-awarded score points for a selected event.
 
 The plugin has no site-wide administrator assignment. WordPress administrators
 manage shared riders, motorcycles, event creation, diagnostics, enrollment,
-and Event Administrator assignments through WordPress capabilities. Assigned
+and event Administrator/Scorer assignments through WordPress capabilities. Assigned
 Event Administrators are restricted to their assigned events and enrolled
 riders; they cannot manage shared motorcycles, master rider records, other
-events, diagnostics, or administrator assignments.
+events, diagnostics, or role assignments. Event Scorers can access only Scoring
+and About for their assigned events.
+
+Event inbox secrets are encrypted with AES-256-GCM using the WordPress
+authentication salts. IMAP requires the PHP IMAP extension. Gmail requires a
+refresh token authorized for gmail.modify. Microsoft 365 requires delegated
+Mail.ReadWrite and offline_access consent. Administrators provide refresh
+tokens; this plugin does not implement interactive OAuth consent callbacks.
+Changing WordPress authentication salts requires re-entering saved inbox
+credentials. Exports and SQL backups contain encrypted credential ciphertext
+and should still be protected as sensitive administrative backups.
 
 Tables use the current site's WordPress prefix followed by MRSA_, avoiding
 collisions between sites. No WordPress core tables or users are replaced.
@@ -255,7 +272,9 @@ controls, and arrange independent security assessment before production use.
 
 = Does this version score rallies? =
 
-No. Scoring workflows are reserved for later specifications.
+Yes. Event Administrators and Event Scorers can accept valid email bonus
+submissions to award the matching Bonus Point Library points exactly once.
+Contested-submission handling remains reserved for a later specification.
 
 = Can riders register themselves on the public website? =
 
@@ -269,6 +288,9 @@ No. Rider and pillion prices are event configuration values only.
 
 = Unreleased =
 * Removed the plugin-defined site-wide administrator assignment and legacy storage. WordPress administrators now manage shared application data, while plugin administrator assignments exist only at the event level.
+* Added separate Event Scorer assignments with Scoring-only access.
+* Added encrypted per-event IMAP, Gmail API, and Microsoft 365 inbox configuration with scheduled and manual polling.
+* Added strict one-code/one-image rider email ingestion, Pending Review image comparison, required rejection reasons, retained Reviewed/rider history, and transactional exactly-once score awards.
 
 = 0.1.16 =
 * List all locally uploaded scoring images that pass scanning and authorize their import with one bulk action instead of approving each image separately.

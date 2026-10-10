@@ -4,12 +4,15 @@ defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 
 global $wpdb;
 require_once __DIR__ . '/includes/class-mrsa-bonus.php';
+if ( function_exists( 'as_unschedule_all_actions' ) ) {
+	as_unschedule_all_actions( 'mrsa_process_submission_inboxes', array(), 'mrsa' );
+}
 // On multisite only opted-in sites are deleted, in bounded pages.
 $cleanup = static function () use ( $wpdb ) {
 	if ( ! get_option( 'mrsa_delete_on_uninstall', false ) ) {
 		return;
 	}
-	foreach ( array( 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'import_audit', 'global_admins' ) as $name ) {
+	foreach ( array( 'event_admins', 'event_scorers', 'event_email_settings', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit', 'global_admins' ) as $name ) {
 		$table = $wpdb->prefix . 'MRSA_' . $name;
 		$wpdb->query( "DROP TABLE IF EXISTS `$table`" );
 	}

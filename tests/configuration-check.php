@@ -29,6 +29,12 @@ check( ! MRSA_Diagnostics::action_scheduler()['ready'], 'active plugin without s
 if ( ! function_exists( 'as_schedule_single_action' ) ) {
 	function as_schedule_single_action() {}
 }
+if ( ! function_exists( 'as_schedule_recurring_action' ) ) {
+	function as_schedule_recurring_action() {}
+}
+if ( ! function_exists( 'as_has_scheduled_action' ) ) {
+	function as_has_scheduled_action() { return false; }
+}
 check( MRSA_Diagnostics::action_scheduler()['ready'], 'installed active dependency with API is ready' );
 foreach ( array( '8.0.0' => true, '5.7.44' => false, '10.6.0-MariaDB' => true, '5.5.5-10.11.6-MariaDB' => true, '10.5.28-MariaDB' => false, 'unknown' => false ) as $version => $supported ) {
 	check( MRSA_Diagnostics::database_version_supported( $version ) === $supported, 'database minimum enforced for ' . $version );

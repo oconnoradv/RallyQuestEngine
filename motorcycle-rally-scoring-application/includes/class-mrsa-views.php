@@ -84,6 +84,10 @@ final class MRSA_Views {
 		return self::queries()->events( $rider_id, MRSA::site_access(), get_current_user_id() );
 	}
 
+	private static function scoring_events() {
+		return self::queries()->scoring_events( MRSA::site_access(), get_current_user_id() );
+	}
+
 	private static function users_select( $selected = 0 ) {
 		echo '<label class="mrsa-field"><span>Username (all WordPress users)</span><input type="search" class="mrsa-user-filter" placeholder="Filter usernames" aria-label="Filter usernames"><select name="user_id" class="mrsa-user-select" required><option value="">Choose a user</option>';
 		foreach ( get_users( array( 'orderby' => 'login', 'order' => 'ASC' ) ) as $user ) {
@@ -105,24 +109,30 @@ final class MRSA_Views {
 			wp_die( esc_html( 'You are not assigned to rally administration.' ), '', array( 'response' => 403 ) );
 		}
 		$site_admin = MRSA::site_access();
+		$scorer_only = ! $site_admin && ! MRSA::event_ids();
 		$tab = MRSA_Admin::query( 'tab', 'events' );
 		$tabs = array( 'riders' => 'Riders', 'events' => 'Events', 'rosters' => 'Rosters', 'scoring' => 'Scoring', 'results' => 'Results', 'bikes' => 'Bikes', 'diagnostics' => 'Diagnostics', 'about' => 'About' );
-		if ( ! isset( $tabs[ $tab ] ) || ( ! $site_admin && in_array( $tab, array( 'bikes', 'diagnostics' ), true ) ) ) {
+		if ( $scorer_only && 'events' === $tab ) {
+			$tab = 'scoring';
+		}
+		if ( ! isset( $tabs[ $tab ] ) || ( ! $site_admin && in_array( $tab, array( 'bikes', 'diagnostics' ), true ) ) || ( $scorer_only && ! in_array( $tab, array( 'scoring', 'about' ), true ) ) ) {
 			wp_die( esc_html( 'This shared-data area is restricted to WordPress administrators.' ), '', array( 'response' => 403 ) );
 		}
 		echo '<div class="wrap mrsa">';
 		self::header();
 		echo '<nav class="nav-tab-wrapper" aria-label="Rally Scoring tabs">';
 		foreach ( $tabs as $key => $label ) {
-			if ( ! $site_admin && in_array( $key, array( 'bikes', 'diagnostics' ), true ) ) {
+			if ( ( ! $site_admin && in_array( $key, array( 'bikes', 'diagnostics' ), true ) ) || ( $scorer_only && ! in_array( $key, array( 'scoring', 'about' ), true ) ) ) {
 				continue;
 			}
 			echo '<a class="nav-tab' . ( $key === $tab ? ' nav-tab-active' : '' ) . '" href="' . esc_url( MRSA_Admin::url( $key ) ) . '">' . esc_html( $label ) . '</a>';
 		}
 		echo '</nav>';
 		self::notice();
-		if ( ! $site_admin ) {
-			echo '<p class="mrsa-note">Event administrator access: your assigned events and their enrolled rider details only. Shared rider records, motorcycles, event creation, diagnostics, and administrator assignments require a WordPress administrator.</p>';
+		if ( $scorer_only ) {
+			echo '<p class="mrsa-note">Event Scorer access: review submissions and view scoring data only for your assigned events.</p>';
+		} elseif ( ! $site_admin ) {
+			echo '<p class="mrsa-note">Event administrator access: your assigned events and their enrolled rider details only. Shared rider records, motorcycles, event creation, diagnostics, and role assignments require a WordPress administrator.</p>';
 		}
 		switch ( $tab ) {
 			case 'bikes':
@@ -417,6 +427,32 @@ final class MRSA_Views {
 		self::end_table();
 	}
 
+	private static function event_scorers( $event ) {
+		echo '<h2>Event Scorer Assignments</h2><p>Scorers can review and score email submissions for this event. They cannot configure events, manage rosters, or access shared rider and motorcycle data.</p>';
+		echo '<details class="mrsa-panel"><summary class="button button-primary">Add Scorer</summary>';
+		self::form( 'event_scorer', array( 'event_id' => $event['id'] ) );
+		self::users_select();
+		self::button( 'Add Scorer' );
+		echo '</form></details>';
+		self::table( array( 'Username', 'Display name', 'Email', 'User phone', 'Actions' ) );
+		foreach ( self::queries()->event_scorers( $event['id'] ) as $row ) {
+			$user = get_user_by( 'id', $row['user_id'] );
+			echo '<tr><td>';
+			self::h( $user ? $user->user_login : 'Deleted user #' . $row['user_id'] );
+			echo '</td><td>';
+			self::h( $user ? $user->display_name : '—' );
+			echo '</td><td>';
+			self::h( $user ? $user->user_email : '—' );
+			echo '</td><td>';
+			self::h( $user ? MRSA::user_phone( $user->ID ) : '—' );
+			echo '</td><td>';
+			self::form( 'remove_event_scorer', array( 'user_id' => $row['user_id'], 'event_id' => $row['event_id'] ) );
+			self::button( 'Remove', 'remove_event_scorer' );
+			echo '</form></td></tr>';
+		}
+		self::end_table();
+	}
+
 	private static function event_form( $id, $event ) {
 		self::form( 'event', array( 'id' => $id ), 'mrsa-panel mrsa-edit-form' );
 		echo '<h2>' . ( $id ? 'Configure event #' . esc_html( $id ) : 'Add Event' ) . '</h2><p>Dates/times use the WordPress site timezone: ' . esc_html( wp_timezone_string() ) . '. Registration open ≤ close ≤ start ≤ end. The event date is derived from its start time. Prices use your event’s currency; no payments are processed.</p>';
@@ -464,10 +500,63 @@ final class MRSA_Views {
 		echo '<h2>' . esc_html( $id ? 'Edit Event' : 'Add Event' ) . '</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'events' ) ) . '">Back to Events</a></p>';
 		self::notice();
 		self::event_form( $id, $event );
+		if ( $id ) {
+			echo '<section class="mrsa-panel"><h2>Email Bonus Submissions</h2><p>Configure the event inbox used for rider bonus submissions.</p><p><a class="button button-primary" href="' . esc_url( MRSA_Admin::url( 'event-email', array( 'event_id' => $id ) ) ) . '">Configure Submission Inbox</a></p></section>';
+		}
 		if ( $id && MRSA::site_access() ) {
 			self::event_administrators( $event );
+			self::event_scorers( $event );
 		}
 		echo '</div>';
+	}
+
+	public static function render_event_email() {
+		$id = absint( MRSA_Admin::query( 'event_id', '0' ) );
+		if ( ! $id || ! MRSA::event_access( $id ) ) {
+			wp_die( esc_html( 'Event not found or not assigned to you.' ), '', array( 'response' => 403 ) );
+		}
+		$event = MRSA::row( 'events', $id );
+		if ( ! $event ) {
+			wp_die( esc_html( 'Event not found.' ), '', array( 'response' => 404 ) );
+		}
+		$config = MRSA_Email_Submissions::configuration( $id );
+		$settings = $config['settings'];
+		echo '<div class="wrap mrsa">';
+		self::header();
+		echo '<h2>Email Bonus Submissions — ' . esc_html( $event['name'] ) . '</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'event-edit', array( 'event_id' => $id ) ) ) . '">Back to Event Configuration</a></p>';
+		self::notice();
+		echo '<section class="mrsa-panel"><p>Each accepted inbox message must map to one registered rider by sender email, contain exactly one Bonus Point Library ID in the subject, and include exactly one JPEG, PNG, GIF, or WebP attachment. Valid images require the configured ClamAV scanner.</p>';
+		self::form( 'event_email', array( 'event_id' => $id ), 'mrsa-edit-form' );
+		echo '<label class="mrsa-field"><span>Provider</span><select name="provider" required>';
+		foreach ( array( 'imap' => 'IMAP', 'gmail' => 'Gmail API', 'microsoft' => 'Microsoft 365 / Graph API' ) as $value => $label ) {
+			echo '<option value="' . esc_attr( $value ) . '"' . selected( $config['provider'], $value, false ) . '>' . esc_html( $label ) . '</option>';
+		}
+		echo '</select></label><label><input type="checkbox" name="enabled" value="1"' . checked( 1, $config['enabled'], false ) . '> Enable scheduled inbox polling every five minutes</label>';
+		self::field( 'Submission mailbox email', 'mailbox', $settings['mailbox'] ?? '', 'email', true, array( 'maxlength' => 254 ) );
+		echo '<h3>IMAP settings</h3>';
+		self::field( 'IMAP host', 'host', $settings['host'] ?? '', 'text', false, array( 'maxlength' => 255 ) );
+		self::field( 'IMAP port', 'port', $settings['port'] ?? 993, 'number', false, array( 'min' => 1, 'max' => 65535 ) );
+		echo '<label class="mrsa-field"><span>IMAP encryption</span><select name="encryption"><option value="ssl"' . selected( $settings['encryption'] ?? 'ssl', 'ssl', false ) . '>SSL</option><option value="tls"' . selected( $settings['encryption'] ?? '', 'tls', false ) . '>TLS</option><option value="none"' . selected( $settings['encryption'] ?? '', 'none', false ) . '>None</option></select></label>';
+		self::field( 'IMAP username', 'username', $settings['username'] ?? '', 'text', false, array( 'maxlength' => 254 ) );
+		self::field( 'IMAP password (leave blank to preserve)', 'password', '', 'password', false, array( 'autocomplete' => 'new-password', 'maxlength' => 4096 ) );
+		self::field( 'Mailbox folder (IMAP or Microsoft)', 'folder', $settings['folder'] ?? ( 'imap' === $config['provider'] ? 'INBOX' : 'inbox' ), 'text', false, array( 'maxlength' => 120 ) );
+		echo '<h3>OAuth API settings (Gmail or Microsoft 365)</h3>';
+		self::field( 'OAuth client ID', 'client_id', $settings['client_id'] ?? '', 'text', false, array( 'maxlength' => 255 ) );
+		self::field( 'OAuth client secret (leave blank to preserve)', 'client_secret', '', 'password', false, array( 'autocomplete' => 'new-password', 'maxlength' => 4096 ) );
+		self::field( 'OAuth refresh token (leave blank to preserve)', 'refresh_token', '', 'password', false, array( 'autocomplete' => 'new-password', 'maxlength' => 4096 ) );
+		self::field( 'Microsoft tenant ID (Microsoft only)', 'tenant_id', $settings['tenant_id'] ?? '', 'text', false, array( 'maxlength' => 100 ) );
+		self::button( 'Save inbox configuration' );
+		echo '</form>';
+		echo '<p><strong>Last checked:</strong> ' . esc_html( $config['last_checked_at'] ?: 'Never' ) . '</p>';
+		if ( $config['last_error'] ) {
+			echo '<div class="notice notice-error inline"><p>' . esc_html( $config['last_error'] ) . '</p></div>';
+		}
+		if ( $config['enabled'] ) {
+			self::form( 'event_email_check', array( 'event_id' => $id ) );
+			self::button( 'Check Inbox Now' );
+			echo '</form>';
+		}
+		echo '</section></div>';
 	}
 
 	public static function render_event_roster() {
@@ -619,9 +708,9 @@ final class MRSA_Views {
 	}
 
 	private static function scoring_setup() {
-		$events = self::events();
+		$events = self::scoring_events();
 		$id = absint( MRSA_Admin::query( 'event_id', '0' ) );
-		if ( $id && ! MRSA::event_access( $id ) ) {
+		if ( $id && ! MRSA::scoring_access( $id ) ) {
 			wp_die( esc_html( 'Event not found or not assigned to you.' ), '', array( 'response' => 403 ) );
 		}
 		echo '<h2>Scoring</h2>';
@@ -632,7 +721,9 @@ final class MRSA_Views {
 		}
 		$event = $id ? MRSA::row( 'events', $id ) : null;
 		if ( $event ) {
-			echo '<p><a class="button" href="' . esc_url( MRSA_Admin::url( 'rosters', array( 'event_id' => $id ) ) ) . '">Back to Event Roster</a></p>';
+			if ( MRSA::event_access( $id ) ) {
+				echo '<p><a class="button" href="' . esc_url( MRSA_Admin::url( 'rosters', array( 'event_id' => $id ) ) ) . '">Back to Event Roster</a></p>';
+			}
 			self::scoring( $event );
 		} else {
 			echo '<p>' . esc_html( $events ? 'Choose an event to display its scoring tabs.' : 'Create or be assigned to an event before opening scoring.' ) . '</p>';
@@ -640,10 +731,14 @@ final class MRSA_Views {
 	}
 
 	private static function scoring( $event ) {
-		$tab = MRSA_Admin::query( 'score_tab', 'library' );
+		$can_configure = MRSA::event_access( $event['id'] );
+		$tab = MRSA_Admin::query( 'score_tab', $can_configure ? 'library' : 'pending' );
 		$tabs = array( 'library' => 'Bonus Point Library', 'pending' => 'Submissions - Pending Review', 'reviewed' => 'Submissions - Reviewed', 'contested' => 'Submissions - Contested' );
+		if ( ! $can_configure ) {
+			unset( $tabs['library'] );
+		}
 		if ( ! isset( $tabs[ $tab ] ) ) {
-			$tab = 'library';
+			$tab = $can_configure ? 'library' : 'pending';
 		}
 		$rider_id = absint( MRSA_Admin::query( 'score_rider', '0' ) );
 		echo '<section id="mrsa-scoring"><nav class="nav-tab-wrapper" aria-label="Scoring workspace">';
@@ -667,6 +762,20 @@ final class MRSA_Views {
 			echo '</section>';
 			return;
 		}
+		if ( 'pending' === $tab ) {
+			self::pending_submissions( $event, $rider_id );
+			echo '</section>';
+			return;
+		}
+		if ( 'reviewed' === $tab ) {
+			self::reviewed_submissions( $event, $rider_id );
+			echo '</section>';
+			return;
+		}
+		if ( 'contested' === $tab ) {
+			echo '<p>No contested-submission workflow is configured. Reviewed decisions remain available in the Reviewed tab and rider submission history.</p></section>';
+			return;
+		}
 		$rows = self::queries()->scoring( $event['id'], $event['min_finisher_points'] );
 		self::table( array( 'Bib', 'Rider ID', 'Rider', 'Status', 'Score', 'Placing' ), array( 3 ) );
 		foreach ( $rows as $row ) {
@@ -686,6 +795,66 @@ final class MRSA_Views {
 		}
 		self::end_table();
 		echo '</section>';
+	}
+
+	private static function pending_submissions( $event, $rider_id ) {
+		$rows = self::queries()->pending_submissions( $event['id'], $rider_id );
+		if ( ! $rows ) {
+			echo '<p>No submissions are pending review.</p>';
+			return;
+		}
+		foreach ( $rows as $row ) {
+			$submission_url = MRSA_Email_Submissions::image_url( $event['id'], $row['image_file'] );
+			$bonus_url = MRSA_Bonus::image_url( $event['id'], $row['bonus_image'] );
+			echo '<article class="mrsa-panel mrsa-submission-review"><h5>Submission #' . esc_html( $row['id'] ) . ' — Bib ' . esc_html( $row['bib'] ) . ', ' . esc_html( $row['rider_name'] ) . '</h5><div class="mrsa-submission-comparison">';
+			echo '<section><h6>Rider submission</h6><p><strong>Submitted ID:</strong> ' . esc_html( $row['bonus_id'] ) . '<br><strong>Email subject:</strong> ' . esc_html( $row['email_subject'] ) . '<br><strong>Description:</strong> ' . esc_html( $row['submission_description'] ?: '—' ) . '<br><strong>Received:</strong> ' . esc_html( $row['submitted_at'] ) . '</p>';
+			if ( $submission_url ) {
+				echo '<a href="' . esc_url( $submission_url ) . '" target="_blank" rel="noopener noreferrer"><img src="' . esc_url( $submission_url ) . '" alt="Rider submission for bonus ' . esc_attr( $row['bonus_id'] ) . '"></a>';
+			}
+			$library_missing = null === $row['bonus_points'];
+			echo '</section><section><h6>Bonus Point Library match</h6><p><strong>Library ID:</strong> ' . esc_html( $row['bonus_id'] ) . '<br><strong>Points:</strong> ' . esc_html( $library_missing ? 'Unavailable' : $row['bonus_points'] ) . '<br><strong>Description:</strong> ' . esc_html( $library_missing ? 'The matching library record was removed after intake.' : $row['bonus_description'] ) . '</p>';
+			if ( $bonus_url ) {
+				echo '<a href="' . esc_url( $bonus_url ) . '" target="_blank" rel="noopener noreferrer"><img src="' . esc_url( $bonus_url ) . '" alt="Bonus Point Library image for ' . esc_attr( $row['bonus_id'] ) . '"></a>';
+			}
+			echo '</section></div>';
+			self::form( 'submission_review', array( 'event_id' => $event['id'], 'submission_id' => $row['id'] ), 'mrsa-submission-decision' );
+			echo '<label class="mrsa-field"><span>Rejection reason</span><select name="rejection_code"><option value="">Select when rejecting</option>';
+			foreach ( array(
+				'wrong_bonus_code' => 'Wrong bonus code',
+				'wrong_image' => 'Wrong image',
+				'wrong_location' => 'Wrong location',
+				'bad_image' => 'Bad image',
+				'missing_rally_flag' => 'Missing rally flag',
+				'wrong_time_window' => 'Wrong time window',
+				'other' => 'Other',
+			) as $value => $label ) {
+				echo '<option value="' . esc_attr( $value ) . '">' . esc_html( $label ) . '</option>';
+			}
+			echo '</select></label>';
+			self::field( 'Rejection description (required for Other)', 'rejection_description', '', 'textarea', false );
+			echo '<p><button type="submit" class="button button-primary" name="decision" value="accepted"' . ( $library_missing ? ' disabled' : '' ) . '>Accept and Award ' . esc_html( $library_missing ? 'Unavailable' : $row['bonus_points'] ) . ' Points</button> <button type="submit" class="button" name="decision" value="rejected">Reject Submission</button></p></form></article>';
+		}
+	}
+
+	private static function reviewed_submissions( $event, $rider_id ) {
+		$rows = self::queries()->reviewed_submissions( $event['id'], $rider_id );
+		if ( ! $rows ) {
+			echo '<p>No submissions have been reviewed.</p>';
+			return;
+		}
+		self::table( array( 'Submission', 'Received', 'Bib', 'Rider', 'Bonus ID', 'Decision', 'Points', 'Reason', 'Reviewer', 'Reviewed', 'Photo' ), array( 5 ) );
+		foreach ( $rows as $row ) {
+			$reviewer = $row['reviewed_by'] ? get_user_by( 'id', $row['reviewed_by'] ) : null;
+			echo '<tr><td>' . esc_html( $row['id'] ) . '</td><td>' . esc_html( $row['submitted_at'] ) . '</td><td>' . esc_html( $row['bib'] ?: '—' ) . '</td><td>' . esc_html( $row['rider_name'] ?: 'Unmatched message' ) . '</td><td>' . esc_html( $row['bonus_id'] ?: '—' ) . '</td><td>' . esc_html( ucfirst( $row['status'] ) ) . '</td><td>' . esc_html( $row['points_awarded'] ) . '</td><td>' . esc_html( $row['rejection_description'] ?: str_replace( '_', ' ', $row['rejection_code'] ) ) . '</td><td>' . esc_html( $reviewer ? $reviewer->user_login : ( $row['reviewed_by'] ? 'Deleted user #' . $row['reviewed_by'] : 'Automated intake' ) ) . '</td><td>' . esc_html( $row['reviewed_at'] ?: '—' ) . '</td><td>';
+			$image_url = MRSA_Email_Submissions::image_url( $event['id'], $row['image_file'] );
+			if ( $image_url ) {
+				echo '<a href="' . esc_url( $image_url ) . '" target="_blank" rel="noopener noreferrer">View photo</a>';
+			} else {
+				echo '—';
+			}
+			echo '</td></tr>';
+		}
+		self::end_table();
 	}
 
 	private static function bonus_import_feedback( $event_id, $step ) {
@@ -887,7 +1056,7 @@ final class MRSA_Views {
 		}
 		$event_id = absint( MRSA_Admin::query( 'event_id', '0' ) );
 		$bonus_id = MRSA_Admin::query( 'bonus_id' );
-		if ( ! MRSA::event_access( $event_id ) ) {
+		if ( ! MRSA::scoring_access( $event_id ) ) {
 			wp_die( esc_html( 'Event not found or not assigned to you.' ), '', array( 'response' => 403 ) );
 		}
 		if ( ! preg_match( '/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/D', $bonus_id ) ) {
@@ -971,9 +1140,24 @@ final class MRSA_Views {
 		$placing = $row['overall_placing'];
 		echo '<div class="wrap mrsa">';
 		self::header();
-		echo '<h2>Rider Overall Event Score Sheet</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'results', array( 'event_id' => $event_id ) ) ) . '">Back to Results</a></p>';
+		$back_url = MRSA::event_access( $event_id ) ? MRSA_Admin::url( 'results', array( 'event_id' => $event_id ) ) : MRSA_Admin::url( 'scoring', array( 'event_id' => $event_id, 'score_tab' => 'reviewed' ) );
+		echo '<h2>Rider Overall Event Score Sheet</h2><p><a class="button" href="' . esc_url( $back_url ) . '">Back</a></p>';
 		echo '<div class="mrsa-panel"><p><strong>Event:</strong> ' . esc_html( $row['event_name'] ) . '</p><p><strong>Rider:</strong> ' . esc_html( $row['name'] ) . ' (bib ' . esc_html( $row['bib'] ) . ')</p><p><strong>Total score:</strong> ' . esc_html( $row['score'] ) . '</p><p><strong>Status:</strong> ' . esc_html( $status ) . '</p><p><strong>Overall placing:</strong> ' . esc_html( $placing ) . '</p></div>';
-		echo '<div class="notice notice-info inline"><p>The bonus-point score-sheet layout and source records have not yet been defined. This authorized page preserves the event and rider context without inventing scoring data.</p></div></div>';
+		echo '<h3>Bonus Submission History</h3>';
+		$submissions = self::queries()->rider_submission_history( $event_id, $rider_id );
+		if ( ! $submissions ) {
+			echo '<p>No email bonus submissions have been recorded for this rider.</p>';
+		} else {
+			self::table( array( 'Submission', 'Received', 'Bonus ID', 'Description', 'Status', 'Points', 'Rejection reason', 'Photo' ), array( 4 ) );
+			foreach ( $submissions as $submission ) {
+				echo '<tr><td>' . esc_html( $submission['id'] ) . '</td><td>' . esc_html( $submission['submitted_at'] ) . '</td><td>' . esc_html( $submission['bonus_id'] ) . '</td><td>' . esc_html( $submission['bonus_description'] ) . '</td><td>' . esc_html( ucfirst( $submission['status'] ) ) . '</td><td>' . esc_html( $submission['points_awarded'] ) . '</td><td>' . esc_html( $submission['rejection_description'] ?: str_replace( '_', ' ', $submission['rejection_code'] ) ) . '</td><td>';
+				$image_url = MRSA_Email_Submissions::image_url( $event_id, $submission['image_file'] );
+				echo $image_url ? '<a href="' . esc_url( $image_url ) . '" target="_blank" rel="noopener noreferrer">View photo</a>' : '—';
+				echo '</td></tr>';
+			}
+			self::end_table();
+		}
+		echo '</div>';
 	}
 
 	private static function diagnostics() {
@@ -1010,7 +1194,7 @@ final class MRSA_Views {
 			$event_options .= '<option value="' . esc_attr( $event['id'] ) . '">' . esc_html( $event['name'] . ' — ' . $event['event_date'] ) . '</option>';
 		}
 		self::diagnostics_delete_form( 'diagnostics_delete_roster', 'Delete Event Roster', 'Delete all registrations for one event.', '<label class="mrsa-field"><span>Event</span><select name="event_id" required>' . $event_options . '</select></label>' );
-		self::diagnostics_delete_form( 'diagnostics_delete_bonus_points', 'Delete Event Bonus Listings', 'Delete all bonus listings and their event gallery images for one event.', '<label class="mrsa-field"><span>Event</span><select name="event_id" required>' . $event_options . '</select></label>' );
+		self::diagnostics_delete_form( 'diagnostics_delete_bonus_points', 'Delete Event Bonus Data', 'Delete all bonus listings, rider submissions, scoring images, and submission-awarded score points for one event.', '<label class="mrsa-field"><span>Event</span><select name="event_id" required>' . $event_options . '</select></label>' );
 		$rider_options = '<option value="">Choose a rider</option>';
 		foreach ( $riders as $rider ) {
 			$rider_options .= '<option value="' . esc_attr( $rider['id'] ) . '">' . esc_html( $rider['name'] . ' — ' . $rider['email'] ) . '</option>';
@@ -1087,7 +1271,7 @@ final class MRSA_Views {
 		);
 		echo '<h2>About</h2>';
 		echo '<p>Motorcycle Rally Scoring Application provides site-scoped administration for rally organizers, motorcycle catalogs, master rider records, event setup, and rider enrollment.</p>';
-		echo '<div class="notice notice-warning inline"><p><strong>Version status:</strong> This development version provides an event-scoped Bonus Point Library, registration lifecycle tracking, score-based overall ranking, read-only result status display, exports, and backups. Bonus scoring calculations and submission-review records remain undefined.</p></div>';
+		echo '<div class="notice notice-warning inline"><p><strong>Version status:</strong> This development version provides event-scoped email bonus ingestion, separate Event Scorer assignments, pending/reviewed submission history, transactional point awards, the Bonus Point Library, registration lifecycle tracking, score-based overall ranking, exports, and backups. Contested-submission handling remains undefined.</p></div>';
 		echo '<table class="form-table" role="presentation">';
 		echo '<tr><th scope="row">Version</th><td>' . esc_html( MRSA_VERSION ) . '</td></tr>';
 		echo '<tr><th scope="row">Environment</th><td>WordPress ' . esc_html( $wp_version ) . ', PHP ' . esc_html( PHP_VERSION ) . '</td></tr>';
@@ -1102,7 +1286,7 @@ final class MRSA_Views {
 		echo '<p><a href="' . esc_url( $recommended_plugin ) . '" target="_blank" rel="noopener noreferrer">View plugin details and documentation<span class="screen-reader-text"> (opens in a new tab)</span></a> &middot; <a href="' . esc_url( $recommended_plugin . '/releases' ) . '" target="_blank" rel="noopener noreferrer">Download from GitHub Releases<span class="screen-reader-text"> (opens in a new tab)</span></a></p>';
 		echo '<p>Installation is optional and manual. Review the plugin&rsquo;s requirements and privacy guidance before installing; embedded maps load content from SpotWalla. This recommendation does not imply endorsement or approval by WordPress.org or SpotWalla.</p></section>';
 		echo '<h2>Bike Catalog Import Source</h2><div class="notice notice-info inline"><p>The optional import uses the <a href="' . esc_url( MRSA_Importer::SOURCE ) . '" target="_blank" rel="noopener noreferrer">NHTSA Product Information Catalog and Vehicle Listing API<span class="screen-reader-text"> (opens in a new tab)</span></a>. It accepts a make and intersects Get Models for Make results with NHTSA&rsquo;s motorcycle-filtered models. Only make and model are imported; an optional four-digit year is entered separately on a rider&rsquo;s motorcycle assignment and is not validated against the catalog.</p></div>';
-		echo '<h2>Privacy and security</h2><p>Collect only necessary rider, emergency-contact, insurance, and pillion details. WordPress personal-data export and erasure tools include plugin rider information. Erasure anonymizes riders and removes motorcycle and pillion details while retaining anonymous registration identifiers and results fields for event integrity.</p><p>Use TLS, least-privilege accounts, secure backups, and supported WordPress, PHP, and database versions. Automated Semgrep and Trivy checks support secure development but do not certify NIST compliance, guarantee that every CVE is absent, or replace an independent security assessment.</p>';
+		echo '<h2>Privacy and security</h2><p>Collect only necessary rider, emergency-contact, insurance, pillion, and bonus-submission details. WordPress personal-data export includes plugin rider, submission, role-assignment, and review information. Rider erasure anonymizes retained scoring records and removes motorcycle, pillion, submission-description, sender-email, and submission-photo data while retaining anonymous registration and decision fields for event integrity.</p><p>Event mailbox secrets are encrypted at rest but encrypted exports/backups remain sensitive. Use TLS, least-privilege accounts, secure backups, and supported WordPress, PHP, and database versions. Automated Semgrep and Trivy checks support secure development but do not certify NIST compliance, guarantee that every CVE is absent, or replace an independent security assessment.</p>';
 		echo '<h2>Reporting issues</h2><ol><li>Search <a href="' . esc_url( $repository . '/issues' ) . '" target="_blank" rel="noopener noreferrer">existing issues<span class="screen-reader-text"> (opens in a new tab)</span></a> to see whether the problem is already reported.</li><li>If not, <a href="' . esc_url( $repository . '/issues/new' ) . '" target="_blank" rel="noopener noreferrer">open a new issue<span class="screen-reader-text"> (opens in a new tab)</span></a> with a short, descriptive title.</li><li>Describe the expected and actual behavior, steps to reproduce it, the affected tab or workflow, and any error messages or screenshots.</li><li>Include your environment: <code>Plugin ' . esc_html( MRSA_VERSION ) . ', WordPress ' . esc_html( $wp_version ) . ', PHP ' . esc_html( PHP_VERSION ) . '</code>.</li><li>Do not include passwords, rider records, emergency contacts, insurance details, or other sensitive data. Report security vulnerabilities privately to the repository owner rather than in a public issue.</li></ol>';
 	}
 }

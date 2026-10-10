@@ -26,7 +26,7 @@ final class MRSA_Diagnostics {
 		$file = 'action-scheduler/action-scheduler.php';
 		$installed = isset( get_plugins()[ $file ] );
 		$active = $installed && is_plugin_active( $file );
-		return array( 'installed' => $installed, 'active' => $active, 'ready' => $active && function_exists( 'as_schedule_single_action' ) );
+		return array( 'installed' => $installed, 'active' => $active, 'ready' => $active && function_exists( 'as_schedule_single_action' ) && function_exists( 'as_schedule_recurring_action' ) && function_exists( 'as_has_scheduled_action' ) );
 	}
 
 	public static function size_check( $name, $value, $required, $zero_unlimited = false ) {
@@ -97,11 +97,15 @@ final class MRSA_Diagnostics {
 			'stream_socket_client' => array( 'Local sockets (ClamAV)', 'Ask the host to allow stream_socket_client in the web-serving PHP disable_functions policy and local socket connections to clamd. This uses PHP streams; installing the sockets extension alone does not resolve a disabled streams function.' ),
 			'getimagesize' => array( 'Image inspection', 'Ask the host to enable getimagesize in the web-serving PHP configuration/disable_functions policy. This standard image-inspection function does not require installing GD.' ),
 			'hash_file' => array( 'File fingerprints', 'Ask the host to enable the standard hash extension and allow hash_file in the web-serving PHP disable_functions policy. Reload PHP-FPM/web server.' ),
+			'openssl_encrypt' => array( 'OpenSSL credential encryption', 'Enable the OpenSSL PHP extension so event mailbox credentials can be encrypted with AES-256-GCM.' ),
+			'openssl_decrypt' => array( 'OpenSSL credential decryption', 'Enable the OpenSSL PHP extension so saved event mailbox credentials can be decrypted for polling.' ),
 		);
 		foreach ( $functions as $function => $requirement ) {
 			$rows[] = array( 'name' => $requirement[0], 'status' => function_exists( $function ) ? 'passed' : 'failed', 'detail' => function_exists( $function ) ? 'Available.' : 'Required PHP function unavailable: ' . $function . '.', 'remedy' => $requirement[1] . ' Ask the host to confirm this function is available to the WordPress PHP process, then rerun this check.' );
 		}
 		$rows[] = array( 'name' => 'WordPress archive reader', 'status' => class_exists( 'PclZip' ) || is_readable( ABSPATH . 'wp-admin/includes/class-pclzip.php' ) ? 'passed' : 'failed', 'detail' => 'XLSX and ZIP imports use the PclZip reader bundled with WordPress.', 'remedy' => 'After a full backup, use Dashboard > Updates > Re-install the current WordPress version, or ask the host to restore wp-admin/includes/class-pclzip.php from the matching official WordPress release. Check that the PHP service account can read it; do not download replacement PHP files from unofficial sources. Rerun the check.' );
+		$rows[] = array( 'name' => 'Action Scheduler polling', 'status' => function_exists( 'as_schedule_recurring_action' ) ? 'passed' : 'failed', 'detail' => function_exists( 'as_schedule_recurring_action' ) ? 'Action Scheduler is available for five-minute inbox polling.' : 'Action Scheduler is unavailable; scheduled email submission polling cannot run.', 'remedy' => 'Install and activate the required Action Scheduler provider, then reload the plugin and rerun this check.' );
+		$rows[] = array( 'name' => 'PHP IMAP provider support', 'status' => function_exists( 'imap_open' ) ? 'passed' : 'review', 'detail' => function_exists( 'imap_open' ) ? 'The PHP IMAP extension is available.' : 'Manual review: the PHP IMAP extension is unavailable. Gmail API and Microsoft 365 API providers remain available.', 'remedy' => 'If an event uses IMAP, enable the PHP IMAP extension for the web-serving PHP version and reload PHP-FPM or the web server.' );
 		return $rows;
 	}
 
@@ -111,13 +115,13 @@ final class MRSA_Diagnostics {
 		$version = $wpdb->get_var( 'SELECT VERSION()' );
 		$rows[] = array( 'name' => 'Database server', 'status' => ! $wpdb->last_error && is_string( $version ) && self::database_version_supported( $version ) ? 'passed' : 'failed', 'detail' => $wpdb->last_error ? 'Database version query failed.' : 'Current: ' . (string) $version . '. Requires MySQL 8.0+ or MariaDB 10.6+.', 'remedy' => 'If the query failed, ask the host to verify DB_HOST, DB_NAME, DB_USER and DB_PASSWORD in wp-config.php and database connectivity/permissions; do not share credentials in support screenshots. For an old server, back up and test a host-managed migration to a supported MySQL 8.0+ or MariaDB 10.6+ release. Rerun the check after reconnecting.' );
 		$invalid = array();
-		foreach ( array( 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'import_audit' ) as $table ) {
+		foreach ( array( 'event_admins', 'event_scorers', 'event_email_settings', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' ) as $table ) {
 			$row = $wpdb->get_row( $wpdb->prepare( 'SHOW TABLE STATUS WHERE Name = %s', MRSA::table( $table ) ), ARRAY_A );
 			if ( $wpdb->last_error || ! $row || 'innodb' !== strtolower( $row['Engine'] ?? '' ) ) {
 				$invalid[] = $table;
 			}
 		}
-		$rows[] = array( 'name' => 'MRSA database tables', 'status' => $invalid ? 'failed' : 'passed', 'detail' => $invalid ? 'Missing, unreadable, or not InnoDB: ' . implode( ', ', $invalid ) . '.' : 'All eight MRSA tables exist and use InnoDB for transactional updates.', 'remedy' => 'Back up before changing tables. In phpMyAdmin or the host database console, inspect the listed tables using the actual WordPress prefix (for example wp_MRSA_bonus_points). Ask the DBA to restore missing data from backup and resolve table metadata/CREATE/ALTER permissions. After testing on staging, convert existing non-InnoDB MRSA tables with ALTER TABLE `actual_table_name` ENGINE=InnoDB; substitute the verified table name, never run the placeholder. Install/reactivate the current MRSA plugin for new tables, then rerun the check. Do not use Diagnostics deletion as a repair.' );
+		$rows[] = array( 'name' => 'MRSA database tables', 'status' => $invalid ? 'failed' : 'passed', 'detail' => $invalid ? 'Missing, unreadable, or not InnoDB: ' . implode( ', ', $invalid ) . '.' : 'All eleven MRSA tables exist and use InnoDB for transactional updates.', 'remedy' => 'Back up before changing tables. In phpMyAdmin or the host database console, inspect the listed tables using the actual WordPress prefix (for example wp_MRSA_bonus_points). Ask the DBA to restore missing data from backup and resolve table metadata/CREATE/ALTER permissions. After testing on staging, convert existing non-InnoDB MRSA tables with ALTER TABLE `actual_table_name` ENGINE=InnoDB; substitute the verified table name, never run the placeholder. Install/reactivate the current MRSA plugin for new tables, then rerun the check. Do not use Diagnostics deletion as a repair.' );
 		$schema = (string) get_option( 'mrsa_db_version', '' );
 		$rows[] = array( 'name' => 'MRSA database schema', 'status' => MRSA_DB_VERSION === $schema ? 'passed' : 'failed', 'detail' => 'Installed schema: ' . ( $schema ?: 'unknown' ) . '. Expected: ' . MRSA_DB_VERSION . '.', 'remedy' => 'Back up the database and install the current MRSA package, then reload WordPress to trigger its schema upgrade. If the mismatch remains, ask the host to check PHP/database logs and the database user CREATE/ALTER permissions. Do not manually change the mrsa_db_version option to hide a failed upgrade. Rerun the check.' );
 		return $rows;
