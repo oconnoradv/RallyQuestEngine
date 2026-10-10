@@ -271,7 +271,7 @@ final class MRSA_Email_Submissions {
 		}
 		$image_file = '';
 		try {
-			$key = md5( $provider . '|' . $message_id . '|' . wp_generate_password( 16, false, false ) );
+			$key = bin2hex( random_bytes( 16 ) );
 			$image_file = MRSA_Bonus::store_submission_image( $temp, $attachment['name'] ?? '', $bonus_id, $event_id, $key );
 		} finally {
 			if ( is_file( $temp ) ) {
