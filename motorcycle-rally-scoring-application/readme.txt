@@ -4,7 +4,7 @@ Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.1.16
+Stable tag: 0.1.17
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -286,7 +286,7 @@ No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
 
-= Unreleased =
+= 0.1.17 =
 * Removed the plugin-defined site-wide administrator assignment and legacy storage. WordPress administrators now manage shared application data, while plugin administrator assignments exist only at the event level.
 * Added separate Event Scorer assignments with Scoring-only access.
 * Added encrypted per-event IMAP, Gmail API, and Microsoft 365 inbox configuration with scheduled and manual polling.
