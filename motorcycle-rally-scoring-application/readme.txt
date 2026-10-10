@@ -43,7 +43,7 @@ Motorcycle Rally Scoring Application provides administrative tabs for:
 * Scoring: event-specific Bonus Point Library, CSV/XLSX listing import, local-folder and public-URL image import, and event-roster scoring summaries in the remaining workspace tabs.
 * Results: score ordering, computed overall placing, read-only result status, and rider score-sheet placeholders.
 * Bikes: side-by-side manual entry and motorcycle make/model import on wide screens, stacked on narrow screens, plus transactional bulk deletion of unassigned catalog rows.
-* Rosters: Import Riders beside Add Rider opens a separate selected-event CSV/XLSX import screen for existing riders by Rider ID or Email, with a downloadable sample CSV and a Back to Rosters link. Optional Bib ID, Status and Pillion columns; blank bibs receive the next available number. Global administrators only, maximum 10 MB / 5,000 rows. ClamAV is required; invalid or conflicting rows reject the whole batch.
+* Rosters: Import Riders beside Add Rider opens a separate selected-event CSV/XLSX import screen for existing riders by Rider ID or Email, with a downloadable sample CSV and a Back to Rosters link. Optional Bib ID, Status and Pillion columns; blank bibs receive the next available number. WordPress administrators only, maximum 10 MB / 5,000 rows. ClamAV is required; invalid or conflicting rows reject the whole batch.
 * Diagnostics: on-demand required-plugin/environment checks with native WordPress install/activate controls for required Action Scheduler; Gallery for SpotWalla remains optional. PHP, database/InnoDB/schema, ClamAV, private staging/storage and upload capacity are checked against current MRSA limits (10 MB spreadsheets/images, 50 MB ZIP/download, 100 MB / 200 images per batch). Unverifiable hosting and scanner policies are labeled Manual review. JSON export, restorable SQL backup, and verification-string-protected scoped deletion are also available. Gallery image files are stored separately and are not included in database exports or backups.
 * About: version, licensing, attribution, scope, and an optional Gallery for SpotWalla recommendation with documentation and download links.
 
@@ -149,12 +149,12 @@ the dedicated uploads/mrsa-event-gallery directory and must be backed up
 separately from the JSON and SQL database exports.
 Diagnostics can delete all bonus listings and images for a selected event.
 
-WordPress administrators can bootstrap access. Existing assigned global
-administrators retain access to plugin data, though the application no longer
-provides global-assignment or uninstall-retention controls. Assigned event
-administrators are restricted to their assigned events and enrolled riders;
-they cannot change global assignments, the motorcycle catalog, or master
-rider records.
+The plugin has no site-wide administrator assignment. WordPress administrators
+manage shared riders, motorcycles, event creation, diagnostics, enrollment,
+and Event Administrator assignments through WordPress capabilities. Assigned
+Event Administrators are restricted to their assigned events and enrolled
+riders; they cannot manage shared motorcycles, master rider records, other
+events, diagnostics, or administrator assignments.
 
 Tables use the current site's WordPress prefix followed by MRSA_, avoiding
 collisions between sites. No WordPress core tables or users are replaced.
@@ -267,6 +267,9 @@ No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
 
+= Unreleased =
+* Removed the plugin-defined site-wide administrator assignment and legacy storage. WordPress administrators now manage shared application data, while plugin administrator assignments exist only at the event level.
+
 = 0.1.16 =
 * List all locally uploaded scoring images that pass scanning and authorize their import with one bulk action instead of approving each image separately.
 
@@ -343,7 +346,7 @@ No. Rider and pillion prices are event configuration values only.
 * Removed former-name wording from the Gallery for SpotWalla recommendation.
 
 = 0.1.6 =
-* Removed the Administrators tab and controls, preserving existing administrator access, and renamed Rider Registration to Rider Setup.
+* Removed the former Administrators tab and renamed Rider Registration to Rider Setup.
 * Moved event scoring workspaces below event selection and made Overall Results status read-only.
 * Simplified Event Rosters to seven read-only columns with rider and bib links that return to the roster.
 * Added event-specific bonus listings, CSV/XLSX imports, independent image galleries, and manual bonus editing.
@@ -352,7 +355,7 @@ No. Rider and pillion prices are event configuration values only.
 
 = 0.1.5 =
 * Added rider-filtered roster/results navigation, computed overall results, automatic and manual result statuses, and an authorized rider score-sheet placeholder.
-* Removed the Administrators tab and its global-assignment and uninstall-retention controls; renamed Rider Registration to Rider Setup.
+* Removed the former site-wide assignment controls and uninstall-retention controls; renamed Rider Registration to Rider Setup.
 * Added automatic event enrollment after creating a rider from a full enrollment workflow.
 * Added editable registration lifecycle statuses and renamed Event Placing to Overall Placing on Event Rosters.
 * Added JSON export, SQL database backup, and randomized-string-verified destructive Diagnostics operations.
@@ -370,7 +373,7 @@ No. Rider and pillion prices are event configuration values only.
 * Support motorcycle catalog records with an unspecified year and optional four-digit manual years.
 * Move event administrator assignments to each event's Configure page.
 * Add Event Rosters with complete rider details and a dedicated Add Rider to Event workflow.
-* Rename Global Setup to Administrators.
+* Renamed the original setup tab to Administrators.
 
 = 0.1.2 =
 * Restrict external import to one exact NHTSA motorcycle make/model/year record.

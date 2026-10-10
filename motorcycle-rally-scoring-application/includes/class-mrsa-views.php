@@ -81,7 +81,7 @@ final class MRSA_Views {
 	}
 
 	private static function events( $rider_id = 0 ) {
-		return self::queries()->events( $rider_id, MRSA::global_access(), get_current_user_id() );
+		return self::queries()->events( $rider_id, MRSA::site_access(), get_current_user_id() );
 	}
 
 	private static function users_select( $selected = 0 ) {
@@ -104,25 +104,25 @@ final class MRSA_Views {
 		if ( ! MRSA::access() ) {
 			wp_die( esc_html( 'You are not assigned to rally administration.' ), '', array( 'response' => 403 ) );
 		}
-		$global = MRSA::global_access();
+		$site_admin = MRSA::site_access();
 		$tab = MRSA_Admin::query( 'tab', 'events' );
 		$tabs = array( 'riders' => 'Riders', 'events' => 'Events', 'rosters' => 'Rosters', 'scoring' => 'Scoring', 'results' => 'Results', 'bikes' => 'Bikes', 'diagnostics' => 'Diagnostics', 'about' => 'About' );
-		if ( ! isset( $tabs[ $tab ] ) || ( ! $global && in_array( $tab, array( 'bikes', 'diagnostics' ), true ) ) ) {
-			wp_die( esc_html( 'This area is restricted to global administrators.' ), '', array( 'response' => 403 ) );
+		if ( ! isset( $tabs[ $tab ] ) || ( ! $site_admin && in_array( $tab, array( 'bikes', 'diagnostics' ), true ) ) ) {
+			wp_die( esc_html( 'This shared-data area is restricted to WordPress administrators.' ), '', array( 'response' => 403 ) );
 		}
 		echo '<div class="wrap mrsa">';
 		self::header();
 		echo '<nav class="nav-tab-wrapper" aria-label="Rally Scoring tabs">';
 		foreach ( $tabs as $key => $label ) {
-			if ( ! $global && in_array( $key, array( 'bikes', 'diagnostics' ), true ) ) {
+			if ( ! $site_admin && in_array( $key, array( 'bikes', 'diagnostics' ), true ) ) {
 				continue;
 			}
 			echo '<a class="nav-tab' . ( $key === $tab ? ' nav-tab-active' : '' ) . '" href="' . esc_url( MRSA_Admin::url( $key ) ) . '">' . esc_html( $label ) . '</a>';
 		}
 		echo '</nav>';
 		self::notice();
-		if ( ! $global ) {
-			echo '<p class="mrsa-note">Event administrator access: your assigned events and their registration details only. Master rider profiles are read-only; global settings and the motorcycle catalog are restricted.</p>';
+		if ( ! $site_admin ) {
+			echo '<p class="mrsa-note">Event administrator access: your assigned events and their enrolled rider details only. Shared rider records, motorcycles, event creation, diagnostics, and administrator assignments require a WordPress administrator.</p>';
 		}
 		switch ( $tab ) {
 			case 'bikes':
@@ -213,8 +213,8 @@ final class MRSA_Views {
 	private static function rider_setup() {
 		echo '<h2>Registered riders</h2>';
 		$id = absint( MRSA_Admin::query( 'rider_id', '0' ) );
-		$global = MRSA::global_access();
-		if ( ! $global && $id ) {
+		$site_admin = MRSA::site_access();
+		if ( ! $site_admin && $id ) {
 			$visible = self::queries()->rider_visible( $id, get_current_user_id() );
 			if ( ! $visible ) {
 				wp_die( esc_html( 'Rider not registered in your assigned events.' ), '', array( 'response' => 403 ) );
@@ -224,7 +224,7 @@ final class MRSA_Views {
 		if ( $id && ! $rider ) {
 			wp_die( esc_html( 'Rider not found.' ), '', array( 'response' => 404 ) );
 		}
-		if ( $global ) {
+		if ( $site_admin ) {
 			echo '<p><a class="button button-primary" href="' . esc_url( MRSA_Admin::url( 'rider-edit' ) ) . '">Add Rider</a></p>';
 		} elseif ( $id ) {
 			self::table( array( 'Rider ID', 'Name', 'Alias', 'Email', 'Phone' ) );
@@ -237,10 +237,10 @@ final class MRSA_Views {
 			echo '</tr>';
 			self::end_table();
 		}
-		if ( $id && ! $global ) {
+		if ( $id && ! $site_admin ) {
 			self::rider_events( $id );
 		}
-		$rows = self::list_page( 'riders', self::queries()->rider_page( MRSA_Admin::query( 'q' ), MRSA_Admin::query( 'list_page', '1' ), $global, get_current_user_id() ) );
+		$rows = self::list_page( 'riders', self::queries()->rider_page( MRSA_Admin::query( 'q' ), MRSA_Admin::query( 'list_page', '1' ), $site_admin, get_current_user_id() ) );
 		self::table( array( 'Rider ID', 'Name', 'Alias', 'Email', 'Phone', 'Actions' ) );
 		foreach ( $rows as $row ) {
 			echo '<tr>';
@@ -250,7 +250,7 @@ final class MRSA_Views {
 				echo '</td>';
 			}
 			echo '<td>';
-			if ( $global ) {
+			if ( $site_admin ) {
 				self::link( 'Edit', 'rider-edit', array( 'rider_id' => $row['id'] ) );
 				echo ' | ';
 			} else {
@@ -293,13 +293,13 @@ final class MRSA_Views {
 		if ( ! MRSA::access() ) {
 			wp_die( esc_html( 'You are not authorized to view rider records.' ), '', array( 'response' => 403 ) );
 		}
-		$global = MRSA::global_access();
+		$site_admin = MRSA::site_access();
 		$id = absint( MRSA_Admin::query( 'rider_id', '0' ) );
 		$rider = $id ? MRSA::row( 'riders', $id ) : array();
 		if ( $id && ! $rider ) {
 			wp_die( esc_html( 'Rider not found.' ), '', array( 'response' => 404 ) );
 		}
-		if ( ! $global ) {
+		if ( ! $site_admin ) {
 			$visible = $id ? self::queries()->rider_visible( $id, get_current_user_id() ) : false;
 			if ( ! $visible ) {
 				wp_die( esc_html( 'Rider not registered in your assigned events.' ), '', array( 'response' => 403 ) );
@@ -309,9 +309,9 @@ final class MRSA_Views {
 		self::header();
 		$return_url = MRSA_Admin::query( 'return_url' );
 		$back_url = $return_url ? wp_validate_redirect( $return_url, MRSA_Admin::url( 'riders' ) ) : MRSA_Admin::url( 'riders' );
-		echo '<h2>' . esc_html( $global ? ( $id ? 'Edit Rider' : 'Add Rider' ) : 'Rider Details' ) . '</h2><p><a class="button" href="' . esc_url( $back_url ) . '">' . esc_html( $return_url ? 'Back to Event Roster' : 'Back to Riders' ) . '</a></p>';
+		echo '<h2>' . esc_html( $site_admin ? ( $id ? 'Edit Rider' : 'Add Rider' ) : 'Rider Details' ) . '</h2><p><a class="button" href="' . esc_url( $back_url ) . '">' . esc_html( $return_url ? 'Back to Event Roster' : 'Back to Riders' ) . '</a></p>';
 		self::notice();
-		if ( $global ) {
+		if ( $site_admin ) {
 			self::rider_form( $id, $rider );
 		} else {
 			self::table( array( 'Rider ID', 'Name', 'Alias', 'Email', 'Phone' ) );
@@ -343,7 +343,7 @@ final class MRSA_Views {
 
 	private static function rider_events( $id ) {
 		echo '<h3>Registered events (read-only)</h3><p>Result status is automatic unless a manual status was previously recorded. Status is read-only on Results.</p>';
-		$rows = self::queries()->rider_events( $id, MRSA::global_access(), get_current_user_id() );
+		$rows = self::queries()->rider_events( $id, MRSA::site_access(), get_current_user_id() );
 		self::table( array( 'Event ID', 'Event', 'Bib / scoring context', 'Pillion', 'Status', 'Score', 'Overall Placing' ), array( 4 ) );
 		foreach ( $rows as $row ) {
 			echo '<tr><td>';
@@ -368,7 +368,7 @@ final class MRSA_Views {
 	private static function event_setup() {
 		$events = self::events();
 		echo '<h2>Events</h2>';
-		if ( MRSA::global_access() ) {
+		if ( MRSA::site_access() ) {
 			echo '<p><a class="button button-primary" href="' . esc_url( MRSA_Admin::url( 'event-edit' ) ) . '">Add Event</a></p>';
 		}
 		self::table( array( 'ID', 'Name', 'Date', 'Location', 'Max bib', 'Actions' ), array( 2, 3 ) );
@@ -391,7 +391,7 @@ final class MRSA_Views {
 	}
 
 	private static function event_administrators( $event ) {
-		echo '<h2>Event Administrator Assignments</h2><p>Assigned administrators may configure only their events and edit event bibs and pillion details. Global administrators enroll riders; event administrators cannot browse unenrolled master riders or edit their personal records.</p>';
+		echo '<h2>Event Administrator Assignments</h2><p>Assigned administrators may configure only their events and use their event rosters and scoring tools. WordPress administrators manage assignments, shared rider records, and enrollment.</p>';
 		echo '<details class="mrsa-panel"><summary class="button button-primary">Add Administrator</summary>';
 		self::form( 'event_admin', array( 'event_id' => $event['id'] ) );
 		self::users_select();
@@ -452,7 +452,7 @@ final class MRSA_Views {
 			wp_die( esc_html( 'You are not assigned to rally administration.' ), '', array( 'response' => 403 ) );
 		}
 		$id = absint( MRSA_Admin::query( 'event_id', '0' ) );
-		if ( ( ! $id && ! MRSA::global_access() ) || ( $id && ! MRSA::event_access( $id ) ) ) {
+		if ( ( ! $id && ! MRSA::site_access() ) || ( $id && ! MRSA::event_access( $id ) ) ) {
 			wp_die( esc_html( 'Event not found or not assigned to you.' ), '', array( 'response' => 403 ) );
 		}
 		$event = $id ? MRSA::row( 'events', $id ) : array();
@@ -464,7 +464,7 @@ final class MRSA_Views {
 		echo '<h2>' . esc_html( $id ? 'Edit Event' : 'Add Event' ) . '</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'events' ) ) . '">Back to Events</a></p>';
 		self::notice();
 		self::event_form( $id, $event );
-		if ( $id && MRSA::global_access() ) {
+		if ( $id && MRSA::site_access() ) {
 			self::event_administrators( $event );
 		}
 		echo '</div>';
@@ -494,7 +494,7 @@ final class MRSA_Views {
 			echo '<button class="button">Choose event</button></form>';
 		}
 		echo '</div><div class="mrsa-roster-toolbar__actions"><h2>Event Roster</h2>';
-		if ( $id && MRSA::global_access() ) {
+		if ( $id && MRSA::site_access() ) {
 			echo '<a class="button button-primary" href="' . esc_url( MRSA_Admin::url( 'event-enroll', array( 'event_id' => $id ) ) ) . '">Add Rider</a>';
 			echo '<a class="button" href="' . esc_url( MRSA_Admin::url( 'roster-import', array( 'event_id' => $id ) ) ) . '">Import Riders</a>';
 		}
@@ -512,8 +512,8 @@ final class MRSA_Views {
 	}
 
 	public static function render_roster_import() {
-		if ( ! MRSA::global_access() ) {
-			wp_die( esc_html( 'Only global administrators may import riders into events.' ), '', array( 'response' => 403 ) );
+		if ( ! MRSA::site_access() ) {
+			wp_die( esc_html( 'Only WordPress administrators may import riders into events.' ), '', array( 'response' => 403 ) );
 		}
 		$id = absint( MRSA_Admin::query( 'event_id', '0' ) );
 		if ( ! MRSA::event_access( $id ) || ! ( $event = MRSA::row( 'events', $id ) ) ) {
@@ -556,8 +556,8 @@ final class MRSA_Views {
 	}
 
 	public static function render_event_enroll() {
-		if ( ! MRSA::global_access() ) {
-			wp_die( esc_html( 'Only global administrators may add riders to events.' ), '', array( 'response' => 403 ) );
+		if ( ! MRSA::site_access() ) {
+			wp_die( esc_html( 'Only WordPress administrators may add riders to events.' ), '', array( 'response' => 403 ) );
 		}
 		$id = absint( MRSA_Admin::query( 'event_id', '0' ) );
 		if ( ! MRSA::event_access( $id ) || ! ( $event = MRSA::row( 'events', $id ) ) ) {
@@ -977,8 +977,8 @@ final class MRSA_Views {
 	}
 
 	private static function diagnostics() {
-		if ( ! MRSA::global_access() ) {
-			wp_die( esc_html( 'Only global administrators may use Diagnostics.' ), '', array( 'response' => 403 ) );
+		if ( ! MRSA::site_access() ) {
+			wp_die( esc_html( 'Only WordPress administrators may use Diagnostics.' ), '', array( 'response' => 403 ) );
 		}
 		$events = self::queries()->diagnostic_events();
 		$riders = self::queries()->diagnostic_riders();
@@ -1096,7 +1096,7 @@ final class MRSA_Views {
 		}
 		echo '</table>';
 		echo '<p>The plugin is free software released under the GNU General Public License, version 3 or (at your option) any later version. The repository and installable package include the license and documentation.</p>';
-		echo '<h2>What this version includes</h2><ul class="ul-disc"><li>Global and per-event administrator assignments based on existing WordPress users.</li><li>Manual and make-based NHTSA motorcycle make/model catalog workflows with bulk deletion.</li><li>Master rider records with emergency, insurance, make/model motorcycle, optional manual year, and fuel-capacity details.</li><li>Event configuration, roster, enrollment, event-scoped bonus listings, and a dedicated bonus image gallery stored outside the WordPress media library.</li><li>Successful forms return to their originating form or tab.</li></ul>';
+		echo '<h2>What this version includes</h2><ul class="ul-disc"><li>Event Administrator assignments based on existing WordPress users; WordPress administrators manage shared application data.</li><li>Manual and make-based NHTSA motorcycle make/model catalog workflows with bulk deletion.</li><li>Master rider records with emergency, insurance, make/model motorcycle, optional manual year, and fuel-capacity details.</li><li>Event configuration, roster, enrollment, event-scoped bonus listings, and a dedicated bonus image gallery stored outside the WordPress media library.</li><li>Successful forms return to their originating form or tab.</li></ul>';
 		echo '<section class="mrsa-panel mrsa-recommended-plugins"><h2>Plugins you Might Like</h2><h3>Gallery for SpotWalla</h3>';
 		echo '<p>Display public SpotWalla tracks, trips, and retrospectives on WordPress pages or posts, individually or in galleries. This optional plugin works independently of Motorcycle Rally Scoring Application; it is not required for scoring or the event bonus image library.</p>';
 		echo '<p><a href="' . esc_url( $recommended_plugin ) . '" target="_blank" rel="noopener noreferrer">View plugin details and documentation<span class="screen-reader-text"> (opens in a new tab)</span></a> &middot; <a href="' . esc_url( $recommended_plugin . '/releases' ) . '" target="_blank" rel="noopener noreferrer">Download from GitHub Releases<span class="screen-reader-text"> (opens in a new tab)</span></a></p>';

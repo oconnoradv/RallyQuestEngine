@@ -5,8 +5,8 @@ define( 'ARRAY_A', 'ARRAY_A' );
 define( 'MRSA_VERSION', 'test' );
 define( 'MRSA_FILE', __DIR__ . '/../motorcycle-rally-scoring-application/motorcycle-rally-scoring-application.php' );
 final class MRSA {
-	public static $global = true;
-	public static function global_access() { return self::$global; }
+	public static $site_admin = true;
+	public static function site_access() { return self::$site_admin; }
 	public static function event_access( $id ) { return 7 === $id; }
 	public static function row( $table, $id ) { return 7 === $id ? array( 'id' => 7, 'name' => 'Test Rally' ) : null; }
 	public static function table( $name ) { return $name; }
@@ -187,10 +187,10 @@ $html = ob_get_clean();
 check( strpos( $html, 'Import Riders — Test Rally' ) !== false && strpos( $html, 'tab=rosters&amp;event_id=7' ) !== false, 'import screen names event and returns to selected roster' );
 check( strpos( $html, 'multipart/form-data' ) !== false && strpos( $html, 'name="op" value="roster_import"' ) !== false && strpos( $html, 'name="event_id" value="7"' ) !== false, 'dedicated screen submits existing import operation with event and nonce' );
 check( strpos( $html, 'samples/event-roster.csv' ) !== false && strpos( $html, 'bonus-import scanning overrides do not apply' ) !== false, 'sample download and mandatory scanning instructions remain available' );
-MRSA::$global = false;
-try { MRSA_Views::render_roster_import(); throw new LogicException( 'Non-global import screen accepted.' ); }
-catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), '403:' ) === 0, 'import screen rejects non-global administrators' ); }
-MRSA::$global = true;
+MRSA::$site_admin = false;
+try { MRSA_Views::render_roster_import(); throw new LogicException( 'Non-site-administrator import screen accepted.' ); }
+catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), '403:' ) === 0, 'import screen rejects non-site administrators' ); }
+MRSA::$site_admin = true;
 $_GET['event_id'] = '8';
 try { MRSA_Views::render_roster_import(); throw new LogicException( 'Unknown event accepted.' ); }
 catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), '404:' ) === 0, 'import screen rejects missing or inaccessible events' ); }

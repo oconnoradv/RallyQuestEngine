@@ -115,9 +115,9 @@ final class MRSA_Admin {
 		return add_query_arg( array_merge( array( 'page' => 'mrsa', 'tab' => $tab ), $extra ), admin_url( 'admin.php' ) );
 	}
 
-	private static function require_global() {
-		if ( ! MRSA::global_access() ) {
-			throw new RuntimeException( 'You are not authorized to manage global settings, catalog or master rider records.' );
+	private static function require_site_admin() {
+		if ( ! MRSA::site_access() ) {
+			throw new RuntimeException( 'You must be a WordPress administrator to manage shared riders, motorcycles, events, diagnostics, or event administrator assignments.' );
 		}
 	}
 
@@ -174,28 +174,28 @@ final class MRSA_Admin {
 			switch ( $op ) {
 				case 'event_admin':
 				case 'remove_event_admin':
-					self::require_global();
+					self::require_site_admin();
 					self::event_admin( 'remove_event_admin' === $op );
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					$tab = 'event-edit';
 					break;
 				case 'bike':
-					self::require_global();
+					self::require_site_admin();
 					self::bike();
 					$tab = 'bikes';
 					break;
 				case 'delete_bike':
-					self::require_global();
+					self::require_site_admin();
 					$message = self::delete_bikes( false );
 					$tab = 'bikes';
 					break;
 				case 'delete_bikes':
-					self::require_global();
+					self::require_site_admin();
 					$message = self::delete_bikes( true );
 					$tab = 'bikes';
 					break;
 				case 'source_import':
-					self::require_global();
+					self::require_site_admin();
 					if ( '1' !== self::posted( 'source_consent' ) ) {
 						throw new RuntimeException( 'Confirm that you understand the source and review requirements before importing the factual catalog data.' );
 					}
@@ -203,7 +203,7 @@ final class MRSA_Admin {
 					$tab = 'bikes';
 					break;
 				case 'rider':
-					self::require_global();
+					self::require_site_admin();
 					$is_new = 0 === self::integer( self::posted( 'id', '0' ) );
 					$extra['rider_id'] = self::rider();
 					$enroll_event_id = self::posted( 'enroll_event_id' );
@@ -228,7 +228,7 @@ final class MRSA_Admin {
 					$tab = 'rosters';
 					break;
 				case 'roster_import':
-					self::require_global();
+					self::require_site_admin();
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
 					$message = self::roster_import( $extra['event_id'] );
@@ -309,7 +309,7 @@ final class MRSA_Admin {
 				case 'diagnostics_delete_rider':
 				case 'diagnostics_delete_bonus_points':
 				case 'diagnostics_delete_audit':
-					self::require_global();
+					self::require_site_admin();
 					self::verify_diagnostics( $op );
 					$message = self::diagnostics_delete( $op );
 					$tab = 'diagnostics';
@@ -494,7 +494,7 @@ final class MRSA_Admin {
 		if ( $id ) {
 			self::require_event( $id );
 		} else {
-			self::require_global();
+			self::require_site_admin();
 		}
 		$data = array( 'name' => self::text( self::posted( 'name' ), 160, true ), 'max_bib' => self::integer( self::posted( 'max_bib' ), 1, 10000 ), 'logo_id' => self::integer( self::posted( 'logo_id', '0' ) ), 'location' => self::text( self::posted( 'location' ), 200 ), 'min_finisher_points' => self::integer( self::posted( 'min_finisher_points', '0' ), 0, 1000000000 ) );
 		if ( $data['logo_id'] && ( 'attachment' !== get_post_type( $data['logo_id'] ) || ! wp_attachment_is_image( $data['logo_id'] ) ) ) {
@@ -562,7 +562,7 @@ final class MRSA_Admin {
 				$data = array( 'bib' => self::integer( self::posted( 'bib' ), 1, (int) $event['max_bib'] ), 'pillion' => self::text( self::posted( 'pillion' ), 160 ) );
 				if ( 'registration' === $op ) {
 					// Event administrators never browse or enroll unregistered master PII.
-					self::require_global();
+					self::require_site_admin();
 					$rider_id = self::integer( self::posted( 'rider_id' ), 1 );
 					$rider = MRSA::row( 'riders', $rider_id );
 					if ( ! $rider || preg_match( '/^erased-\d+@example\.invalid$/', $rider['email'] ) ) {
@@ -701,8 +701,8 @@ final class MRSA_Admin {
 	}
 
 	public static function diagnostics_check() {
-		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! MRSA::global_access() ) {
-			wp_die( esc_html( 'Only global administrators may check MRSA configuration.' ), '', array( 'response' => 403 ) );
+		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! MRSA::site_access() ) {
+			wp_die( esc_html( 'Only WordPress administrators may check MRSA configuration.' ), '', array( 'response' => 403 ) );
 		}
 		check_admin_referer( 'mrsa_diagnostics_check' );
 		$report = MRSA_Diagnostics::check();
@@ -732,7 +732,7 @@ final class MRSA_Admin {
 		return ( new MRSA_Diagnostics_Deletion_Service() )->delete( $operation, $input );
 	}
 	public static function diagnostics_download() {
-		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! MRSA::global_access() ) {
+		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! MRSA::site_access() ) {
 			wp_die( esc_html( 'Unauthorized request.' ), '', array( 'response' => 403 ) );
 		}
 		check_admin_referer( 'mrsa_diagnostics_download' );
@@ -741,7 +741,7 @@ final class MRSA_Admin {
 			wp_die( esc_html( 'Unsupported diagnostics download.' ), '', array( 'response' => 400 ) );
 		}
 		global $wpdb;
-		$tables = array( 'global_admins', 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'import_audit' );
+		$tables = array( 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'import_audit' );
 		$stamp = gmdate( 'Ymd-His' );
 		nocache_headers();
 		if ( 'json' === $type ) {

@@ -3,7 +3,7 @@
 define( 'ABSPATH', __DIR__ );
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-diagnostics.php';
 final class MRSA {
-	public static function global_access() { return $GLOBALS['authorized']; }
+	public static function site_access() { return $GLOBALS['authorized']; }
 }
 function check( $condition, $label ) {
 	if ( ! $condition ) {

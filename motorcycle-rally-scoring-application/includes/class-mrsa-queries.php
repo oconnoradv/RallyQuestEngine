@@ -17,11 +17,11 @@ final class MRSA_Queries {
 		return $rows;
 	}
 
-	public function events( $rider_id, $global_access, $user_id ) {
+	public function events( $rider_id, $site_access, $user_id ) {
 		$join = $rider_id ? ' JOIN ' . MRSA::table( 'registrations' ) . ' reg ON reg.event_id=e.id AND reg.rider_id=%d' : '';
 		$args = $rider_id ? array( $rider_id ) : array();
 		$sql = 'SELECT e.* FROM ' . MRSA::table( 'events' ) . ' e' . $join;
-		if ( ! $global_access ) {
+		if ( ! $site_access ) {
 			$sql .= ' JOIN ' . MRSA::table( 'event_admins' ) . ' a ON a.event_id=e.id WHERE a.user_id=%d';
 			$args[] = $user_id;
 		}
@@ -53,10 +53,10 @@ final class MRSA_Queries {
 		return $rows;
 	}
 
-	public function rider_events( $rider_id, $global_access, $user_id ) {
+	public function rider_events( $rider_id, $site_access, $user_id ) {
 		$sql = 'SELECT reg.*,e.name,e.min_finisher_points FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'events' ) . ' e ON e.id=reg.event_id WHERE reg.rider_id=%d';
 		$args = array( $rider_id );
-		if ( ! $global_access ) {
+		if ( ! $site_access ) {
 			$sql .= ' AND EXISTS (SELECT 1 FROM ' . MRSA::table( 'event_admins' ) . ' a WHERE a.event_id=e.id AND a.user_id=%d)';
 			$args[] = $user_id;
 		}
@@ -146,11 +146,11 @@ final class MRSA_Queries {
 		return $this->page( 'SELECT * FROM ' . MRSA::table( 'bikes' ) . $where . ' ORDER BY make,model,id', 'SELECT COUNT(*) FROM ' . MRSA::table( 'bikes' ) . $where, $args, $page );
 	}
 
-	public function rider_page( $search, $page, $global_access, $user_id ) {
+	public function rider_page( $search, $page, $site_access, $user_id ) {
 		$search = substr( $search, 0, 100 );
 		$where = $search ? ' WHERE (r.name LIKE %s OR r.alias LIKE %s OR r.email LIKE %s)' : ' WHERE 1=1';
 		$args = $search ? array_fill( 0, 3, '%' . $this->db->esc_like( $search ) . '%' ) : array();
-		if ( ! $global_access ) {
+		if ( ! $site_access ) {
 			$where .= ' AND EXISTS (SELECT 1 FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'event_admins' ) . ' a ON a.event_id=reg.event_id WHERE reg.rider_id=r.id AND a.user_id=%d)';
 			$args[] = $user_id;
 		}

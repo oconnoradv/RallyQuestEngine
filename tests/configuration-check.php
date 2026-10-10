@@ -86,7 +86,7 @@ $wpdb->missing_table = 'bonus_points';
 check( strpos( row_named( MRSA_Diagnostics::check(), 'MRSA database tables' )['detail'], 'bonus_points' ) !== false, 'missing tables are named' );
 $wpdb->missing_table = '';
 $wpdb->database_version = '5.7.44';
-$GLOBALS['schema_version'] = '5';
+$GLOBALS['schema_version'] = '6';
 $GLOBALS['upload_limit'] = 9437184;
 $GLOBALS['scanner_ready'] = true;
 $report = MRSA_Diagnostics::check();
@@ -122,7 +122,7 @@ foreach ( array( 'failed', 'review' ) as $state ) {
 }
 $GLOBALS['authorized'] = false;
 try { MRSA_Diagnostics::check(); throw new LogicException( 'Unauthorized check accepted.' ); }
-catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), 'Only global' ) !== false, 'configuration collection rejects unauthorized administrator' ); }
+catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), 'Only WordPress' ) !== false, 'configuration collection rejects unauthorized administrator' ); }
 function wp_die( $message, $title = '', $options = array() ) { throw new RuntimeException( $message ); }
 function check_admin_referer( $action ) {
 	$GLOBALS['checked_nonce'] = $action;
@@ -139,7 +139,7 @@ function wp_safe_redirect( $url ) { throw new RuntimeException( 'Redirect: ' . $
 $_SERVER['REQUEST_METHOD'] = 'POST';
 $before = $GLOBALS['scan_checks'];
 try { MRSA_Admin::diagnostics_check(); throw new LogicException( 'Unauthorized POST accepted.' ); }
-catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), 'Only global' ) !== false && $GLOBALS['scan_checks'] === $before, 'POST authorization runs before any environment checks' ); }
+catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), 'Only WordPress' ) !== false && $GLOBALS['scan_checks'] === $before, 'POST authorization runs before any environment checks' ); }
 $GLOBALS['authorized'] = true;
 try { MRSA_Admin::diagnostics_check(); throw new LogicException( 'Invalid nonce accepted.' ); }
 catch ( RuntimeException $exception ) { check( $exception->getMessage() === 'Invalid nonce.' && $GLOBALS['scan_checks'] === $before, 'nonce verification runs before scanner checks' ); }
@@ -159,4 +159,4 @@ try { MRSA_Admin::diagnostics_check(); throw new LogicException( 'Report write f
 catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), 'could not be saved' ) !== false, 'report persistence failure surfaces explicitly' ); }
 $_SERVER['REQUEST_METHOD'] = 'GET';
 try { MRSA_Admin::diagnostics_check(); throw new LogicException( 'GET mutation accepted.' ); }
-catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), 'Only global' ) !== false, 'check endpoint requires POST' ); }
+catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), 'Only WordPress' ) !== false, 'check endpoint requires POST' ); }

@@ -48,8 +48,8 @@ final class MRSA_Diagnostics {
 
 	/** Callers may compose additional checks without changing the report collector. */
 	public static function check( ?array $checks = null ) {
-		if ( ! MRSA::global_access() ) {
-			throw new RuntimeException( 'Only global administrators may check MRSA configuration.' );
+		if ( ! MRSA::site_access() ) {
+			throw new RuntimeException( 'Only WordPress administrators may check MRSA configuration.' );
 		}
 		$checks = $checks ?? array(
 			array( __CLASS__, 'plugin_checks' ),
@@ -111,13 +111,13 @@ final class MRSA_Diagnostics {
 		$version = $wpdb->get_var( 'SELECT VERSION()' );
 		$rows[] = array( 'name' => 'Database server', 'status' => ! $wpdb->last_error && is_string( $version ) && self::database_version_supported( $version ) ? 'passed' : 'failed', 'detail' => $wpdb->last_error ? 'Database version query failed.' : 'Current: ' . (string) $version . '. Requires MySQL 8.0+ or MariaDB 10.6+.', 'remedy' => 'If the query failed, ask the host to verify DB_HOST, DB_NAME, DB_USER and DB_PASSWORD in wp-config.php and database connectivity/permissions; do not share credentials in support screenshots. For an old server, back up and test a host-managed migration to a supported MySQL 8.0+ or MariaDB 10.6+ release. Rerun the check after reconnecting.' );
 		$invalid = array();
-		foreach ( array( 'global_admins', 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'import_audit' ) as $table ) {
+		foreach ( array( 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'import_audit' ) as $table ) {
 			$row = $wpdb->get_row( $wpdb->prepare( 'SHOW TABLE STATUS WHERE Name = %s', MRSA::table( $table ) ), ARRAY_A );
 			if ( $wpdb->last_error || ! $row || 'innodb' !== strtolower( $row['Engine'] ?? '' ) ) {
 				$invalid[] = $table;
 			}
 		}
-		$rows[] = array( 'name' => 'MRSA database tables', 'status' => $invalid ? 'failed' : 'passed', 'detail' => $invalid ? 'Missing, unreadable, or not InnoDB: ' . implode( ', ', $invalid ) . '.' : 'All nine MRSA tables exist and use InnoDB for transactional updates.', 'remedy' => 'Back up before changing tables. In phpMyAdmin or the host database console, inspect the listed tables using the actual WordPress prefix (for example wp_MRSA_bonus_points). Ask the DBA to restore missing data from backup and resolve table metadata/CREATE/ALTER permissions. After testing on staging, convert existing non-InnoDB MRSA tables with ALTER TABLE `actual_table_name` ENGINE=InnoDB; substitute the verified table name, never run the placeholder. Install/reactivate the current MRSA plugin for new tables, then rerun the check. Do not use Diagnostics deletion as a repair.' );
+		$rows[] = array( 'name' => 'MRSA database tables', 'status' => $invalid ? 'failed' : 'passed', 'detail' => $invalid ? 'Missing, unreadable, or not InnoDB: ' . implode( ', ', $invalid ) . '.' : 'All eight MRSA tables exist and use InnoDB for transactional updates.', 'remedy' => 'Back up before changing tables. In phpMyAdmin or the host database console, inspect the listed tables using the actual WordPress prefix (for example wp_MRSA_bonus_points). Ask the DBA to restore missing data from backup and resolve table metadata/CREATE/ALTER permissions. After testing on staging, convert existing non-InnoDB MRSA tables with ALTER TABLE `actual_table_name` ENGINE=InnoDB; substitute the verified table name, never run the placeholder. Install/reactivate the current MRSA plugin for new tables, then rerun the check. Do not use Diagnostics deletion as a repair.' );
 		$schema = (string) get_option( 'mrsa_db_version', '' );
 		$rows[] = array( 'name' => 'MRSA database schema', 'status' => MRSA_DB_VERSION === $schema ? 'passed' : 'failed', 'detail' => 'Installed schema: ' . ( $schema ?: 'unknown' ) . '. Expected: ' . MRSA_DB_VERSION . '.', 'remedy' => 'Back up the database and install the current MRSA package, then reload WordPress to trigger its schema upgrade. If the mismatch remains, ask the host to check PHP/database logs and the database user CREATE/ALTER permissions. Do not manually change the mrsa_db_version option to hide a failed upgrade. Rerun the check.' );
 		return $rows;

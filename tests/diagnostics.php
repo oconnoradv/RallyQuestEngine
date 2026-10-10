@@ -2,12 +2,12 @@
 /** Standalone diagnostics regression tests: php tests/diagnostics.php */
 define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
-define( 'MRSA_DB_VERSION', '6' );
+define( 'MRSA_DB_VERSION', '7' );
 define( 'MINUTE_IN_SECONDS', 60 );
 final class MRSA {
 	public static function table( $name ) { return $name; }
-	public static function global_access() { return $GLOBALS['authorized']; }
-	public static function event_access( $id ) { return self::global_access(); }
+	public static function site_access() { return $GLOBALS['authorized']; }
+	public static function event_access( $id ) { return self::site_access(); }
 	public static function row( $table, $id ) { return array( 'id' => $id ); }
 	public static function begin_transaction() { $GLOBALS['wpdb']->snapshot = $GLOBALS['wpdb']->tables; }
 	public static function commit_transaction() {}
@@ -92,7 +92,7 @@ function wp_convert_hr_to_bytes( $value ) {
 	return (int) ( $number * ( 'g' === $unit ? 1073741824 : ( 'm' === $unit ? 1048576 : ( 'k' === $unit ? 1024 : 1 ) ) ) );
 }
 function size_format( $bytes ) { return ( $bytes / 1048576 ) . ' MB'; }
-function get_option( $key, $default = '' ) { return $GLOBALS['schema_version'] ?? '6'; }
+function get_option( $key, $default = '' ) { return $GLOBALS['schema_version'] ?? '7'; }
 function wp_max_upload_size() { return $GLOBALS['upload_limit'] ?? 10485760; }
 function get_temp_dir() { return sys_get_temp_dir(); }
 function wp_normalize_path( $value ) { return str_replace( '\\', '/', $value ); }
@@ -151,7 +151,7 @@ check( strpos( $html, 'id="mrsa-configuration"' ) < strpos( $html, '<h3>Database
 $operations = array( 'all', 'bikes', 'roster', 'bonus_points', 'rider', 'audit' );
 foreach ( $operations as $suffix ) {
 	$operation = 'diagnostics_delete_' . $suffix;
-	$wpdb->tables = array_fill_keys( array( 'registrations', 'rider_bikes', 'event_admins', 'events', 'riders', 'bikes', 'global_admins', 'bonus_points' ), array( array( 'id' => 9, 'event_id' => 7, 'rider_id' => 9 ) ) );
+	$wpdb->tables = array_fill_keys( array( 'registrations', 'rider_bikes', 'event_admins', 'events', 'riders', 'bikes', 'bonus_points' ), array( array( 'id' => 9, 'event_id' => 7, 'rider_id' => 9 ) ) );
 	$wpdb->tables['import_audit'] = array(
 		array( 'user_id' => 1, 'action' => 'bypass_enabled' ),
 		array( 'user_id' => 2, 'action' => 'bypass_enabled' ),
@@ -194,8 +194,8 @@ foreach ( $operations as $suffix ) {
 }
 $GLOBALS['authorized'] = false;
 try {
-	invoke_method( 'MRSA_Admin', 'require_global' );
-	throw new RuntimeException( 'Non-global administrator unexpectedly authorized.' );
+	invoke_method( 'MRSA_Admin', 'require_site_admin' );
+	throw new RuntimeException( 'Non-site administrator unexpectedly authorized.' );
 } catch ( RuntimeException $exception ) {
-	check( strpos( $exception->getMessage(), 'not authorized' ) !== false, 'Diagnostics mutation authorization rejects non-global administrators' );
+	check( strpos( $exception->getMessage(), 'WordPress administrator' ) !== false, 'Diagnostics mutation authorization rejects non-site administrators' );
 }

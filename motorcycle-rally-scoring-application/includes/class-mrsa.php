@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
 final class MRSA {
 	public static function table( $name ) {
 		global $wpdb;
-		$allowed = array( 'global_admins', 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'import_audit' );
+		$allowed = array( 'event_admins', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'import_audit' );
 		if ( ! in_array( $name, $allowed, true ) ) {
 			throw new InvalidArgumentException( 'Unknown MRSA table.' );
 		}
@@ -36,13 +36,8 @@ final class MRSA {
 		$previous_db_version = get_option( 'mrsa_db_version' );
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		$c = $wpdb->get_charset_collate();
-		$t = self::table( 'global_admins' );
-		dbDelta( "CREATE TABLE $t (
-			user_id bigint(20) unsigned NOT NULL,
-			secondary_email varchar(254) NOT NULL DEFAULT '',
-			secondary_phone varchar(60) NOT NULL DEFAULT '',
-			PRIMARY KEY  (user_id)
-		) ENGINE=InnoDB $c;" );
+		$legacy_global_admins = $wpdb->prefix . 'MRSA_global_admins';
+		$wpdb->query( "DROP TABLE IF EXISTS `$legacy_global_admins`" );
 		$t = self::table( 'event_admins' );
 		dbDelta( "CREATE TABLE $t (
 			event_id bigint(20) unsigned NOT NULL,
@@ -174,17 +169,13 @@ final class MRSA {
 		return false !== $wpdb->query( 'ROLLBACK' );
 	}
 
-	public static function global_access() {
-		global $wpdb;
-		if ( current_user_can( 'manage_options' ) ) {
-			return true;
-		}
-		return is_user_logged_in() && (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'global_admins' ) . ' WHERE user_id = %d', get_current_user_id() ) );
+	public static function site_access() {
+		return is_user_logged_in() && current_user_can( 'manage_options' );
 	}
 
 	public static function event_ids() {
 		global $wpdb;
-		if ( self::global_access() ) {
+		if ( self::site_access() ) {
 			return array_map( 'intval', $wpdb->get_col( 'SELECT id FROM ' . self::table( 'events' ) ) );
 		}
 		return array_map( 'intval', $wpdb->get_col( $wpdb->prepare( 'SELECT a.event_id FROM ' . self::table( 'event_admins' ) . ' a INNER JOIN ' . self::table( 'events' ) . ' e ON e.id=a.event_id WHERE a.user_id=%d', get_current_user_id() ) ) );
@@ -195,7 +186,7 @@ final class MRSA {
 	}
 
 	public static function access() {
-		return is_user_logged_in() && ( self::global_access() || count( self::event_ids() ) > 0 );
+		return is_user_logged_in() && ( self::site_access() || count( self::event_ids() ) > 0 );
 	}
 
 	public static function row( $table, $id ) {
@@ -244,13 +235,9 @@ final class MRSA {
 		}
 		$user = get_user_by( 'email', $email );
 		if ( $user ) {
-			$admin = $wpdb->get_row( $wpdb->prepare( 'SELECT secondary_email,secondary_phone FROM ' . self::table( 'global_admins' ) . ' WHERE user_id=%d', $user->ID ), ARRAY_A );
 			$assignments = $wpdb->get_col( $wpdb->prepare( 'SELECT e.name FROM ' . self::table( 'event_admins' ) . ' a JOIN ' . self::table( 'events' ) . ' e ON e.id=a.event_id WHERE a.user_id=%d', $user->ID ) );
-			if ( $admin || $assignments ) {
-				$data[] = array( 'group_id' => 'mrsa', 'group_label' => 'Rally administration', 'item_id' => 'mrsa-user-' . $user->ID, 'data' => array(
-					array( 'name' => 'Global administrator', 'value' => $admin ? 'Yes' : 'No' ),
-					array( 'name' => 'Secondary email', 'value' => $admin ? $admin['secondary_email'] : '' ),
-					array( 'name' => 'Secondary phone', 'value' => $admin ? $admin['secondary_phone'] : '' ),
+			if ( $assignments ) {
+				$data[] = array( 'group_id' => 'mrsa', 'group_label' => 'Event administration', 'item_id' => 'mrsa-user-' . $user->ID, 'data' => array(
 					array( 'name' => 'Assigned events', 'value' => implode( ', ', $assignments ) ),
 				) );
 			}
@@ -286,12 +273,10 @@ final class MRSA {
 		}
 		$user = get_user_by( 'email', $email );
 		if ( $user ) {
-			$result = $wpdb->update( self::table( 'global_admins' ), array( 'secondary_email' => '', 'secondary_phone' => '' ), array( 'user_id' => $user->ID ) );
-			$removed = $removed || ( false !== $result && $result > 0 );
-			$assigned = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'global_admins' ) . ' WHERE user_id=%d', $user->ID ) ) || $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'event_admins' ) . ' WHERE user_id=%d LIMIT 1', $user->ID ) );
+			$assigned = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'event_admins' ) . ' WHERE user_id=%d LIMIT 1', $user->ID ) );
 			if ( $assigned ) {
 				$retained = true;
-				$messages[] = 'Administrator assignments retained for access control. Event assignments can be removed from the event Configure page. WordPress user profiles are managed by WordPress.';
+				$messages[] = 'Event administrator assignments retained for access control. Assignments can be removed from the event Configure page. WordPress user profiles and site-administrator access are managed by WordPress.';
 			}
 		}
 		return array( 'items_removed' => $removed, 'items_retained' => $retained, 'messages' => $messages, 'done' => true );

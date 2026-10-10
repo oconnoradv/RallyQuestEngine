@@ -51,7 +51,7 @@ $queries = new MRSA_Queries( $wpdb );
 $queries->events( 7, false, 99 );
 check( $wpdb->query[1] === array( 7, 99 ) && strpos( $wpdb->query[0], 'a.user_id=%d' ) !== false, 'event query retains rider and assigned-administrator restrictions' );
 $queries->events( 0, true, 99 );
-check( is_string( $wpdb->query ) && strpos( $wpdb->query, 'event_admins' ) === false, 'global unfiltered event query retains full access' );
+check( is_string( $wpdb->query ) && strpos( $wpdb->query, 'event_admins' ) === false, 'site-administrator event query retains full access' );
 $wpdb->data = array( array( 'score' => 100 ), array( 'score' => 50 ), array( 'score' => 100 ) );
 $roster = $queries->roster( 7 );
 check( array_column( $roster, 'overall_placing' ) === array( 1, 3, 1 ) && $wpdb->query[1] === array( 7 ), 'roster read model computes ranks without changing bib order or event scope' );
@@ -70,7 +70,7 @@ $page = $queries->bike_page( '', -1 );
 check( $page['page'] === 1 && $wpdb->query[1] === array( 100, 0 ), 'catalog pagination clamps negative pages without inventing search conditions' );
 $wpdb->count = 0;
 $page = $queries->rider_page( '', 99, true, 99 );
-check( $page['page'] === 1 && $page['pages'] === 1 && strpos( $wpdb->query[0], 'event_admins' ) === false, 'empty global catalog retains one page and unrestricted query' );
+check( $page['page'] === 1 && $page['pages'] === 1 && strpos( $wpdb->query[0], 'event_admins' ) === false, 'empty site-administrator catalog retains one page and unrestricted query' );
 $wpdb->last_error = 'Database unavailable';
 try {
 	$queries->roster( 7 );
