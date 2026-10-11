@@ -144,6 +144,7 @@ function rejects( $run, $message ) {
 		check( strpos( $exception->getMessage(), $message ) !== false, 'rejects ' . $message );
 		return;
 	}
+	rejects( function () { RQE_Admin::integer( '<script>alert(1)</script>', 1 ); }, 'Invalid integer' );
 	throw new LogicException( 'Expected rejection: ' . $message );
 }
 function request( $query = array() ) {
