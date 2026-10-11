@@ -1,4 +1,4 @@
-title = "MRSA release secret checks"
+title = "RQE release secret checks"
 
 [extend]
 useDefault = true
@@ -7,8 +7,8 @@ useDefault = true
 id = "generic-api-key"
 
 [[rules.allowlists]]
-description = "Fixed transient-key prefix in the import expiry test; not a credential."
+description = "Fixed transient-key prefix (current rqe_ and pre-rename mrsa_ history) in the import expiry test; not a credential."
 condition = "AND"
 regexTarget = "secret"
 paths = ['''(^|[/\\])tests[/\\]bonus-import\.php$''']
-regexes = ['''^mrsa_bonus_pending_1_$''']
+regexes = ['''^(rqe|mrsa)_bonus_pending_1_$''']

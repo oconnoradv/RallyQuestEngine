@@ -1,7 +1,7 @@
 <?php
 /** Compressed raster policy regression: php tests/raster-policy.php */
 define( 'ABSPATH', __DIR__ );
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-file-scan.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-file-scan.php';
 function check_raster( $condition, $label ) {
 	if ( ! $condition ) { throw new LogicException( 'FAIL: ' . $label ); }
 	echo 'PASS: ' . $label . PHP_EOL;
@@ -16,7 +16,7 @@ $fixtures = array(
 	'WebP' => file_get_contents( __DIR__ . '/fixtures/webp-binary-marker.webp' ),
 );
 $path = __DIR__ . '/.raster-policy-' . bin2hex( random_bytes( 6 ) );
-$policy = new MRSA_Executable_Content_Policy();
+$policy = new RQE_Executable_Content_Policy();
 $validate = function ( $bytes ) use ( $path, $policy ) {
 	if ( strlen( $bytes ) !== file_put_contents( $path, $bytes ) ) { throw new RuntimeException( 'Fixture write failed.' ); }
 	$policy->validate( $path );

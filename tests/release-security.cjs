@@ -11,7 +11,7 @@ const { checkDependabot, checkCodeQL } = require('../.github/scripts/release-sec
 	const policy = workflow.match(/- name: Report CodeQL visibility policy[\s\S]*?        run: \|\n((?:          .*\n)+)/);
 	assert.ok(policy, 'Visibility policy must be present in the workflow.');
 	const script = policy[1].replace(/^          /gm, '');
-	const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mrsa-codeql-policy-'));
+	const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'rqe-codeql-policy-'));
 	try {
 		for (const visibility of ['true', 'false', '']) {
 			const output = path.join(directory, 'output');

@@ -1,7 +1,7 @@
 <?php
 /** JPEG binary/content policy regression: php tests/jpeg-policy.php */
 define( 'ABSPATH', __DIR__ );
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-file-scan.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-file-scan.php';
 
 function check_jpeg( $condition, $label ) {
 	if ( ! $condition ) { throw new LogicException( 'FAIL: ' . $label ); }
@@ -12,7 +12,7 @@ $jpeg = file_get_contents( __DIR__ . '/fixtures/jpeg-binary-marker.jpg' );
 $info = getimagesizefromstring( $jpeg );
 check_jpeg( $info && 'image/jpeg' === $info['mime'] && false !== strpos( $jpeg, '<%' ), 'real JPEG fixture contains natural script-like compressed bytes' );
 $path = __DIR__ . '/.jpeg-policy-' . bin2hex( random_bytes( 6 ) );
-$policy = new MRSA_Executable_Content_Policy();
+$policy = new RQE_Executable_Content_Policy();
 $write = function ( $content ) use ( $path ) {
 	if ( strlen( $content ) !== file_put_contents( $path, $content ) ) {
 		throw new RuntimeException( 'JPEG fixture could not be written.' );
@@ -73,12 +73,12 @@ try {
 			return $this->response;
 		}
 	};
-	$session = new MRSA_Scan_Session( false, $transport );
+	$session = new RQE_Scan_Session( false, $transport );
 	$session->scan( $path, 'B12.jpeg' );
 	check_jpeg( 'Passed' === $session->results()[0]['status'], 'JPEG still requires a clean antivirus result' );
 	$transport->response = 'stream: Test-Malware FOUND';
 	try {
-		( new MRSA_Scan_Session( true, $transport ) )->scan( $path, 'B12.jpg' );
+		( new RQE_Scan_Session( true, $transport ) )->scan( $path, 'B12.jpg' );
 		throw new LogicException( 'Malware result bypassed.' );
 	} catch ( RuntimeException $exception ) {
 		check_jpeg( strpos( $exception->getMessage(), 'Test-Malware' ) !== false, 'malware detections remain blocked even with unavailable-scanner consent' );

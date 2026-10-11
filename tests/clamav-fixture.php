@@ -31,13 +31,13 @@ while ( $socket = stream_socket_accept( $server, 60 ) ) {
 		$content .= read_bytes( $socket, $length );
 	}
 	$check_mode = isset( $argv[1] ) ? trim( file_get_contents( $argv[1] ) ) : '';
-	if ( '' !== $check_mode && false !== strpos( $content, 'MRSA ClamAV connection check.' ) ) {
+	if ( '' !== $check_mode && false !== strpos( $content, 'RQE ClamAV connection check.' ) ) {
 		fwrite( $socket, 'TRUNCATED' === $check_mode ? 'stream: OK' : "stream: scan failed ERROR\0" );
-	} elseif ( false !== strpos( $content, 'MRSA_TEST_INFECTED' ) ) {
+	} elseif ( false !== strpos( $content, 'RQE_TEST_INFECTED' ) ) {
 		fwrite( $socket, "stream: Test.Signature FOUND\0" );
-	} elseif ( false !== strpos( $content, 'MRSA_TEST_ERROR' ) ) {
+	} elseif ( false !== strpos( $content, 'RQE_TEST_ERROR' ) ) {
 		fwrite( $socket, "stream: scan failed ERROR\0" );
-	} elseif ( false !== strpos( $content, 'MRSA_TEST_TRUNCATED' ) ) {
+	} elseif ( false !== strpos( $content, 'RQE_TEST_TRUNCATED' ) ) {
 		fwrite( $socket, 'stream: OK' );
 	} else {
 		fwrite( $socket, "stream: OK\0" );

@@ -2,10 +2,10 @@
 <html lang="en">
 <meta charset="utf-8">
 <title>Image queue endpoint regression</title>
-<div class="mrsa">
-	<div id="mrsa-import-images">
+<div class="rqe">
+	<div id="rqe-import-images">
 		<form action="https://example.test/wp-admin/admin-post.php" method="post">
-			<input type="hidden" name="action" value="mrsa_save">
+			<input type="hidden" name="action" value="rqe_save">
 			<input type="hidden" name="_wpnonce" value="test-nonce">
 			<input type="hidden" name="event_id" value="7">
 			<input type="file" name="bonus_images[]" multiple>
@@ -13,12 +13,12 @@
 			<input type="checkbox" name="allow_partial_images">
 		</form>
 	</div>
-	<section class="mrsa-image-queue" hidden data-max-image="10485760" data-max-total="104857600" data-max-count="200">
-		<p class="mrsa-queue-progress"></p>
-		<div class="mrsa-queue-review"></div>
-		<ol class="mrsa-queue-log"></ol>
-		<button class="mrsa-queue-stop">Stop</button>
-		<a href="https://example.test/wp-admin/admin.php?page=mrsa">Gallery</a>
+	<section class="rqe-image-queue" hidden data-max-image="10485760" data-max-total="104857600" data-max-count="200">
+		<p class="rqe-queue-progress"></p>
+		<div class="rqe-queue-review"></div>
+		<ol class="rqe-queue-log"></ol>
+		<button class="rqe-queue-stop">Stop</button>
+		<a href="https://example.test/wp-admin/admin.php?page=rqe">Gallery</a>
 	</section>
 </div>
 <pre id="result">RUNNING</pre>
@@ -48,7 +48,7 @@
 		}) };
 	};
 </script>
-<script src="../motorcycle-rally-scoring-application/assets/admin.js"></script>
+<script src="../rally-quest-engine/assets/admin.js"></script>
 <script>
 	(async () => {
 		const form = document.querySelector('form');
@@ -66,17 +66,17 @@
 			if (request.url !== form.getAttribute('action')) throw new Error('Upload used the hidden action control instead of the form destination.');
 			if (request.options.method !== 'POST' || request.options.credentials !== 'same-origin') throw new Error('Upload must retain authenticated POST behavior.');
 			const body = request.options.body;
-			if (body.get('action') !== 'mrsa_image_queue' || body.get('_wpnonce') !== 'test-nonce' || body.get('event_id') !== '7') throw new Error('Queue routing, nonce or event scope was lost.');
+			if (body.get('action') !== 'rqe_image_queue' || body.get('_wpnonce') !== 'test-nonce' || body.get('event_id') !== '7') throw new Error('Queue routing, nonce or event scope was lost.');
 			if (body.getAll('bonus_images[]').length !== 1 || body.get('bonus_images[]').name !== 'B1.jpg') throw new Error('Expected one named image.');
-			if (document.querySelectorAll('.mrsa-queue-review section').length !== 2) throw new Error('Successful scans were not listed together.');
+			if (document.querySelectorAll('.rqe-queue-review section').length !== 2) throw new Error('Successful scans were not listed together.');
 			if (requests.some(item => item.options.body.get('queue_operation') === 'approve')) throw new Error('An image was approved before bulk authorization.');
-			const reviewForm = document.querySelector('.mrsa-queue-review form');
+			const reviewForm = document.querySelector('.rqe-queue-review form');
 			reviewForm.querySelector('[type="checkbox"]').checked = true;
 			reviewForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 			await new Promise(resolve => setTimeout(resolve, 50));
 			const approvals = requests.filter(item => item.options.body.get('queue_operation') === 'approve');
 			if (approvals.length !== 2) throw new Error('One bulk authorization did not import both passed images.');
-			if (!document.querySelector('.mrsa-queue-progress').textContent.includes('2 images imported')) throw new Error('Bulk queue did not complete.');
+			if (!document.querySelector('.rqe-queue-progress').textContent.includes('2 images imported')) throw new Error('Bulk queue did not complete.');
 			result.textContent = 'PASS: all successful scans are listed before one bulk authorization imports each staged image.';
 		} catch (error) {
 			result.textContent = 'FAIL: ' + error.message;

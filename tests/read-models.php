@@ -2,10 +2,10 @@
 /** Public read-model and pure-rule contracts: php tests/read-models.php */
 define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-results.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-queries.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-diagnostics.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-results.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-queries.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-diagnostics.php';
 
 function check( $condition, $label ) {
 	if ( ! $condition ) {
@@ -14,26 +14,26 @@ function check( $condition, $label ) {
 	echo 'PASS: ' . $label . PHP_EOL;
 }
 
-$ranks = MRSA_Results::rankings( array( array( 'score' => 50 ), array( 'score' => '100' ), array( 'score' => 100 ), array( 'score' => 0 ), array( 'score' => -5 ) ) );
+$ranks = RQE_Results::rankings( array( array( 'score' => 50 ), array( 'score' => '100' ), array( 'score' => 100 ), array( 'score' => 0 ), array( 'score' => -5 ) ) );
 check( $ranks === array( 100 => 1, 50 => 3, 0 => 4, -5 => 5 ), 'competition rankings handle unordered rows, ties, numeric strings and negative scores' );
-check( MRSA_Results::rankings( array() ) === array(), 'empty roster has no rankings' );
-check( MRSA_Results::status( array( 'score' => 100 ), 100 ) === 'Registered', 'minimum finisher threshold is strictly greater than' );
-check( MRSA_Results::status( array( 'score' => 101 ), 100 ) === 'Preliminary Finisher', 'above-threshold automatic status is retained' );
-check( MRSA_Results::status( array( 'score' => 1000, 'status_manual' => 1, 'status' => 'DNF' ), 100 ) === 'DNF', 'manual historical status overrides automatic status' );
+check( RQE_Results::rankings( array() ) === array(), 'empty roster has no rankings' );
+check( RQE_Results::status( array( 'score' => 100 ), 100 ) === 'Registered', 'minimum finisher threshold is strictly greater than' );
+check( RQE_Results::status( array( 'score' => 101 ), 100 ) === 'Preliminary Finisher', 'above-threshold automatic status is retained' );
+check( RQE_Results::status( array( 'score' => 1000, 'status_manual' => 1, 'status' => 'DNF' ), 100 ) === 'DNF', 'manual historical status overrides automatic status' );
 foreach ( array( 'Finisher', 'DNF', 'DNS' ) as $manual ) {
-	check( MRSA_Results::status( array( 'score' => 0, 'status_manual' => 1, 'status' => $manual ), 100 ) === $manual, 'manual ' . $manual . ' is preserved below threshold' );
-	check( MRSA_Results::status( array( 'score' => 1000, 'status_manual' => 1, 'status' => $manual ), 100 ) === $manual, 'manual ' . $manual . ' is preserved above threshold' );
+	check( RQE_Results::status( array( 'score' => 0, 'status_manual' => 1, 'status' => $manual ), 100 ) === $manual, 'manual ' . $manual . ' is preserved below threshold' );
+	check( RQE_Results::status( array( 'score' => 1000, 'status_manual' => 1, 'status' => $manual ), 100 ) === $manual, 'manual ' . $manual . ' is preserved above threshold' );
 }
 
 $row = array( 'name' => 'Check', 'status' => 'passed', 'detail' => 'Result', 'remedy' => 'Action' );
-check( MRSA_Diagnostic_Report::state( array( $row ) ) === 'passed', 'all-passed report has passed aggregate state' );
+check( RQE_Diagnostic_Report::state( array( $row ) ) === 'passed', 'all-passed report has passed aggregate state' );
 $review = array_merge( $row, array( 'status' => 'review' ) );
 $failed = array_merge( $row, array( 'status' => 'failed' ) );
-check( MRSA_Diagnostic_Report::state( array( $row, $review ) ) === 'review', 'manual review takes precedence over passed' );
-check( MRSA_Diagnostic_Report::state( array( $review, $failed ) ) === 'failed', 'failure takes precedence over manual review' );
+check( RQE_Diagnostic_Report::state( array( $row, $review ) ) === 'review', 'manual review takes precedence over passed' );
+check( RQE_Diagnostic_Report::state( array( $review, $failed ) ) === 'failed', 'failure takes precedence over manual review' );
 foreach ( array( array(), array( array_merge( $row, array( 'status' => 'unknown' ) ) ), array( array( 'status' => 'passed' ) ) ) as $invalid ) {
 	try {
-		MRSA_Diagnostic_Report::state( $invalid );
+		RQE_Diagnostic_Report::state( $invalid );
 		throw new LogicException( 'Invalid report accepted.' );
 	} catch ( RuntimeException $exception ) {
 		check( true, 'invalid diagnostic contracts fail explicitly' );
@@ -51,7 +51,7 @@ $wpdb = new class {
 	public function get_var( $query ) { $this->query = $query; return $this->count; }
 	public function esc_like( $text ) { return addcslashes( $text, '_%\\' ); }
 };
-$queries = new MRSA_Queries( $wpdb );
+$queries = new RQE_Queries( $wpdb );
 $queries->events( 7, false, 99 );
 check( $wpdb->query[1] === array( 7, 99 ) && strpos( $wpdb->query[0], 'a.user_id=%d' ) !== false, 'event query retains rider and assigned-administrator restrictions' );
 $queries->events( 0, true, 99 );

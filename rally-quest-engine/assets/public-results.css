@@ -1,0 +1,10 @@
+.rqe-public-results { max-width: 100%; margin: 1.5em 0; }
+.rqe-public-results-scroll { max-width: 100%; overflow-x: auto; }
+.rqe-public-results-scroll:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.rqe-public-results table { border-collapse: collapse; width: 100%; margin: 0; font-size: inherit; }
+.rqe-public-results caption { text-align: left; font-weight: bold; padding: .5em 0; }
+.rqe-public-results th, .rqe-public-results td { padding: .6em; border: 1px solid #c3c4c7; text-align: left; vertical-align: top; }
+.rqe-public-results th { white-space: nowrap; }
+.rqe-public-results-image { margin: 0 0 1em; }
+.rqe-public-results-image img { max-width: 100%; height: auto; }
+.rqe-public-results-description { margin-bottom: 1em; }

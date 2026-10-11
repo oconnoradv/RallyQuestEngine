@@ -1,12 +1,12 @@
 <?php
 /** Sequential endpoint contract tests: php tests/image-queue.php */
 define( 'ABSPATH', __DIR__ );
-final class MRSA {
+final class RQE {
 	public static function access() { return $GLOBALS['authorized']; }
 	public static function event_access( $id ) { return $GLOBALS['event_access']; }
 	public static function row( $table, $id ) { return array( 'id' => $id ); }
 }
-final class MRSA_Bonus {
+final class RQE_Bonus {
 	public static function import( $event ) { $GLOBALS['uploads']++; return $GLOBALS['result']; }
 	public static function pending( $event, $token ) {
 		if ( $event !== 7 || $token !== str_repeat( 'a', 32 ) ) { throw new RuntimeException( 'Invalid review.' ); }
@@ -17,14 +17,14 @@ final class MRSA_Bonus {
 		return array( 'message' => $cancel ? 'Cancelled.' : 'Imported.', 'errors' => array() );
 	}
 }
-final class MRSA_Bonus_Application_Service {
-	public function import( $event, array $input ) { $GLOBALS['captured_import_input'] = $input; return MRSA_Bonus::import( $event ); }
-	public function pending( $event, $token ) { return MRSA_Bonus::pending( $event, $token ); }
+final class RQE_Bonus_Application_Service {
+	public function import( $event, array $input ) { $GLOBALS['captured_import_input'] = $input; return RQE_Bonus::import( $event ); }
+	public function pending( $event, $token ) { return RQE_Bonus::pending( $event, $token ); }
 	public function review( $event, $token, $operation, array $input ) {
 		$pending = $this->pending( $event, $token );
 		if ( 'approve' === $operation && '1' !== ( $input['scan_approval'] ?? '' ) ) { throw new RuntimeException( 'Review required.' ); }
 		if ( 'bypass' === $operation && '1' !== ( $input['bypass_confirmation'] ?? '' ) ) { throw new RuntimeException( 'Confirm risk.' ); }
-		return array( 'pending' => $pending, 'result' => MRSA_Bonus::approve( $event, $token, 'cancel' === $operation, 'bypass' === $operation ) );
+		return array( 'pending' => $pending, 'result' => RQE_Bonus::approve( $event, $token, 'cancel' === $operation, 'bypass' === $operation ) );
 	}
 }
 function wp_unslash( $value ) { return $value; }
@@ -39,14 +39,14 @@ final class Queue_Response extends Exception {
 }
 function wp_send_json_success( $data ) { throw new Queue_Response( $data, true ); }
 function wp_send_json_error( $data, $status ) { throw new Queue_Response( $data, false ); }
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-admin.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-admin.php';
 function check( $ok, $label ) {
 	if ( ! $ok ) { throw new LogicException( 'FAIL: ' . $label ); }
 	echo 'PASS: ' . $label . PHP_EOL;
 }
 function operation( $op ) {
 	$_POST['queue_operation'] = $op;
-	try { MRSA_Admin::image_queue(); }
+	try { RQE_Admin::image_queue(); }
 	catch ( Queue_Response $response ) { return $response; }
 	throw new LogicException( 'Endpoint did not respond.' );
 }

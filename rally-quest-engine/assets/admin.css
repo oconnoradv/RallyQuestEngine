@@ -1,0 +1,211 @@
+.rqe { max-width: 1500px; }
+.rqe h1 small { font-size: 14px; font-weight: normal; }
+.rqe .rqe-header { display: flex; align-items: center; gap: 18px; margin: 16px 0 12px; }
+.rqe .rqe-header .dashicons { display: grid; place-items: center; width: 96px; height: 96px; border-radius: 18px; background: #1d4f7a; color: #fff; font-size: 64px; line-height: 1; box-shadow: inset 0 0 0 4px rgba(255, 255, 255, .18); }
+.rqe .rqe-header h1 { margin: 0 0 4px; padding: 0; font-size: 30px; line-height: 1.2; }
+.rqe .rqe-header p { margin: 0; color: #50575e; font-size: 16px; }
+.rqe .rqe-header p span { margin-left: 8px; font-size: 13px; }
+.rqe .rqe-header .dashicons { flex-shrink: 0; }
+.rqe .rqe-header-event { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-left: auto; min-width: 220px; }
+.rqe .rqe-header-event label { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+.rqe .rqe-header-event select { width: 100%; max-width: 340px; }
+.rqe .rqe-riders-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 12px 0; }
+.rqe .rqe-riders-toolbar p { margin: 0; }
+.rqe .rqe-riders-toolbar .rqe-server-search { margin-left: auto; text-align: right; }
+.rqe .rqe-event-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.rqe .rqe-event-columns > div { min-width: 0; }
+.rqe .rqe-event-columns .rqe-edit-form { max-width: none; }
+.rqe .rqe-email-panel > summary { cursor: pointer; }
+.rqe .rqe-email-panel > summary h2 { display: inline; }
+.rqe .rqe-status-options li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #c3c4c7; }
+.rqe .rqe-status-options form { margin-left: auto; }
+.rqe .rqe-status-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+.rqe .rqe-status-form select { max-width: 220px; }
+@media (max-width: 1000px) {
+	.rqe .rqe-header { flex-wrap: wrap; }
+	.rqe .rqe-header-event { flex-basis: 100%; margin-left: 0; }
+	.rqe .rqe-event-columns { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+	.rqe .rqe-riders-toolbar { align-items: stretch; flex-direction: column; }
+	.rqe .rqe-riders-toolbar .rqe-server-search { margin-left: 0; text-align: left; }
+}
+.rqe .rqe-panel { background: #fff; border: 1px solid #c3c4c7; padding: 18px; margin: 16px 0; }
+.rqe .rqe-check-passed { color: #006b1b; }
+.rqe .rqe-check-failed { color: #b32d2e; }
+.rqe .rqe-check-review { color: #924500; }
+.rqe .rqe-configuration-passed { border-color: #008a20; }
+.rqe .rqe-configuration-review { border-color: #b85c00; }
+.rqe .rqe-configuration-failed { border-color: #b32d2e; }
+.rqe .rqe-configuration-passed:not([open]) { background: #edfaef; }
+.rqe .rqe-configuration-review:not([open]) { background: #fff4e5; }
+.rqe .rqe-configuration-failed:not([open]) { background: #fcf0f1; }
+.rqe .rqe-configuration-failed-row > td { background: #fcf0f1; color: #3c1718; }
+.rqe .rqe-recommended-plugins { border-color: #008a20; background: #edfaef; color: #004d16; }
+.rqe .rqe-recommended-plugins h2 { margin-top: 0; }
+.rqe .rqe-recommended-plugins h2, .rqe .rqe-recommended-plugins h3 { color: #006b1b; }
+.rqe .rqe-bike-entry { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 16px 0 24px; }
+.rqe .rqe-bike-entry > .rqe-panel { min-width: 0; margin: 0; }
+.rqe .rqe-bike-entry h3 { margin-top: 0; }
+.rqe .rqe-bike-import-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.rqe .rqe-bike-import-heading h3 { margin-bottom: 12px; }
+.rqe .rqe-bike-import-heading .rqe-url-help { flex-shrink: 0; }
+.rqe .rqe-image-import-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.rqe .rqe-image-import-heading .rqe-url-help { flex-shrink: 0; }
+.rqe .rqe-image-import-heading .rqe-url-help-content { max-height: 60vh; overflow-y: auto; }
+.rqe .rqe-bike-import-controls { display: flex; align-items: end; gap: 12px; margin-bottom: 12px; }
+.rqe .rqe-bike-import-controls .rqe-field { flex: 1; min-width: 0; margin: 8px 0 0; }
+.rqe .rqe-bike-import-controls .button { white-space: normal; }
+.rqe .rqe-destructive-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin: 16px 0; }
+.rqe .rqe-destructive-grid > .rqe-panel { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.rqe .rqe-destructive-action h4 { margin-top: 0; }
+.rqe .rqe-delete-dialog { width: 480px; max-width: calc(100vw - 48px); max-height: calc(100vh - 48px); overflow-y: auto; box-sizing: border-box; padding: 18px; border: 1px solid #c3c4c7; color: #1d2327; background: #fff; }
+.rqe .rqe-delete-dialog:not([open]) { display: none; }
+.rqe .rqe-delete-dialog::backdrop { background: rgba(0, 0, 0, .7); }
+.rqe .rqe-delete-confirm { color: #b32d2e; border-color: #b32d2e; }
+@media (max-width: 1100px) {
+	.rqe .rqe-destructive-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.rqe .rqe-bike-entry .rqe-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rqe .rqe-bike-entry p, .rqe .rqe-bike-entry label { overflow-wrap: anywhere; }
+.rqe .rqe-roster-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 12px 0 16px; }
+.rqe .rqe-roster-event-select { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.rqe .rqe-roster-event-select .rqe-field { min-width: 240px; margin: 0; }
+.rqe .rqe-roster-toolbar__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; }
+.rqe .rqe-roster-toolbar__actions h2 { margin: 0; }
+.rqe .rqe-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px 18px; margin-bottom: 12px; }
+.rqe .rqe-field { display: flex; flex-direction: column; gap: 5px; margin: 8px 0; }
+.rqe .rqe-field input, .rqe .rqe-field select, .rqe .rqe-field textarea { width: 100%; max-width: 100%; }
+.rqe .rqe-edit-form { max-width: 760px; }
+.rqe .rqe-edit-form .rqe-bike-row, .rqe .rqe-edit-form .rqe-dependent { flex-direction: column; align-items: stretch; }
+.rqe textarea { min-height: 90px; }
+.rqe .rqe-profile { margin: 12px 0; }
+.rqe .rqe-note { background: #f0f6fc; border-left: 4px solid #2271b1; padding: 12px; }
+.rqe .rqe-table-region { margin: 16px 0 24px; }
+.rqe .rqe-table-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 10px; }
+.rqe .rqe-table-tools label { display: flex; gap: 6px; align-items: center; }
+.rqe .rqe-scroll { overflow-x: auto; }
+.rqe .rqe-table { min-width: 600px; }
+.rqe .rqe-table td { vertical-align: top; overflow-wrap: anywhere; }
+.rqe .rqe-table .rqe-field { min-width: 170px; }
+.rqe .rqe-pagination { margin-top: 10px; }
+.rqe .rqe-sort { background: transparent; border: 0; color: #1d2327; font: inherit; font-weight: 600; cursor: pointer; padding: 0; text-align: left; }
+.rqe .rqe-sort:focus-visible { outline: 2px solid #2271b1; outline-offset: 3px; }
+.rqe .button { margin: 2px 4px 2px 0; }
+.rqe details > summary { cursor: pointer; width: fit-content; }
+.rqe .rqe-administrative-audit > summary { padding: 8px 0; }
+.rqe .rqe-administrative-audit > summary h3 { display: inline; margin: 0; }
+.rqe .rqe-administrative-audit > summary:focus-visible { outline: 2px solid #2271b1; outline-offset: 3px; }
+.rqe .rqe-diagnostics-section > summary { padding: 8px 0; }
+.rqe .rqe-diagnostics-section > summary h3, .rqe .rqe-diagnostics-section > summary h4 { display: inline; margin: 0; }
+.rqe .rqe-diagnostics-section > summary:focus-visible { outline: 2px solid #2271b1; outline-offset: 3px; }
+.rqe details[open] > summary { margin-bottom: 12px; }
+.rqe .rqe-inline { display: inline-block; margin-left: 8px; }
+.rqe .rqe-bike-row { border: 1px solid #c3c4c7; padding: 12px; margin-bottom: 10px; display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.rqe .rqe-dependent { display: flex; flex-wrap: wrap; gap: 10px; }
+.rqe .rqe-dependent label { display: flex; flex-direction: column; gap: 5px; }
+.rqe .rqe-bike-row select { min-width: 140px; max-width: 320px; }
+.rqe .rqe-logo { margin: 12px 0; }
+.rqe .rqe-logo-preview img { width: auto; max-width: 150px; max-height: 150px; margin: 10px 0; }
+.rqe .rqe-bonus-thumbnail { display: block; width: auto; max-width: 120px; max-height: 90px; }
+.rqe .rqe-bonus-preview { width: auto; max-width: 480px; max-height: 360px; }
+.rqe .rqe-bonus-image-link { display: inline-block; }
+.rqe .rqe-gallery-dialog { width: fit-content; max-width: calc(100vw - 48px); max-height: calc(100vh - 48px); box-sizing: border-box; padding: 18px; border: 1px solid #c3c4c7; background: #fff; color: #1d2327; }
+.rqe .rqe-gallery-dialog:not([open]) { display: none; }
+.rqe .rqe-gallery-dialog::backdrop { background: rgba(0, 0, 0, .7); }
+.rqe .rqe-gallery-dialog-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 12px; }
+.rqe .rqe-gallery-dialog h3 { margin: 0; }
+.rqe .rqe-gallery-full-image { display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 160px); object-fit: contain; }
+.rqe .rqe-import-errors { overflow-wrap: anywhere; }
+.rqe .rqe-image-queue { overflow-wrap: anywhere; }
+.rqe .rqe-queue-review section { margin: 12px 0; padding: 10px 12px; border-left: 4px solid #00a32a; background: #f6f7f7; }
+.rqe .rqe-queue-review section h5 { margin: 0 0 6px; font-size: 14px; }
+.rqe .rqe-queue-review section p { margin: 4px 0; }
+.rqe .rqe-queue-review form { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.rqe .rqe-queue-review form label { flex-basis: 100%; }
+.rqe .rqe-queue-success { color: #004d16; background: #edfaef; padding: 8px; }
+.rqe .rqe-queue-warning { color: #924500; background: #fff4e5; padding: 8px; }
+.rqe .rqe-import-header { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: start; margin: 16px 0; }
+.rqe .rqe-import-header > div { min-width: 0; overflow-wrap: anywhere; }
+.rqe .rqe-import-header .rqe-panel { margin: 0; max-width: none; min-width: 0; }
+.rqe .rqe-clamav-enabled { border: 1px solid #008a20; background: #edfaef; padding: 18px; }
+.rqe .rqe-clamav-enabled > summary { color: #006b1b; font-weight: 600; }
+.rqe .rqe-clamav-disabled { border: 1px solid #d97706; background: #fff4e5; padding: 18px; }
+.rqe .rqe-clamav-disabled > summary { color: #924500; font-weight: 600; }
+.rqe .rqe-clamav-unconfigured > .rqe-panel { border-color: #d63638; border-left-width: 4px; background: #fcf0f1; }
+.rqe .rqe-clamav-unconfigured h4:first-child { color: #8a2424; }
+.rqe .rqe-import-header h4:first-child { margin-top: 0; }
+.rqe .rqe-url-actions { display: flex; align-items: center; gap: 8px; margin: 12px 0 16px; }
+.rqe .rqe-url-source > .rqe-url-open { margin: 8px 0 16px; }
+.rqe .rqe-url-dialog { width: 520px; max-width: calc(100vw - 48px); max-height: calc(100vh - 48px); overflow-y: auto; box-sizing: border-box; padding: 18px; border: 1px solid #c3c4c7; color: #1d2327; background: #fff; }
+.rqe .rqe-url-dialog:not([open]) { display: none; }
+.rqe .rqe-url-dialog::backdrop { background: rgba(0, 0, 0, .7); }
+.rqe .rqe-url-dialog h4 { margin-top: 0; }
+.rqe .rqe-url-dialog .rqe-field input { width: 100%; }
+.rqe .rqe-url-dialog .rqe-url-actions { justify-content: flex-end; margin-bottom: 0; }
+.rqe .rqe-url-help { position: relative; }
+.rqe .rqe-url-help > summary { color: #135e96; text-decoration: underline; padding: 6px; }
+.rqe .rqe-url-help-content { display: none; position: absolute; z-index: 10; right: 0; top: 100%; width: 280px; max-width: calc(100vw - 64px); padding: 12px; border: 1px solid #8c8f94; background: #fff; color: #1d2327; box-shadow: 0 4px 12px rgba(0, 0, 0, .15); }
+.rqe .rqe-url-help[open] > .rqe-url-help-content { display: block; }
+.rqe .rqe-email-provider-help { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; max-width: 760px; margin: 12px 0; font-weight: 600; }
+.rqe .rqe-email-provider-help .rqe-url-help-content { width: 520px; max-height: 65vh; overflow-y: auto; font-weight: 400; }
+.rqe .rqe-email-provider-help .rqe-url-help-content h4 { margin-top: 0; }
+.rqe .rqe-email-provider-help .rqe-url-help-content h5 { margin-bottom: 4px; }
+.rqe .rqe-email-provider-help .rqe-url-help-content ol { margin-top: 4px; }
+.rqe .rqe-email-config { max-width: 1200px; }
+.rqe .rqe-email-setup-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr); gap: 28px; align-items: start; margin-top: 16px; }
+.rqe .rqe-email-setup-fields { min-width: 0; }
+.rqe .rqe-email-setup-instructions { min-width: 0; padding: 16px 18px; border-left: 4px solid #2271b1; background: #f0f6fc; overflow-wrap: anywhere; }
+.rqe .rqe-email-setup-instructions h3 { margin-top: 0; }
+.rqe .rqe-email-setup-instructions ol { margin: 0 0 14px 20px; }
+.rqe .rqe-email-setup-instructions li { margin-bottom: 7px; }
+.rqe .rqe-email-security-note { margin-bottom: 0; padding-top: 12px; border-top: 1px solid #c3c4c7; }
+.rqe .rqe-email-connected { border-color: #008a20; border-left-width: 4px; background: #edfaef; }
+.rqe .rqe-email-connected h2, .rqe .rqe-email-connected .rqe-email-status { color: #006b1b; }
+.rqe .rqe-email-connection-failed { border-color: #b32d2e; border-left-width: 4px; background: #fcf0f1; }
+.rqe .rqe-email-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.rqe .rqe-email-summary { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 5px 10px; overflow-wrap: anywhere; }
+.rqe .rqe-email-summary span { color: #50575e; }
+.rqe .rqe-inline-form { display: inline; margin: 0; }
+.rqe .rqe-email-status { margin-bottom: 0; }
+.rqe .rqe-import-feedback { min-width: 0; overflow-wrap: anywhere; }
+.rqe .rqe-import-feedback:empty { display: none; }
+.rqe .rqe-import-feedback .notice-success { border-left-color: #008a20; background: #edfaef; color: #004d16; }
+.rqe .rqe-import-feedback-group > .notice, .rqe .rqe-import-feedback-group > .rqe-panel { margin: 0 0 16px; }
+.rqe .rqe-import-feedback .rqe-table { min-width: 0; }
+@media (max-width: 1100px) {
+	.rqe .rqe-import-header { grid-template-columns: minmax(0, 1fr); }
+}
+.rqe .rqe-setup-commands { overflow-x: auto; padding: 12px; background: #f0f0f1; color: #1d2327; }
+.rqe [hidden] { display: none !important; }
+.rqe .rqe-submission-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin: 16px 0; }
+.rqe .rqe-submission-comparison section { border: 1px solid #dcdcde; border-radius: 4px; padding: 16px; background: #fff; }
+.rqe .rqe-submission-comparison img { display: block; max-width: 100%; max-height: 420px; width: auto; height: auto; margin: auto; }
+.rqe .rqe-submission-comparison h6 { font-size: 14px; margin: 0 0 10px; }
+.rqe .rqe-submission-decision { border-top: 1px solid #dcdcde; padding-top: 16px; }
+@media (max-width: 782px) {
+	.rqe .rqe-header .dashicons { width: 64px; height: 64px; border-radius: 12px; font-size: 42px; }
+	.rqe .rqe-header h1 { font-size: 24px; }
+	.rqe .rqe-table-tools, .rqe .rqe-table-tools label { align-items: start; }
+	.rqe .rqe-grid { grid-template-columns: 1fr; }
+	.rqe .rqe-destructive-grid { grid-template-columns: 1fr; }
+	.rqe .rqe-bike-entry, .rqe .rqe-bike-entry .rqe-grid { grid-template-columns: 1fr; }
+	.rqe .rqe-bike-import-controls { flex-wrap: wrap; }
+	.rqe .nav-tab { margin-top: 8px; }
+	.rqe .rqe-roster-toolbar { align-items: stretch; flex-direction: column; }
+	.rqe .rqe-roster-event-select { align-items: stretch; }
+	.rqe .rqe-roster-event-select .rqe-field { min-width: min(100%, 240px); }
+	.rqe .rqe-roster-toolbar__actions { justify-content: space-between; }
+	.rqe .rqe-submission-comparison { grid-template-columns: 1fr; }
+	.rqe .rqe-email-setup-layout { grid-template-columns: 1fr; }
+}
+.rqe .rqe-section > summary { cursor: pointer; }
+.rqe .rqe-section > summary h2 { display: inline; margin: 0; }
+.rqe .rqe-complete { border-color: #008a20; border-left-width: 4px; background: #edfaef; }
+.rqe .rqe-complete > summary h2, .rqe .rqe-complete-label { color: #006b1b; }
+.rqe .rqe-welcome-steps { margin-left: 20px; }
+.rqe .rqe-style-form fieldset { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 8px 0 12px; }
+.rqe .rqe-style-form legend { font-weight: 600; margin-bottom: 6px; }
+.rqe .rqe-disabled-field, .rqe input[disabled].rqe-disabled-field { background: #f0f0f1; color: #8c8f94; cursor: not-allowed; }
+.rqe .rqe-horse-choices { margin: 0 0 12px; }
+.rqe .rqe-public-results-image img { max-width: 100%; height: auto; }
