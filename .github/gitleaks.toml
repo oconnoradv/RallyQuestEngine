@@ -1,4 +1,4 @@
-title = "MRSA release secret checks"
+title = "RQE release secret checks"
 
 [extend]
 useDefault = true
@@ -11,4 +11,4 @@ description = "Fixed transient-key prefix in the import expiry test; not a crede
 condition = "AND"
 regexTarget = "secret"
 paths = ['''(^|[/\\])tests[/\\]bonus-import\.php$''']
-regexes = ['''^mrsa_bonus_pending_1_$''']
+regexes = ['''^rqe_bonus_pending_1_$''']

@@ -2,7 +2,7 @@
 /** Small WordPress adapters used by the bonus-import application services. */
 defined( 'ABSPATH' ) || exit;
 
-final class MRSA_Pending_Review_Store {
+final class RQE_Pending_Review_Store {
 	public function get( $key ) {
 		return get_transient( $key );
 	}
@@ -16,13 +16,13 @@ final class MRSA_Pending_Review_Store {
 	}
 }
 
-final class MRSA_Import_Scheduler {
+final class RQE_Import_Scheduler {
 	public function schedule( $timestamp, $hook, $arguments ) {
 		return wp_schedule_single_event( $timestamp, $hook, $arguments, true );
 	}
 }
 
-final class MRSA_Gallery_Filesystem {
+final class RQE_Gallery_Filesystem {
 	public function is_file( $path ) { return is_file( $path ); }
 	public function is_dir( $path ) { return is_dir( $path ); }
 	public function is_link( $path ) { return is_link( $path ); }

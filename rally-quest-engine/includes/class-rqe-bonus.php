@@ -2,9 +2,9 @@
 /** Event-scoped bonus point records and their independent image gallery. */
 defined( 'ABSPATH' ) || exit;
 
-final class MRSA_Bonus_Recovery_Exception extends RuntimeException {}
+final class RQE_Bonus_Recovery_Exception extends RuntimeException {}
 
-final class MRSA_Bonus {
+final class RQE_Bonus {
 	const MAX_RECORDS = 5000;
 	const MAX_IMAGES = 200;
 	const MAX_IMAGE_SIZE = 10485760;
@@ -25,19 +25,19 @@ final class MRSA_Bonus {
 	}
 
 	private static function pending_store() {
-		return self::$pending_store ?: ( self::$pending_store = new MRSA_Pending_Review_Store() );
+		return self::$pending_store ?: ( self::$pending_store = new RQE_Pending_Review_Store() );
 	}
 
 	private static function scheduler() {
-		return self::$scheduler ?: ( self::$scheduler = new MRSA_Import_Scheduler() );
+		return self::$scheduler ?: ( self::$scheduler = new RQE_Import_Scheduler() );
 	}
 
 	private static function filesystem() {
-		return self::$gallery_filesystem ?: ( self::$gallery_filesystem = new MRSA_Gallery_Filesystem() );
+		return self::$gallery_filesystem ?: ( self::$gallery_filesystem = new RQE_Gallery_Filesystem() );
 	}
 
 	private static function audit_service() {
-		return self::$audit_service ?: ( self::$audit_service = new MRSA_Import_Audit() );
+		return self::$audit_service ?: ( self::$audit_service = new RQE_Import_Audit() );
 	}
 
 	public static function storage_root() {
@@ -45,7 +45,7 @@ final class MRSA_Bonus {
 		if ( ! empty( $uploads['error'] ) || empty( $uploads['basedir'] ) ) {
 			throw new RuntimeException( 'The WordPress upload directory is unavailable: ' . ( isset( $uploads['error'] ) ? $uploads['error'] : 'unknown error' ) );
 		}
-		return trailingslashit( $uploads['basedir'] ) . 'mrsa-event-gallery';
+		return trailingslashit( $uploads['basedir'] ) . 'rqe-event-gallery';
 	}
 
 	private static function event_dir( $event_id ) {
@@ -57,7 +57,7 @@ final class MRSA_Bonus {
 			return '';
 		}
 		$uploads = wp_upload_dir();
-		return trailingslashit( $uploads['baseurl'] ) . 'mrsa-event-gallery/' . absint( $event_id ) . '/' . rawurlencode( $image_file );
+		return trailingslashit( $uploads['baseurl'] ) . 'rqe-event-gallery/' . absint( $event_id ) . '/' . rawurlencode( $image_file );
 	}
 
 	public static function store_submission_image( $source_path, $original_name, $bonus_id, $event_id, $storage_key ) {
@@ -75,7 +75,7 @@ final class MRSA_Bonus {
 		$images = array();
 		$total_size = 0;
 		try {
-			self::stage_image( $source_path, $bonus_id . '.' . $extension, $stage_dir, $images, $total_size, new MRSA_Scan_Session() );
+			self::stage_image( $source_path, $bonus_id . '.' . $extension, $stage_dir, $images, $total_size, new RQE_Scan_Session() );
 			$image = reset( $images );
 			$directory = trailingslashit( self::event_dir( $event_id ) ) . 'submissions';
 			self::ensure_directory( $directory );
@@ -99,7 +99,7 @@ final class MRSA_Bonus {
 			return '';
 		}
 		$uploads = wp_upload_dir();
-		return trailingslashit( $uploads['baseurl'] ) . 'mrsa-event-gallery/' . absint( $event_id ) . '/submissions/' . rawurlencode( $image_file );
+		return trailingslashit( $uploads['baseurl'] ) . 'rqe-event-gallery/' . absint( $event_id ) . '/submissions/' . rawurlencode( $image_file );
 	}
 
 	private static function valid_id( $bonus_id ) {
@@ -222,7 +222,7 @@ final class MRSA_Bonus {
 	}
 
 	public static function read_spreadsheet( $path, $extension ) {
-		return MRSA_Spreadsheet_Reader::read( $path, $extension );
+		return RQE_Spreadsheet_Reader::read( $path, $extension );
 	}
 
 	private static function upload_file( $key, $multiple = false, $files = null ) {
@@ -305,7 +305,7 @@ final class MRSA_Bonus {
 			throw new RuntimeException( 'An image could not be staged for import.' );
 		}
 		// Keep only the primary image; appended gain maps, MPF images, trailers, video or padding are discarded before scanning.
-		$primary_length = ( new MRSA_Executable_Content_Policy() )->primary_image_length( $staged_path );
+		$primary_length = ( new RQE_Executable_Content_Policy() )->primary_image_length( $staged_path );
 		if ( null === $primary_length ) {
 			throw new RuntimeException( 'Only valid JPEG, PNG, GIF, and WebP images can be imported.' );
 		}
@@ -506,7 +506,7 @@ final class MRSA_Bonus {
 	}
 
 	private static function make_stage_dir() {
-		$root = defined( 'MRSA_IMPORT_TEMP_DIR' ) ? MRSA_IMPORT_TEMP_DIR : get_temp_dir();
+		$root = defined( 'RQE_IMPORT_TEMP_DIR' ) ? RQE_IMPORT_TEMP_DIR : get_temp_dir();
 		$root = realpath( $root );
 		if ( ! $root || ! is_writable( $root ) ) {
 			throw new RuntimeException( 'A writable private import temporary directory is required.' );
@@ -515,10 +515,10 @@ final class MRSA_Bonus {
 		foreach ( array( ABSPATH, $uploads['basedir'], defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : '', $_SERVER['DOCUMENT_ROOT'] ?? '' ) as $public_root ) {
 			$public_root = $public_root ? realpath( $public_root ) : false;
 			if ( $public_root && ( strtolower( $root ) === strtolower( $public_root ) || 0 === strpos( strtolower( wp_normalize_path( $root ) ) . '/', strtolower( trailingslashit( wp_normalize_path( $public_root ) ) ) ) ) ) {
-				throw new RuntimeException( 'MRSA_IMPORT_TEMP_DIR must be outside the web root and gallery uploads directory.' );
+				throw new RuntimeException( 'RQE_IMPORT_TEMP_DIR must be outside the web root and gallery uploads directory.' );
 			}
 		}
-		$stage_dir = trailingslashit( $root ) . 'mrsa-bonus-' . wp_generate_password( 32, false, false );
+		$stage_dir = trailingslashit( $root ) . 'rqe-bonus-' . wp_generate_password( 32, false, false );
 		if ( ! self::filesystem()->make_directory( $stage_dir, 0700 ) ) {
 			throw new RuntimeException( 'A temporary image staging directory could not be created.' );
 		}
@@ -533,7 +533,7 @@ final class MRSA_Bonus {
 		if ( ! preg_match( '/^[A-Za-z0-9]{32}$/D', $token ) ) {
 			throw new RuntimeException( 'The import review identifier is invalid.' );
 		}
-		return 'mrsa_bonus_pending_' . get_current_user_id() . '_' . $token;
+		return 'rqe_bonus_pending_' . get_current_user_id() . '_' . $token;
 	}
 
 	public static function check_staging() {
@@ -566,7 +566,7 @@ final class MRSA_Bonus {
 
 	public static function enable_bypass( $event_id, $confirmed = null ) {
 		if ( null === $confirmed ) {
-			$confirmed = '1' === MRSA_Admin::posted( 'bypass_confirmation' );
+			$confirmed = '1' === RQE_Admin::posted( 'bypass_confirmation' );
 		}
 		self::audit_service()->enable_bypass( $event_id, true === $confirmed || '1' === $confirmed );
 	}
@@ -608,7 +608,7 @@ final class MRSA_Bonus {
 		if ( ! self::pending_store()->put( self::pending_key( $token ), $pending, $pending['expires'] ) ) {
 			throw new RuntimeException( 'The import scan report could not be stored. No data was imported.' );
 		}
-		$scheduled = self::scheduler()->schedule( $pending['expires'], 'mrsa_bonus_expire', array( get_current_user_id(), $token, $stage_dir ) );
+		$scheduled = self::scheduler()->schedule( $pending['expires'], 'rqe_bonus_expire', array( get_current_user_id(), $token, $stage_dir ) );
 		if ( is_wp_error( $scheduled ) || false === $scheduled ) {
 			self::pending_store()->remove( self::pending_key( $token ) );
 			throw new RuntimeException( 'Private import cleanup could not be scheduled. No data was imported.' );
@@ -617,25 +617,25 @@ final class MRSA_Bonus {
 	}
 
 	public static function expire( $user_id, $token, $stage_dir ) {
-		if ( ! preg_match( '/^[A-Za-z0-9]{32}$/D', $token ) || ! preg_match( '/^mrsa-bonus-[A-Za-z0-9]{32}$/D', basename( $stage_dir ) ) ) {
+		if ( ! preg_match( '/^[A-Za-z0-9]{32}$/D', $token ) || ! preg_match( '/^rqe-bonus-[A-Za-z0-9]{32}$/D', basename( $stage_dir ) ) ) {
 			throw new RuntimeException( 'Invalid private import cleanup target.' );
 		}
 		if ( self::filesystem()->is_dir( $stage_dir ) ) {
 			if ( self::filesystem()->files( trailingslashit( $stage_dir ) . '.backup-*' ) ) {
-				error_log( 'MRSA: import recovery backups retained in ' . $stage_dir );
+				error_log( 'RQE: import recovery backups retained in ' . $stage_dir );
 				return;
 			}
 			$lock = trailingslashit( $stage_dir ) . '.approval-lock';
 			if ( self::filesystem()->is_file( $lock ) && self::filesystem()->modified_time( $lock ) > time() - 300 ) {
-				$scheduled = self::scheduler()->schedule( time() + 300, 'mrsa_bonus_expire', array( $user_id, $token, $stage_dir ) );
+				$scheduled = self::scheduler()->schedule( time() + 300, 'rqe_bonus_expire', array( $user_id, $token, $stage_dir ) );
 				if ( is_wp_error( $scheduled ) || false === $scheduled ) {
-					error_log( 'MRSA: cleanup rescheduling failed for active import ' . $stage_dir );
+					error_log( 'RQE: cleanup rescheduling failed for active import ' . $stage_dir );
 				}
 				return;
 			}
 			self::remove_directory( $stage_dir );
 		}
-		self::pending_store()->remove( 'mrsa_bonus_pending_' . absint( $user_id ) . '_' . $token );
+		self::pending_store()->remove( 'rqe_bonus_pending_' . absint( $user_id ) . '_' . $token );
 	}
 
 	public static function approve( $event_id, $token, $cancel = false, $confirm_bypass = false ) {
@@ -676,14 +676,14 @@ final class MRSA_Bonus {
 					try {
 						self::apply_import( $event_id, array(), array( $image ), $pending['stage_dir'], false );
 						++$imported;
-					} catch ( MRSA_Bonus_Recovery_Exception $exception ) {
+					} catch ( RQE_Bonus_Recovery_Exception $exception ) {
 						throw $exception;
 					} catch ( RuntimeException $exception ) {
 						if ( ! empty( $pending['unscanned'] ) ) {
 							try {
 								self::audit( $event_id, 'import_failed', 'No antivirus security scan performed. ' . $imported . ' images saved before stopping. ' . $exception->getMessage() );
 							} catch ( RuntimeException $audit_exception ) {
-								error_log( 'MRSA: unscanned import failure audit could not be saved for event ' . $event_id . ', user ' . get_current_user_id() );
+								error_log( 'RQE: unscanned import failure audit could not be saved for event ' . $event_id . ', user ' . get_current_user_id() );
 							}
 						}
 						$pending['errors'][] = $image['image_file'] . ': ' . $exception->getMessage();
@@ -695,12 +695,12 @@ final class MRSA_Bonus {
 				$imported = count( $pending['images'] );
 			}
 		} catch ( RuntimeException $exception ) {
-			if ( ! ( $exception instanceof MRSA_Bonus_Recovery_Exception ) && self::filesystem()->is_dir( $pending['stage_dir'] ) ) {
+			if ( ! ( $exception instanceof RQE_Bonus_Recovery_Exception ) && self::filesystem()->is_dir( $pending['stage_dir'] ) ) {
 				self::remove_directory( $pending['stage_dir'] );
 			}
 			$message = $imported . ' images saved before stopping. ' . $exception->getMessage();
-			if ( $exception instanceof MRSA_Bonus_Recovery_Exception ) {
-				throw new MRSA_Bonus_Recovery_Exception( $message );
+			if ( $exception instanceof RQE_Bonus_Recovery_Exception ) {
+				throw new RQE_Bonus_Recovery_Exception( $message );
 			}
 			throw new RuntimeException( $message );
 		}
@@ -724,10 +724,10 @@ final class MRSA_Bonus {
 		}
 		$backups = array();
 		$installed = array();
-		MRSA::begin_transaction();
+		RQE::begin_transaction();
 		try {
 			foreach ( $rows as $row ) {
-				$existing = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'bonus_points' ) . ' WHERE event_id=%d AND bonus_id=%s', $event_id, $row['bonus_id'] ) );
+				$existing = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . RQE::table( 'bonus_points' ) . ' WHERE event_id=%d AND bonus_id=%s', $event_id, $row['bonus_id'] ) );
 				$data = array(
 					'description' => $row['description'],
 					'category'    => $row['category'],
@@ -735,20 +735,20 @@ final class MRSA_Bonus {
 					'locations'   => $row['locations'],
 				);
 				if ( $existing ) {
-					if ( false === $wpdb->update( MRSA::table( 'bonus_points' ), $data, array( 'event_id' => $event_id, 'bonus_id' => $row['bonus_id'] ) ) ) {
+					if ( false === $wpdb->update( RQE::table( 'bonus_points' ), $data, array( 'event_id' => $event_id, 'bonus_id' => $row['bonus_id'] ) ) ) {
 						throw new RuntimeException( 'A bonus listing could not be updated. No import was saved.' );
 					}
 				} else {
-					if ( false === $wpdb->insert( MRSA::table( 'bonus_points' ), array_merge( array( 'event_id' => $event_id, 'bonus_id' => $row['bonus_id'] ), $data ) ) ) {
+					if ( false === $wpdb->insert( RQE::table( 'bonus_points' ), array_merge( array( 'event_id' => $event_id, 'bonus_id' => $row['bonus_id'] ), $data ) ) ) {
 						throw new RuntimeException( 'A bonus listing could not be added. No import was saved.' );
 					}
 				}
 			}
 			$index = 0;
 			foreach ( $images as $image ) {
-				$existing = $wpdb->get_row( $wpdb->prepare( 'SELECT id,image_file FROM ' . MRSA::table( 'bonus_points' ) . ' WHERE event_id=%d AND bonus_id=%s', $event_id, $image['bonus_id'] ), ARRAY_A );
+				$existing = $wpdb->get_row( $wpdb->prepare( 'SELECT id,image_file FROM ' . RQE::table( 'bonus_points' ) . ' WHERE event_id=%d AND bonus_id=%s', $event_id, $image['bonus_id'] ), ARRAY_A );
 				if ( ! $existing ) {
-					if ( false === $wpdb->insert( MRSA::table( 'bonus_points' ), array( 'event_id' => $event_id, 'bonus_id' => $image['bonus_id'], 'description' => '' ) ) ) {
+					if ( false === $wpdb->insert( RQE::table( 'bonus_points' ), array( 'event_id' => $event_id, 'bonus_id' => $image['bonus_id'], 'description' => '' ) ) ) {
 						throw new RuntimeException( 'A bonus gallery record could not be created.' );
 					}
 					$existing = array( 'id' => $wpdb->insert_id, 'image_file' => '' );
@@ -773,23 +773,23 @@ final class MRSA_Bonus {
 					throw new RuntimeException( $image['image_file'] . ': The image could not be installed in the event gallery.' );
 				}
 				$installed[] = $destination;
-				if ( false === $wpdb->update( MRSA::table( 'bonus_points' ), array( 'image_file' => $new_file ), array( 'id' => $existing['id'], 'event_id' => $event_id ) ) ) {
+				if ( false === $wpdb->update( RQE::table( 'bonus_points' ), array( 'image_file' => $new_file ), array( 'id' => $existing['id'], 'event_id' => $event_id ) ) ) {
 					throw new RuntimeException( $image['image_file'] . ': The image could not be linked to its bonus listing.' );
 				}
 			}
-			MRSA::commit_transaction();
+			RQE::commit_transaction();
 		} catch ( RuntimeException $exception ) {
-			if ( ! MRSA::rollback_transaction() ) {
-				throw new MRSA_Bonus_Recovery_Exception( 'The import failed and the database rollback failed. Gallery backups have been retained for recovery.' );
+			if ( ! RQE::rollback_transaction() ) {
+				throw new RQE_Bonus_Recovery_Exception( 'The import failed and the database rollback failed. Gallery backups have been retained for recovery.' );
 			}
 			foreach ( $installed as $path ) {
 				if ( self::filesystem()->is_file( $path ) && ! self::filesystem()->remove_file( $path ) ) {
-					throw new MRSA_Bonus_Recovery_Exception( 'The import failed and a newly installed image could not be removed: ' . basename( $path ) );
+					throw new RQE_Bonus_Recovery_Exception( 'The import failed and a newly installed image could not be removed: ' . basename( $path ) );
 				}
 			}
 			foreach ( $backups as $original => $backup ) {
 				if ( self::filesystem()->is_file( $backup ) && ! self::filesystem()->move( $backup, $original ) ) {
-					throw new MRSA_Bonus_Recovery_Exception( 'The import failed and a previous gallery image could not be restored: ' . basename( $original ) );
+					throw new RQE_Bonus_Recovery_Exception( 'The import failed and a previous gallery image could not be restored: ' . basename( $original ) );
 				}
 			}
 			if ( $stage_dir && $cleanup ) {
@@ -799,7 +799,7 @@ final class MRSA_Bonus {
 		}
 		foreach ( $backups as $backup ) {
 			if ( self::filesystem()->is_file( $backup ) && ! self::filesystem()->remove_file( $backup ) ) {
-				throw new MRSA_Bonus_Recovery_Exception( 'The import completed, but an old replaced image could not be removed from staging.' );
+				throw new RQE_Bonus_Recovery_Exception( 'The import completed, but an old replaced image could not be removed from staging.' );
 			}
 		}
 		if ( $stage_dir && $cleanup ) {
@@ -825,17 +825,17 @@ final class MRSA_Bonus {
 		$keys = array( 'new_bonus_id', 'description', 'category', 'points', 'locations', 'remove_image' );
 		$input = array( 'files' => $_FILES );
 		foreach ( $keys as $key ) {
-			$input[ $key ] = MRSA_Admin::posted( $key );
+			$input[ $key ] = RQE_Admin::posted( $key );
 		}
 		return $input;
 	}
 
 	private static function legacy_import_input() {
 		$input = array(
-			'import_step' => MRSA_Admin::posted( 'import_step' ),
-			'gallery_url' => MRSA_Admin::posted( 'gallery_url' ),
-			'image_source' => MRSA_Admin::posted( 'image_source' ),
-			'allow_partial_images' => MRSA_Admin::posted( 'allow_partial_images' ),
+			'import_step' => RQE_Admin::posted( 'import_step' ),
+			'gallery_url' => RQE_Admin::posted( 'gallery_url' ),
+			'image_source' => RQE_Admin::posted( 'image_source' ),
+			'allow_partial_images' => RQE_Admin::posted( 'allow_partial_images' ),
 			'files' => $_FILES,
 		);
 		return $input;
@@ -843,7 +843,7 @@ final class MRSA_Bonus {
 
 	private static function prepare_import( $event_id, $input = null ) {
 		$input = null === $input ? self::legacy_import_input() : $input;
-		$scan_session = new MRSA_Scan_Session( true );
+		$scan_session = new RQE_Scan_Session( true );
 		$step = (string) ( $input['import_step'] ?? '' );
 		if ( ! in_array( $step, array( 'listing', 'images' ), true ) ) {
 			throw new RuntimeException( 'Choose step 1 to import listings or step 2 to import images.' );
@@ -887,7 +887,7 @@ final class MRSA_Bonus {
 					throw new RuntimeException( 'The listing could not be placed in private staging.' );
 				}
 				$scan_session->scan( $sheet_path, $sheet['name'] );
-				list( $header, $sheet_rows ) = MRSA_Spreadsheet_Reader::read( $sheet_path, $extension );
+				list( $header, $sheet_rows ) = RQE_Spreadsheet_Reader::read( $sheet_path, $extension );
 				$rows = self::normalize_rows( $header, $sheet_rows );
 				if ( ! $rows ) {
 					throw new RuntimeException( 'The listing contains no bonus rows. Add bonus data and scan again.' );
@@ -947,26 +947,26 @@ final class MRSA_Bonus {
 	public static function save( $event_id, $bonus_id, $input = null ) {
 		global $wpdb;
 		$input = null === $input ? self::legacy_save_input() : $input;
-		$scan_session = new MRSA_Scan_Session();
+		$scan_session = new RQE_Scan_Session();
 		if ( ! self::valid_id( $bonus_id ) ) {
 			throw new RuntimeException( 'The Bonus ID is invalid.' );
 		}
-		$existing = $wpdb->get_row( $wpdb->prepare( 'SELECT id,image_file FROM ' . MRSA::table( 'bonus_points' ) . ' WHERE event_id=%d AND bonus_id=%s', $event_id, $bonus_id ), ARRAY_A );
+		$existing = $wpdb->get_row( $wpdb->prepare( 'SELECT id,image_file FROM ' . RQE::table( 'bonus_points' ) . ' WHERE event_id=%d AND bonus_id=%s', $event_id, $bonus_id ), ARRAY_A );
 		if ( ! $existing ) {
 			throw new RuntimeException( 'The selected bonus listing no longer exists.' );
 		}
-		$new_bonus_id = MRSA_Admin::text( $input['new_bonus_id'] ?? '', 64, true );
+		$new_bonus_id = RQE_Admin::text( $input['new_bonus_id'] ?? '', 64, true );
 		if ( ! self::valid_id( $new_bonus_id ) ) {
 			throw new RuntimeException( 'Bonus ID must use 1–64 letters, numbers, hyphens, or underscores.' );
 		}
-		$duplicate = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'bonus_points' ) . ' WHERE event_id=%d AND bonus_id=%s AND id<>%d', $event_id, $new_bonus_id, $existing['id'] ) );
+		$duplicate = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . RQE::table( 'bonus_points' ) . ' WHERE event_id=%d AND bonus_id=%s AND id<>%d', $event_id, $new_bonus_id, $existing['id'] ) );
 		if ( $duplicate ) {
 			throw new RuntimeException( 'Another bonus listing already uses that Bonus ID in this event.' );
 		}
-		$description = sanitize_textarea_field( MRSA_Admin::text( $input['description'] ?? '', 5000 ) );
-		$category    = MRSA_Admin::text( $input['category'] ?? '', 120 );
-		$points      = MRSA_Admin::integer( $input['points'] ?? '', 0, self::MAX_BONUS_POINTS );
-		$locations   = self::validate_location( MRSA_Admin::text( $input['locations'] ?? '', 80 ) );
+		$description = sanitize_textarea_field( RQE_Admin::text( $input['description'] ?? '', 5000 ) );
+		$category    = RQE_Admin::text( $input['category'] ?? '', 120 );
+		$points      = RQE_Admin::integer( $input['points'] ?? '', 0, self::MAX_BONUS_POINTS );
+		$locations   = self::validate_location( RQE_Admin::text( $input['locations'] ?? '', 80 ) );
 		$remove_image = '1' === ( $input['remove_image'] ?? '' );
 		$image_files = self::upload_file( 'bonus_image', false, $input['files'] ?? array() );
 		$image_file  = $image_files ? $image_files[0] : null;
@@ -1050,13 +1050,13 @@ final class MRSA_Bonus {
 					$installed = true;
 				}
 			}
-			MRSA::begin_transaction();
-			if ( false === $wpdb->update( MRSA::table( 'bonus_points' ), $data, array( 'id' => $existing['id'], 'event_id' => $event_id ) ) ) {
+			RQE::begin_transaction();
+			if ( false === $wpdb->update( RQE::table( 'bonus_points' ), $data, array( 'id' => $existing['id'], 'event_id' => $event_id ) ) ) {
 				throw new RuntimeException( 'The bonus listing could not be saved.' );
 			}
-			MRSA::commit_transaction();
+			RQE::commit_transaction();
 		} catch ( RuntimeException $exception ) {
-			MRSA::rollback_transaction();
+			RQE::rollback_transaction();
 			if ( $installed && self::filesystem()->is_file( $destination ) ) {
 				if ( $backup ) {
 					if ( ! self::filesystem()->remove_file( $destination ) || ! self::filesystem()->move( $backup, $old_path ) ) {

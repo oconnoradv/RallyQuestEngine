@@ -3,23 +3,25 @@
 defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 
 global $wpdb;
-require_once __DIR__ . '/includes/class-mrsa-bonus.php';
+require_once __DIR__ . '/includes/class-rqe-bonus.php';
 if ( function_exists( 'as_unschedule_all_actions' ) ) {
-	as_unschedule_all_actions( 'mrsa_process_submission_inboxes', array(), 'mrsa' );
+	as_unschedule_all_actions( 'rqe_process_submission_inboxes', array(), 'rqe' );
 }
 // On multisite only opted-in sites are deleted, in bounded pages.
 $cleanup = static function () use ( $wpdb ) {
-	if ( ! get_option( 'mrsa_delete_on_uninstall', false ) ) {
+	if ( ! get_option( 'rqe_delete_on_uninstall', false ) ) {
 		return;
 	}
 	foreach ( array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit', 'global_admins' ) as $name ) {
-		$table = $wpdb->prefix . 'MRSA_' . $name;
+		$table = $wpdb->prefix . 'RQE_' . $name;
 		$wpdb->query( "DROP TABLE IF EXISTS `$table`" );
 	}
-	MRSA_Bonus::remove_all_storage();
-	delete_option( 'mrsa_db_version' );
-	delete_option( 'mrsa_delete_on_uninstall' );
-	delete_metadata( 'user', 0, $wpdb->prefix . 'mrsa_selected_event', '', true );
+	RQE_Bonus::remove_all_storage();
+	delete_option( 'rqe_db_version' );
+	delete_option( 'rqe_delete_on_uninstall' );
+	delete_option( 'rqe_primary_style' );
+	delete_option( 'rqe_legacy_import' );
+	delete_metadata( 'user', 0, $wpdb->prefix . 'rqe_selected_event', '', true );
 };
 if ( is_multisite() ) {
 	$offset = 0;

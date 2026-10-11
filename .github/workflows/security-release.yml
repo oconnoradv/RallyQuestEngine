@@ -30,9 +30,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          find motorcycle-rally-scoring-application -name '*.php' -print0 |
+          find rally-quest-engine -name '*.php' -print0 |
             xargs -0 -r -n 1 php -l
-          node --check motorcycle-rally-scoring-application/assets/admin.js
+          node --check rally-quest-engine/assets/admin.js
           node tests/release-security.cjs
 
       - name: Check bonus image import behavior
@@ -50,6 +50,7 @@ jobs:
           php tests/event-administration.php
           php tests/diagnostic-contracts.php
           php tests/email-submissions.php
+          php tests/legacy-import.php
 
       - name: Install static security scanner
         shell: bash
@@ -74,7 +75,7 @@ jobs:
             --config p/php --config p/javascript --config .github/semgrep/wordpress.yml \
             --metrics=off --disable-version-check \
             --strict --error --timeout 0 \
-            motorcycle-rally-scoring-application
+            rally-quest-engine
 
       - name: Check full Git history and working tree with Gitleaks
         shell: bash
@@ -112,9 +113,9 @@ jobs:
           set -euo pipefail
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           version="${RELEASE_TAG#v}"
-          plugin="motorcycle-rally-scoring-application"
+          plugin="rally-quest-engine"
           header_version="$(sed -n 's/^ \* Version: //p' "$plugin/$plugin.php")"
-          constant_version="$(sed -n "s/^define( 'MRSA_VERSION', '\([^']*\)' );$/\1/p" "$plugin/$plugin.php")"
+          constant_version="$(sed -n "s/^define( 'RQE_VERSION', '\([^']*\)' );$/\1/p" "$plugin/$plugin.php")"
           stable_version="$(sed -n 's/^Stable tag: //p' "$plugin/readme.txt")"
           [[ "$version" == "$header_version" ]]
           [[ "$version" == "$constant_version" ]]
@@ -259,7 +260,7 @@ jobs:
           set -euo pipefail
           sha256sum --check SHA256SUMS
           gh release create "$RELEASE_TAG" \
-            "motorcycle-rally-scoring-application-$RELEASE_TAG.zip" SHA256SUMS \
+            "rally-quest-engine-$RELEASE_TAG.zip" SHA256SUMS \
             --verify-tag \
-            --title "Motorcycle Rally Scoring Application $RELEASE_TAG" \
-            --notes "Install the ZIP through WordPress Plugins > Add New > Upload Plugin. See the bundled readme changelog for this version's changes. This source passed syntax, Semgrep static security (including WordPress exploit rules), Trivy dependency/secret, and Gitleaks history/working-tree secret checks. $CODEQL_NOTICE Publication also required no open repository Dependabot alerts. These checks do not certify NIST compliance or absence of all CVEs; deployed WordPress, PHP, and other plugins require separate assessment. Event-scoped IMAP, Gmail API, and Microsoft 365 inboxes can ingest rider bonus submissions for Administrator or Scorer review with transactional point awards. Back up the database and event gallery files separately before upgrading."
+            --title "Rally Quest Engine $RELEASE_TAG" \
+            --notes "Install the ZIP through WordPress Plugins > Add New > Upload Plugin. See the bundled readme changelog for this version's changes. This source passed syntax, Semgrep static security (including WordPress exploit rules), Trivy dependency/secret, and Gitleaks history/working-tree secret checks. $CODEQL_NOTICE Publication also required no open repository Dependabot alerts. These checks do not certify NIST compliance or absence of all CVEs; deployed WordPress, PHP, and other plugins require separate assessment. Event-scoped IMAP, Gmail API, and Microsoft 365 inboxes can ingest participant bonus submissions for Administrator or Scorer review with transactional point awards. Back up the database and event gallery files separately before upgrading. Rally Quest Engine replaces Motorcycle Rally Scoring Application: install it, deactivate the former plugin, then open wp-admin as a site administrator to import existing data once."

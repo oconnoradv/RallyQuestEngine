@@ -2,13 +2,13 @@
 /** Local ClamAV transport, executable-content policy and request-local scan state. */
 defined( 'ABSPATH' ) || exit;
 
-final class MRSA_Scanner_Unavailable_Exception extends RuntimeException {}
+final class RQE_Scanner_Unavailable_Exception extends RuntimeException {}
 
-final class MRSA_ClamAV_Transport {
+final class RQE_ClamAV_Transport {
 	private $address;
 
 	public function __construct( $address = null ) {
-		$this->address = null === $address ? ( defined( 'MRSA_CLAMAV_SOCKET' ) ? MRSA_CLAMAV_SOCKET : 'unix:///var/run/clamav/clamd.ctl' ) : $address;
+		$this->address = null === $address ? ( defined( 'RQE_CLAMAV_SOCKET' ) ? RQE_CLAMAV_SOCKET : 'unix:///var/run/clamav/clamd.ctl' ) : $address;
 	}
 
 	private function write_all( $socket, $data ) {
@@ -23,14 +23,14 @@ final class MRSA_ClamAV_Transport {
 
 	public function scan( $path ) {
 		if ( ! is_string( $this->address ) || ! preg_match( '#^(?:unix:///[^\\x00]+|tcp://127\.0\.0\.1:[0-9]{1,5}|tcp://\[::1\]:[0-9]{1,5})$#D', $this->address ) ) {
-			throw new RuntimeException( 'MRSA_CLAMAV_SOCKET must specify a local Unix socket or loopback TCP address.' );
+			throw new RuntimeException( 'RQE_CLAMAV_SOCKET must specify a local Unix socket or loopback TCP address.' );
 		}
 		$socket = @stream_socket_client( $this->address, $errno, $error, 5 );
 		if ( ! $socket ) {
 			if ( in_array( (int) $errno, array( 2, 61, 111, 10061 ), true ) ) {
-				throw new MRSA_Scanner_Unavailable_Exception( 'Local ClamAV is unavailable: the local socket is missing or the daemon refused the connection.' );
+				throw new RQE_Scanner_Unavailable_Exception( 'Local ClamAV is unavailable: the local socket is missing or the daemon refused the connection.' );
 			}
-			throw new RuntimeException( 'Local ClamAV is unavailable. Ask the site administrator to configure clamd and MRSA_CLAMAV_SOCKET; import is blocked.' );
+			throw new RuntimeException( 'Local ClamAV is unavailable. Ask the site administrator to configure clamd and RQE_CLAMAV_SOCKET; import is blocked.' );
 		}
 		$handle = null;
 		try {
@@ -72,7 +72,7 @@ final class MRSA_ClamAV_Transport {
 	}
 }
 
-final class MRSA_Executable_Content_Policy {
+final class RQE_Executable_Content_Policy {
 	private function validate_text( $content ) {
 		if ( preg_match( '/<\?(?:php\b|=)|<script\b|<%|#!\s*\/(?:usr|bin)\//i', $content ) ) {
 			throw new RuntimeException( 'Executable or script content was detected. Only data files and raster images are allowed.' );
@@ -420,7 +420,7 @@ final class MRSA_Executable_Content_Policy {
 	}
 }
 
-final class MRSA_Scan_Session {
+final class RQE_Scan_Session {
 	private $transport;
 	private $policy;
 	private $allow_unavailable;
@@ -430,8 +430,8 @@ final class MRSA_Scan_Session {
 
 	public function __construct( $allow_unavailable = false, $transport = null, $policy = null ) {
 		$this->allow_unavailable = (bool) $allow_unavailable;
-		$this->transport = $transport ?: new MRSA_ClamAV_Transport();
-		$this->policy = $policy ?: new MRSA_Executable_Content_Policy();
+		$this->transport = $transport ?: new RQE_ClamAV_Transport();
+		$this->policy = $policy ?: new RQE_Executable_Content_Policy();
 	}
 
 	public function results() { return $this->results; }
@@ -448,7 +448,7 @@ final class MRSA_Scan_Session {
 			$response = null;
 			try {
 				$response = $this->transport->scan( $path );
-			} catch ( MRSA_Scanner_Unavailable_Exception $exception ) {
+			} catch ( RQE_Scanner_Unavailable_Exception $exception ) {
 				if ( ! $this->allow_unavailable ) {
 					throw $exception;
 				}
@@ -477,12 +477,12 @@ final class MRSA_Scan_Session {
 	}
 
 	public static function check_connection() {
-		$path = wp_tempnam( 'mrsa-clamav-check' );
+		$path = wp_tempnam( 'rqe-clamav-check' );
 		if ( ! $path ) {
 			return array( 'passed' => false, 'message' => 'A temporary file could not be created for the ClamAV connection check. Check PHP temporary-directory permissions.' );
 		}
 		try {
-			if ( false === file_put_contents( $path, "MRSA ClamAV connection check.\n" ) ) {
+			if ( false === file_put_contents( $path, "RQE ClamAV connection check.\n" ) ) {
 				throw new RuntimeException( 'The ClamAV connection-check file could not be written.' );
 			}
 			( new self() )->scan( $path, 'Connection-check file' );
@@ -491,18 +491,18 @@ final class MRSA_Scan_Session {
 			return array( 'passed' => false, 'message' => 'ClamAV connection check failed: ' . $exception->getMessage() );
 		} finally {
 			if ( is_file( $path ) && ! unlink( $path ) ) {
-				error_log( 'MRSA: ClamAV connection-check temporary file could not be removed.' );
+				error_log( 'RQE: ClamAV connection-check temporary file could not be removed.' );
 			}
 		}
 	}
 }
 
-/** Compatibility facade for older integrations; imports use MRSA_Scan_Session directly. */
-final class MRSA_File_Scan {
+/** Compatibility facade for older integrations; imports use RQE_Scan_Session directly. */
+final class RQE_File_Scan {
 	private static $session;
 
 	public static function reset( $allow_unavailable = false ) {
-		self::$session = new MRSA_Scan_Session( $allow_unavailable );
+		self::$session = new RQE_Scan_Session( $allow_unavailable );
 	}
 	private static function session() {
 		if ( ! self::$session ) {
@@ -514,5 +514,5 @@ final class MRSA_File_Scan {
 	public static function results() { return self::session()->results(); }
 	public static function failed() { return self::session()->failed(); }
 	public static function scan( $path, $name ) { self::session()->scan( $path, $name ); }
-	public static function check_connection() { return MRSA_Scan_Session::check_connection(); }
+	public static function check_connection() { return RQE_Scan_Session::check_connection(); }
 }

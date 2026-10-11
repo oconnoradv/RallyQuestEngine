@@ -2,13 +2,13 @@
 /** Event-scoped email ingestion and transactional bonus-submission review. */
 defined( 'ABSPATH' ) || exit;
 
-final class MRSA_Email_Submissions {
+final class RQE_Email_Submissions {
 	const MAX_MESSAGES = 25;
 	const MAX_ATTACHMENT_SIZE = 10485760;
 
 	public static function schedule() {
-		if ( function_exists( 'as_has_scheduled_action' ) && function_exists( 'as_schedule_recurring_action' ) && ! as_has_scheduled_action( 'mrsa_process_submission_inboxes' ) ) {
-			as_schedule_recurring_action( time() + 300, 300, 'mrsa_process_submission_inboxes', array(), 'mrsa' );
+		if ( function_exists( 'as_has_scheduled_action' ) && function_exists( 'as_schedule_recurring_action' ) && ! as_has_scheduled_action( 'rqe_process_submission_inboxes' ) ) {
+			as_schedule_recurring_action( time() + 300, 300, 'rqe_process_submission_inboxes', array(), 'rqe' );
 		}
 	}
 
@@ -44,7 +44,7 @@ final class MRSA_Email_Submissions {
 
 	public static function configuration( $event_id, $include_secrets = false ) {
 		global $wpdb;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'event_email_settings' ) . ' WHERE event_id=%d', $event_id ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'event_email_settings' ) . ' WHERE event_id=%d', $event_id ), ARRAY_A );
 		if ( ! $row ) {
 			return array( 'provider' => 'imap', 'enabled' => 0, 'settings' => array(), 'last_checked_at' => null, 'last_error' => '', 'last_tested_at' => null, 'last_test_error' => '' );
 		}
@@ -147,8 +147,8 @@ final class MRSA_Email_Submissions {
 			'last_tested_at' => null,
 			'last_test_error' => '',
 		);
-		$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT event_id FROM ' . MRSA::table( 'event_email_settings' ) . ' WHERE event_id=%d', $event_id ) );
-		$result = $exists ? $wpdb->update( MRSA::table( 'event_email_settings' ), $data, array( 'event_id' => $event_id ) ) : $wpdb->insert( MRSA::table( 'event_email_settings' ), array_merge( array( 'event_id' => $event_id ), $data ) );
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT event_id FROM ' . RQE::table( 'event_email_settings' ) . ' WHERE event_id=%d', $event_id ) );
+		$result = $exists ? $wpdb->update( RQE::table( 'event_email_settings' ), $data, array( 'event_id' => $event_id ) ) : $wpdb->insert( RQE::table( 'event_email_settings' ), array_merge( array( 'event_id' => $event_id ), $data ) );
 		if ( false === $result ) {
 			throw new RuntimeException( 'The event email configuration could not be saved.' );
 		}
@@ -190,7 +190,7 @@ final class MRSA_Email_Submissions {
 
 	private static function record_connection_test( $event_id, $error ) {
 		global $wpdb;
-		if ( false === $wpdb->update( MRSA::table( 'event_email_settings' ), array( 'last_tested_at' => gmdate( 'Y-m-d H:i:s' ), 'last_test_error' => substr( (string) $error, 0, 65535 ) ), array( 'event_id' => $event_id ) ) ) {
+		if ( false === $wpdb->update( RQE::table( 'event_email_settings' ), array( 'last_tested_at' => gmdate( 'Y-m-d H:i:s' ), 'last_test_error' => substr( (string) $error, 0, 65535 ) ), array( 'event_id' => $event_id ) ) ) {
 			throw new RuntimeException( 'The inbox connection-test result could not be saved.' );
 		}
 	}
@@ -245,12 +245,12 @@ final class MRSA_Email_Submissions {
 
 	public static function process_all() {
 		global $wpdb;
-		$event_ids = $wpdb->get_col( 'SELECT event_id FROM ' . MRSA::table( 'event_email_settings' ) . ' WHERE enabled=1' );
+		$event_ids = $wpdb->get_col( 'SELECT event_id FROM ' . RQE::table( 'event_email_settings' ) . ' WHERE enabled=1' );
 		foreach ( $event_ids as $event_id ) {
 			try {
 				self::process_event( (int) $event_id );
 			} catch ( RuntimeException $exception ) {
-				error_log( 'MRSA event inbox #' . (int) $event_id . ': ' . $exception->getMessage() );
+				error_log( 'RQE event inbox #' . (int) $event_id . ': ' . $exception->getMessage() );
 			}
 		}
 	}
@@ -289,7 +289,7 @@ final class MRSA_Email_Submissions {
 
 	private static function record_check( $event_id, $error ) {
 		global $wpdb;
-		if ( false === $wpdb->update( MRSA::table( 'event_email_settings' ), array( 'last_checked_at' => gmdate( 'Y-m-d H:i:s' ), 'last_error' => substr( (string) $error, 0, 65535 ) ), array( 'event_id' => $event_id ) ) ) {
+		if ( false === $wpdb->update( RQE::table( 'event_email_settings' ), array( 'last_checked_at' => gmdate( 'Y-m-d H:i:s' ), 'last_error' => substr( (string) $error, 0, 65535 ) ), array( 'event_id' => $event_id ) ) ) {
 			throw new RuntimeException( 'The inbox check status could not be saved.' );
 		}
 	}
@@ -302,7 +302,7 @@ final class MRSA_Email_Submissions {
 		}
 		$message_id = substr( $raw_message_id, 0, 191 );
 		$message_hash = hash( 'sha256', $raw_message_id );
-		$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'bonus_submissions' ) . ' WHERE event_id=%d AND provider=%s AND provider_message_hash=%s', $event_id, $provider, $message_hash ) );
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . RQE::table( 'bonus_submissions' ) . ' WHERE event_id=%d AND provider=%s AND provider_message_hash=%s', $event_id, $provider, $message_hash ) );
 		if ( $exists ) {
 			return false;
 		}
@@ -325,7 +325,7 @@ final class MRSA_Email_Submissions {
 			return self::invalid_message( $base, 'Sender email address is missing or invalid.' );
 		}
 		$registration = $wpdb->get_row( $wpdb->prepare(
-			'SELECT reg.id AS registration_id,reg.rider_id,reg.bib FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=reg.rider_id WHERE reg.event_id=%d AND LOWER(r.email)=LOWER(%s)',
+			'SELECT reg.id AS registration_id,reg.rider_id,reg.bib FROM ' . RQE::table( 'registrations' ) . ' reg JOIN ' . RQE::table( 'riders' ) . ' r ON r.id=reg.rider_id WHERE reg.event_id=%d AND LOWER(r.email)=LOWER(%s)',
 			$event_id,
 			$sender
 		), ARRAY_A );
@@ -355,21 +355,21 @@ final class MRSA_Email_Submissions {
 		if ( ! is_string( $data ) || '' === $data || strlen( $data ) > self::MAX_ATTACHMENT_SIZE ) {
 			return self::invalid_message( array_merge( $base, $registration, array( 'bonus_id' => $bonus_id ) ), 'The image attachment is empty or exceeds 10 MB.' );
 		}
-		$temp = wp_tempnam( 'mrsa-email-submission' );
+		$temp = wp_tempnam( 'rqe-email-submission' );
 		if ( ! $temp || false === file_put_contents( $temp, $data ) ) {
 			throw new RuntimeException( 'The email attachment could not be written to private temporary storage.' );
 		}
 		$image_file = '';
 		try {
 			$key = bin2hex( random_bytes( 16 ) );
-			$image_file = MRSA_Bonus::store_submission_image( $temp, $attachment['name'] ?? '', $bonus_id, $event_id, $key );
+			$image_file = RQE_Bonus::store_submission_image( $temp, $attachment['name'] ?? '', $bonus_id, $event_id, $key );
 		} finally {
 			if ( is_file( $temp ) ) {
 				unlink( $temp );
 			}
 		}
 		$row = array_merge( $base, $registration, array( 'bonus_id' => $bonus_id, 'image_file' => $image_file, 'status' => 'pending', 'rejection_description' => '' ) );
-		if ( false === $wpdb->insert( MRSA::table( 'bonus_submissions' ), $row ) ) {
+		if ( false === $wpdb->insert( RQE::table( 'bonus_submissions' ), $row ) ) {
 			self::remove_submission_image( $event_id, $image_file );
 			throw new RuntimeException( 'The validated participant submission could not be recorded.' );
 		}
@@ -390,7 +390,7 @@ final class MRSA_Email_Submissions {
 			'rejection_description' => substr( $description, 0, 65535 ),
 			'reviewed_at' => gmdate( 'Y-m-d H:i:s' ),
 		) );
-		if ( false === $wpdb->insert( MRSA::table( 'bonus_submissions' ), $row ) ) {
+		if ( false === $wpdb->insert( RQE::table( 'bonus_submissions' ), $row ) ) {
 			throw new RuntimeException( 'An invalid inbox message could not be recorded for idempotent processing.' );
 		}
 		return true;
@@ -398,7 +398,7 @@ final class MRSA_Email_Submissions {
 
 	private static function subject_bonus_id( $event_id, $subject ) {
 		global $wpdb;
-		$ids = $wpdb->get_col( $wpdb->prepare( 'SELECT bonus_id FROM ' . MRSA::table( 'bonus_points' ) . ' WHERE event_id=%d', $event_id ) );
+		$ids = $wpdb->get_col( $wpdb->prepare( 'SELECT bonus_id FROM ' . RQE::table( 'bonus_points' ) . ' WHERE event_id=%d', $event_id ) );
 		$matches = array();
 		foreach ( $ids as $id ) {
 			if ( preg_match( '/(?<![A-Za-z0-9_-])' . preg_quote( $id, '/' ) . '(?![A-Za-z0-9_-])/i', $subject ) ) {
@@ -424,31 +424,31 @@ final class MRSA_Email_Submissions {
 		if ( 'rejected' === $decision && ( ! in_array( $reason_code, $allowed_reasons, true ) || ( 'other' === $reason_code && '' === $description ) ) ) {
 			throw new RuntimeException( 'Select a rejection reason; describe the reason when Other is selected.' );
 		}
-		MRSA::begin_transaction();
+		RQE::begin_transaction();
 		try {
-			$submission = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'bonus_submissions' ) . ' WHERE id=%d AND event_id=%d FOR UPDATE', $submission_id, $event_id ), ARRAY_A );
+			$submission = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'bonus_submissions' ) . ' WHERE id=%d AND event_id=%d FOR UPDATE', $submission_id, $event_id ), ARRAY_A );
 			if ( ! $submission || 'pending' !== $submission['status'] ) {
 				throw new RuntimeException( 'This submission is no longer pending review.' );
 			}
 			$points = 0;
 			if ( 'accepted' === $decision ) {
-				$registration = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'registrations' ) . ' WHERE id=%d AND event_id=%d AND rider_id=%d FOR UPDATE', $submission['registration_id'], $event_id, $submission['rider_id'] ) );
+				$registration = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . RQE::table( 'registrations' ) . ' WHERE id=%d AND event_id=%d AND rider_id=%d FOR UPDATE', $submission['registration_id'], $event_id, $submission['rider_id'] ) );
 				if ( ! $registration ) {
 					throw new RuntimeException( 'The matching event registration no longer exists.' );
 				}
-				$duplicate = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM " . MRSA::table( 'bonus_submissions' ) . " WHERE event_id=%d AND rider_id=%d AND bonus_id=%s AND status='accepted' AND id<>%d FOR UPDATE", $event_id, $submission['rider_id'], $submission['bonus_id'], $submission_id ) );
+				$duplicate = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM " . RQE::table( 'bonus_submissions' ) . " WHERE event_id=%d AND rider_id=%d AND bonus_id=%s AND status='accepted' AND id<>%d FOR UPDATE", $event_id, $submission['rider_id'], $submission['bonus_id'], $submission_id ) );
 				if ( $duplicate ) {
 					throw new RuntimeException( 'This participant already has an accepted submission for that bonus ID.' );
 				}
-				$points = $wpdb->get_var( $wpdb->prepare( 'SELECT points FROM ' . MRSA::table( 'bonus_points' ) . ' WHERE event_id=%d AND bonus_id=%s', $event_id, $submission['bonus_id'] ) );
+				$points = $wpdb->get_var( $wpdb->prepare( 'SELECT points FROM ' . RQE::table( 'bonus_points' ) . ' WHERE event_id=%d AND bonus_id=%s', $event_id, $submission['bonus_id'] ) );
 				if ( null === $points ) {
 					throw new RuntimeException( 'The matching Bonus Point Library entry no longer exists.' );
 				}
-				if ( false === $wpdb->query( $wpdb->prepare( 'UPDATE ' . MRSA::table( 'registrations' ) . ' SET score=score+%d WHERE id=%d', $points, $registration ) ) ) {
+				if ( false === $wpdb->query( $wpdb->prepare( 'UPDATE ' . RQE::table( 'registrations' ) . ' SET score=score+%d WHERE id=%d', $points, $registration ) ) ) {
 					throw new RuntimeException( 'The participant score could not be updated.' );
 				}
 			}
-			$result = $wpdb->update( MRSA::table( 'bonus_submissions' ), array(
+			$result = $wpdb->update( RQE::table( 'bonus_submissions' ), array(
 				'status' => $decision,
 				'points_awarded' => (int) $points,
 				'reviewed_by' => get_current_user_id(),
@@ -459,16 +459,16 @@ final class MRSA_Email_Submissions {
 			if ( false === $result || 1 !== $result ) {
 				throw new RuntimeException( 'The submission review could not be saved.' );
 			}
-			MRSA::commit_transaction();
+			RQE::commit_transaction();
 		} catch ( RuntimeException $exception ) {
-			MRSA::rollback_transaction();
+			RQE::rollback_transaction();
 			throw $exception;
 		}
 		return 'accepted' === $decision ? 'Submission accepted and ' . (int) $points . ' points added to the participant total.' : 'Submission rejected and retained in review history.';
 	}
 
 	public static function image_url( $event_id, $image_file ) {
-		return MRSA_Bonus::submission_image_url( $event_id, $image_file );
+		return RQE_Bonus::submission_image_url( $event_id, $image_file );
 	}
 
 	private static function remove_submission_image( $event_id, $image_file ) {
@@ -476,7 +476,7 @@ final class MRSA_Email_Submissions {
 			return;
 		}
 		$uploads = wp_upload_dir();
-		$path = trailingslashit( $uploads['basedir'] ) . 'mrsa-event-gallery/' . absint( $event_id ) . '/submissions/' . $image_file;
+		$path = trailingslashit( $uploads['basedir'] ) . 'rqe-event-gallery/' . absint( $event_id ) . '/submissions/' . $image_file;
 		if ( is_file( $path ) ) {
 			unlink( $path );
 		}

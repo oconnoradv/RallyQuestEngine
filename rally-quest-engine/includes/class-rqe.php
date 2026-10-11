@@ -2,50 +2,56 @@
 /** Storage, authorization and privacy integration. */
 defined( 'ABSPATH' ) || exit;
 
-final class MRSA {
+final class RQE {
+	/** Returns the prefixed RQE table name for an allow-listed table key; unknown keys throw. */
 	public static function table( $name ) {
 		global $wpdb;
 		$allowed = array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
 		if ( ! in_array( $name, $allowed, true ) ) {
-			throw new InvalidArgumentException( 'Unknown MRSA table.' );
+			throw new InvalidArgumentException( 'Unknown RQE table.' );
 		}
-		return $wpdb->prefix . 'MRSA_' . $name;
+		return $wpdb->prefix . 'RQE_' . $name;
 	}
 
+	/** Activation hook: creates or upgrades tables for this site. Network activation is rejected. */
 	public static function activate( $network_wide = false ) {
 		if ( is_multisite() && $network_wide ) {
-			wp_die( esc_html( 'Motorcycle Rally Scoring Application requires individual site activation. Network-wide activation/provisioning is not supported.' ), '', array( 'back_link' => true ) );
+			wp_die( esc_html( 'Rally Quest Engine requires individual site activation. Network-wide activation/provisioning is not supported.' ), '', array( 'back_link' => true ) );
 		}
 		self::install();
 	}
 
+	/** Deactivation hook: removes scheduled inbox polling; data is kept. */
 	public static function deactivate() {
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
-			as_unschedule_all_actions( 'mrsa_process_submission_inboxes', array(), 'mrsa' );
+			as_unschedule_all_actions( 'rqe_process_submission_inboxes', array(), 'rqe' );
 		}
 	}
 
+	/** Registers runtime hooks and upgrades the schema when the stored DB version differs. */
 	public static function init() {
-		add_action( 'mrsa_bonus_expire', array( 'MRSA_Bonus', 'expire' ), 10, 3 );
-		add_action( 'mrsa_process_submission_inboxes', array( 'MRSA_Email_Submissions', 'process_all' ) );
-		if ( get_option( 'mrsa_db_version' ) !== MRSA_DB_VERSION ) {
+		add_action( 'rqe_bonus_expire', array( 'RQE_Bonus', 'expire' ), 10, 3 );
+		add_action( 'rqe_process_submission_inboxes', array( 'RQE_Email_Submissions', 'process_all' ) );
+		if ( get_option( 'rqe_db_version' ) !== RQE_DB_VERSION ) {
 			self::install();
 		}
 		if ( is_admin() ) {
-			MRSA_Admin::init();
+			RQE_Admin::init();
+			RQE_Legacy_Import::init();
 		}
-		MRSA_Email_Submissions::schedule();
-		MRSA_Public_Results::init();
+		RQE_Email_Submissions::schedule();
+		RQE_Public_Results::init();
 		add_filter( 'wp_privacy_personal_data_exporters', array( __CLASS__, 'exporters' ) );
 		add_filter( 'wp_privacy_personal_data_erasers', array( __CLASS__, 'erasers' ) );
 	}
 
+	/** Creates/updates all plugin tables with dbDelta and runs one-time data migrations by schema version. */
 	public static function install() {
 		global $wpdb;
-		$previous_db_version = get_option( 'mrsa_db_version' );
+		$previous_db_version = get_option( 'rqe_db_version' );
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		$c = $wpdb->get_charset_collate();
-		$legacy_global_admins = $wpdb->prefix . 'MRSA_global_admins';
+		$legacy_global_admins = $wpdb->prefix . 'RQE_global_admins';
 		$wpdb->query( "DROP TABLE IF EXISTS `$legacy_global_admins`" );
 		$t = self::table( 'event_admins' );
 		dbDelta( "CREATE TABLE $t (
@@ -109,7 +115,7 @@ final class MRSA {
 			KEY rider_id (rider_id),
 			KEY bike_id (bike_id)
 		) ENGINE=InnoDB $c;" );
-		if ( MRSA_DB_VERSION !== $previous_db_version ) {
+		if ( RQE_DB_VERSION !== $previous_db_version ) {
 			$wpdb->query( 'UPDATE ' . self::table( 'rider_bikes' ) . ' rb JOIN ' . self::table( 'bikes' ) . ' b ON b.id=rb.bike_id SET rb.model_year=b.year WHERE rb.model_year=0 AND b.year BETWEEN 1000 AND 9999' );
 		}
 		$t = self::table( 'horses' );
@@ -229,16 +235,16 @@ final class MRSA {
 			UNIQUE KEY event_kind_label (event_id,kind,label)
 		) ENGINE=InnoDB $c;" );
 		if ( (int) $previous_db_version < 10 ) {
-			MRSA_Statuses::migrate();
+			RQE_Statuses::migrate();
 		}
 		if ( (int) $previous_db_version < 11 ) {
 			$columns = $wpdb->get_results( 'SELECT public_results_enabled FROM ' . self::table( 'events' ) . ' LIMIT 0', ARRAY_A );
 			if ( ! is_array( $columns ) || $wpdb->last_error ) {
 				throw new RuntimeException( 'Public results schema upgrade failed. Check database permissions and retry the upgrade.' );
 			}
-			MRSA_Statuses::migrate_cancelled();
+			RQE_Statuses::migrate_cancelled();
 		}
-		update_option( 'mrsa_db_version', MRSA_DB_VERSION, false );
+		update_option( 'rqe_db_version', RQE_DB_VERSION, false );
 	}
 
 	public static function begin_transaction() {
@@ -260,10 +266,12 @@ final class MRSA {
 		return false !== $wpdb->query( 'ROLLBACK' );
 	}
 
+	/** True for WordPress administrators (manage_options), who manage shared data. */
 	public static function site_access() {
 		return is_user_logged_in() && current_user_can( 'manage_options' );
 	}
 
+	/** Event IDs the current user may administer: all events for site administrators, otherwise assigned events. */
 	public static function event_ids() {
 		global $wpdb;
 		if ( self::site_access() ) {
@@ -272,6 +280,7 @@ final class MRSA {
 		return array_map( 'intval', $wpdb->get_col( $wpdb->prepare( 'SELECT a.event_id FROM ' . self::table( 'event_admins' ) . ' a INNER JOIN ' . self::table( 'events' ) . ' e ON e.id=a.event_id WHERE a.user_id=%d', get_current_user_id() ) ) );
 	}
 
+	/** Event IDs the current user may score as an Event Administrator or Event Scorer. */
 	public static function scoring_event_ids() {
 		global $wpdb;
 		if ( self::site_access() ) {
@@ -284,10 +293,12 @@ final class MRSA {
 		) ) );
 	}
 
+	/** True when the current user may administer the given event. */
 	public static function event_access( $id ) {
 		return $id > 0 && in_array( (int) $id, self::event_ids(), true );
 	}
 
+	/** True when the current user may review submissions for the given event. */
 	public static function scoring_access( $id ) {
 		return $id > 0 && in_array( (int) $id, self::scoring_event_ids(), true );
 	}
@@ -300,6 +311,7 @@ final class MRSA {
 		return $id > 0 && (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'event_scorers' ) . ' WHERE event_id=%d AND user_id=%d', $id, get_current_user_id() ) );
 	}
 
+	/** True when the current user may open any part of the application. */
 	public static function access() {
 		return is_user_logged_in() && ( self::site_access() || count( self::scoring_event_ids() ) > 0 );
 	}
@@ -315,15 +327,16 @@ final class MRSA {
 	}
 
 	public static function exporters( $items ) {
-		$items['mrsa'] = array( 'exporter_friendly_name' => 'Motorcycle Rally Scoring Application', 'callback' => array( __CLASS__, 'export' ) );
+		$items['rqe'] = array( 'exporter_friendly_name' => 'Rally Quest Engine', 'callback' => array( __CLASS__, 'export' ) );
 		return $items;
 	}
 
 	public static function erasers( $items ) {
-		$items['mrsa'] = array( 'eraser_friendly_name' => 'Motorcycle Rally Scoring Application', 'callback' => array( __CLASS__, 'erase' ) );
+		$items['rqe'] = array( 'eraser_friendly_name' => 'Rally Quest Engine', 'callback' => array( __CLASS__, 'erase' ) );
 		return $items;
 	}
 
+	/** WordPress personal-data exporter for participant, role-assignment, review and horse data. */
 	public static function export( $email, $page = 1 ) {
 		global $wpdb;
 		$data = array();
@@ -347,21 +360,21 @@ final class MRSA {
 			}
 			$events = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,r.bib,r.pillion,r.registration_status,r.status,r.status_manual,r.score,r.placing,e.min_finisher_points FROM ' . self::table( 'registrations' ) . ' r JOIN ' . self::table( 'events' ) . ' e ON e.id=r.event_id WHERE r.rider_id=%d', $rider['id'] ), ARRAY_A );
 			foreach ( $events as $event ) {
-				$result_status = MRSA_Results::status( $event, $event['min_finisher_points'] );
+				$result_status = RQE_Results::status( $event, $event['min_finisher_points'] );
 				$fields[] = array( 'name' => 'Event / bib / pillion / registration status / event status / score / placing', 'value' => implode( ' / ', array( $event['name'], $event['bib'], $event['pillion'], $event['registration_status'], $result_status, $event['score'], $event['placing'] ) ) );
 			}
 			$submissions = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,s.bib,s.bonus_id,s.email_subject,s.submission_description,s.submitted_at,s.status,s.points_awarded,s.rejection_code,s.rejection_description FROM ' . self::table( 'bonus_submissions' ) . ' s JOIN ' . self::table( 'events' ) . ' e ON e.id=s.event_id WHERE s.rider_id=%d ORDER BY s.submitted_at', $rider['id'] ), ARRAY_A );
 			foreach ( $submissions as $submission ) {
 				$fields[] = array( 'name' => 'Bonus email submission', 'value' => implode( ' / ', array( $submission['name'], $submission['bib'], $submission['bonus_id'], $submission['email_subject'], $submission['submission_description'], $submission['submitted_at'], $submission['status'], $submission['points_awarded'], $submission['rejection_code'], $submission['rejection_description'] ) ) );
 			}
-			$data[] = array( 'group_id' => 'mrsa', 'group_label' => 'Rally registrations', 'item_id' => 'mrsa-rider-' . $rider['id'], 'data' => $fields );
+			$data[] = array( 'group_id' => 'rqe', 'group_label' => 'Rally registrations', 'item_id' => 'rqe-rider-' . $rider['id'], 'data' => $fields );
 		}
 		$user = get_user_by( 'email', $email );
 		if ( $user ) {
 			$admin_assignments = $wpdb->get_col( $wpdb->prepare( 'SELECT e.name FROM ' . self::table( 'event_admins' ) . ' a JOIN ' . self::table( 'events' ) . ' e ON e.id=a.event_id WHERE a.user_id=%d', $user->ID ) );
 			$scorer_assignments = $wpdb->get_col( $wpdb->prepare( 'SELECT e.name FROM ' . self::table( 'event_scorers' ) . ' s JOIN ' . self::table( 'events' ) . ' e ON e.id=s.event_id WHERE s.user_id=%d', $user->ID ) );
 			if ( $admin_assignments || $scorer_assignments ) {
-				$data[] = array( 'group_id' => 'mrsa', 'group_label' => 'Event administration', 'item_id' => 'mrsa-user-' . $user->ID, 'data' => array(
+				$data[] = array( 'group_id' => 'rqe', 'group_label' => 'Event administration', 'item_id' => 'rqe-user-' . $user->ID, 'data' => array(
 					array( 'name' => 'Event Administrator assignments', 'value' => implode( ', ', $admin_assignments ) ),
 					array( 'name' => 'Event Scorer assignments', 'value' => implode( ', ', $scorer_assignments ) ),
 				) );
@@ -372,12 +385,13 @@ final class MRSA {
 				foreach ( $reviews as $review ) {
 					$review_fields[] = array( 'name' => 'Submission review', 'value' => implode( ' / ', array( $review['name'], $review['id'], $review['bonus_id'], $review['status'], $review['reviewed_at'], $review['rejection_code'], $review['rejection_description'] ) ) );
 				}
-				$data[] = array( 'group_id' => 'mrsa', 'group_label' => 'Event scoring reviews', 'item_id' => 'mrsa-reviews-' . $user->ID, 'data' => $review_fields );
+				$data[] = array( 'group_id' => 'rqe', 'group_label' => 'Event scoring reviews', 'item_id' => 'rqe-reviews-' . $user->ID, 'data' => $review_fields );
 			}
 		}
 		return array( 'data' => $data, 'done' => true );
 	}
 
+	/** WordPress personal-data eraser: anonymizes retained scoring records and removes personal conveyance and submission data. */
 	public static function erase( $email, $page = 1 ) {
 		global $wpdb;
 		$removed = false;
@@ -390,7 +404,7 @@ final class MRSA {
 			$staged_submission_files = array( 'root' => '', 'files' => array() );
 			try {
 				$submission_files = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,image_file FROM ' . self::table( 'bonus_submissions' ) . ' WHERE rider_id=%d', $id ), ARRAY_A );
-				$staged_submission_files = MRSA_Bonus::stage_submission_files( $submission_files ?: array() );
+				$staged_submission_files = RQE_Bonus::stage_submission_files( $submission_files ?: array() );
 				self::begin_transaction();
 				$success = false !== $wpdb->update( self::table( 'riders' ), array( 'name' => 'Erased participant ' . $id, 'alias' => '', 'email' => 'erased-' . $id . '@example.invalid', 'phone' => '', 'emergency_name' => '', 'emergency_email' => '', 'emergency_phone' => '', 'insurance' => '', 'other' => '' ), array( 'id' => $id ) );
 				$success = false !== $wpdb->delete( self::table( 'rider_bikes' ), array( 'rider_id' => $id ) ) && $success;
@@ -405,18 +419,18 @@ final class MRSA {
 				self::rollback_transaction();
 				if ( ! empty( $staged_submission_files['root'] ) ) {
 					try {
-						MRSA_Bonus::restore_submission_files( $staged_submission_files );
+						RQE_Bonus::restore_submission_files( $staged_submission_files );
 					} catch ( RuntimeException $restore_exception ) {
-						error_log( 'MRSA privacy erasure image restoration failed for participant #' . $id . ': ' . $restore_exception->getMessage() );
+						error_log( 'RQE privacy erasure image restoration failed for participant #' . $id . ': ' . $restore_exception->getMessage() );
 					}
 				}
 				$success = false;
 			}
 			if ( $success && ! empty( $staged_submission_files['root'] ) ) {
 				try {
-					MRSA_Bonus::finish_staged_submission_files( $staged_submission_files );
+					RQE_Bonus::finish_staged_submission_files( $staged_submission_files );
 				} catch ( RuntimeException $cleanup_exception ) {
-					error_log( 'MRSA privacy erasure staged image cleanup failed for participant #' . $id . ': ' . $cleanup_exception->getMessage() );
+					error_log( 'RQE privacy erasure staged image cleanup failed for participant #' . $id . ': ' . $cleanup_exception->getMessage() );
 					$success = false;
 				}
 			}

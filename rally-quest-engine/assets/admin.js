@@ -1,16 +1,16 @@
 /* Admin UI and sequential event-gallery uploads; files remain outside the WordPress media library. */
 (function () {
 	'use strict';
-	const root = document.querySelector('.mrsa');
+	const root = document.querySelector('.rqe');
 	if (!root) return;
-	const imageForm = root.querySelector('#mrsa-import-images form');
-	const queue = root.querySelector('.mrsa-image-queue');
+	const imageForm = root.querySelector('#rqe-import-images form');
+	const queue = root.querySelector('.rqe-image-queue');
 	if (imageForm && queue && typeof window.fetch === 'function') {
 		const chooser = imageForm.querySelector('[name="bonus_images[]"]');
-		const progress = queue.querySelector('.mrsa-queue-progress');
-		const review = queue.querySelector('.mrsa-queue-review');
-		const log = queue.querySelector('.mrsa-queue-log');
-		const stop = queue.querySelector('.mrsa-queue-stop');
+		const progress = queue.querySelector('.rqe-queue-progress');
+		const review = queue.querySelector('.rqe-queue-review');
+		const log = queue.querySelector('.rqe-queue-log');
+		const stop = queue.querySelector('.rqe-queue-stop');
 		const galleryLink = queue.querySelector('a');
 		const galleryUrl = galleryLink.href;
 		chooser.multiple = true;
@@ -27,7 +27,7 @@
 		const request = async (operation, file, token, unscanned) => {
 			// Never reuse the multipart form: it would send every selected image.
 			const data = new FormData();
-			data.set('action', 'mrsa_image_queue');
+			data.set('action', 'rqe_image_queue');
 			data.set('_wpnonce', imageForm.querySelector('[name="_wpnonce"]').value);
 			data.set('event_id', imageForm.querySelector('[name="event_id"]').value);
 			data.set('import_step', 'images');
@@ -143,7 +143,7 @@
 			let imported = 0;
 			let failed = false;
 			const passed = [];
-			const controls = Array.from(root.querySelectorAll('.mrsa-import-header input, .mrsa-import-header button'));
+			const controls = Array.from(root.querySelectorAll('.rqe-import-header input, .rqe-import-header button'));
 			const originalDisabled = controls.map(control => control.disabled);
 			controls.forEach(control => { control.disabled = true; });
 			try {
@@ -159,7 +159,7 @@
 						// Keep recovery available until the approval response confirms its outcome.
 						const recovery = new URL(galleryUrl);
 						recovery.searchParams.set('bonus_pending', result.token);
-						galleryLink.href = recovery.href + '#mrsa-import-feedback';
+						galleryLink.href = recovery.href + '#rqe-import-feedback';
 						galleryLink.textContent = 'Open saved scan review / check gallery';
 						const report = result;
 						if (!report.can_approve) {
@@ -170,14 +170,14 @@
 							if (!partial || report.scanner_error) stopping = true;
 						} else {
 							passed.push({ file, report });
-							node('li', file.name + ': passed scan and is ready for bulk import.', log).className = 'mrsa-queue-success';
+							node('li', file.name + ': passed scan and is ready for bulk import.', log).className = 'rqe-queue-success';
 						}
 						continue;
 					}
 					if (result.state === 'imported') imported++;
 					const entry = node('li', file.name + ': ' + result.message, log);
 					if (result.state === 'imported') {
-						entry.className = result.message.includes('WARNING:') ? 'mrsa-queue-warning' : 'mrsa-queue-success';
+						entry.className = result.message.includes('WARNING:') ? 'rqe-queue-warning' : 'rqe-queue-success';
 					}
 					(result.errors || []).forEach(error => node('li', file.name + ': ' + error, log));
 					review.replaceChildren();
@@ -205,7 +205,7 @@
 								item.report.token = '';
 							}
 							const entry = node('li', item.file.name + ': ' + result.message, log);
-							entry.className = result.message.includes('WARNING:') ? 'mrsa-queue-warning' : 'mrsa-queue-success';
+							entry.className = result.message.includes('WARNING:') ? 'rqe-queue-warning' : 'rqe-queue-success';
 							(result.errors || []).forEach(error => node('li', item.file.name + ': ' + error, log));
 						}
 						review.replaceChildren();
@@ -233,14 +233,14 @@
 			}
 		});
 	}
-	root.querySelectorAll('.mrsa-destructive-action').forEach(section => {
+	root.querySelectorAll('.rqe-destructive-action').forEach(section => {
 		const form = section.querySelector('form');
-		const verification = form.querySelector('.mrsa-delete-verification');
+		const verification = form.querySelector('.rqe-delete-verification');
 		const dialog = document.createElement('dialog');
 		if (typeof dialog.showModal !== 'function') return;
 		const input = verification.querySelector('[name="verification_code"]');
 		const action = Array.from(form.querySelectorAll('button')).find(button => !verification.contains(button));
-		dialog.className = 'mrsa-delete-dialog';
+		dialog.className = 'rqe-delete-dialog';
 		dialog.setAttribute('aria-labelledby', verification.querySelector('h4').id);
 		dialog.append(verification);
 		form.append(dialog);
@@ -250,30 +250,30 @@
 			if (dialog.open) return;
 			event.preventDefault();
 			const selected = form.querySelector('select');
-			verification.querySelector('.mrsa-delete-target').textContent = selected ?
+			verification.querySelector('.rqe-delete-target').textContent = selected ?
 				selected.previousElementSibling.textContent + ': ' + selected.selectedOptions[0].textContent : '';
 			input.disabled = false;
 			dialog.showModal();
-			verification.querySelector('.mrsa-delete-cancel').focus();
+			verification.querySelector('.rqe-delete-cancel').focus();
 		});
-		verification.querySelector('.mrsa-delete-cancel').addEventListener('click', () => dialog.close());
+		verification.querySelector('.rqe-delete-cancel').addEventListener('click', () => dialog.close());
 		dialog.addEventListener('close', () => {
 			input.value = '';
 			input.disabled = true;
 			action.focus();
 		});
 	});
-	const urlSource = root.querySelector('.mrsa-url-source');
+	const urlSource = root.querySelector('.rqe-url-source');
 	const urlDialog = document.createElement('dialog');
 	if (urlSource && typeof urlDialog.showModal === 'function') {
 		// Like Choose Files: one button that prompts; the URL field stays in the form so it submits normally.
-		const opener = urlSource.querySelector('.mrsa-url-open');
-		const prompt = urlSource.querySelector('.mrsa-url-prompt');
+		const opener = urlSource.querySelector('.rqe-url-open');
+		const prompt = urlSource.querySelector('.rqe-url-prompt');
 		const input = prompt.querySelector('[name="gallery_url"]');
-		urlDialog.className = 'mrsa-url-dialog';
-		urlDialog.setAttribute('aria-labelledby', 'mrsa-url-prompt-title');
+		urlDialog.className = 'rqe-url-dialog';
+		urlDialog.setAttribute('aria-labelledby', 'rqe-url-prompt-title');
 		prompt.querySelectorAll('[hidden]').forEach(element => { element.hidden = false; });
-		prompt.querySelector('.mrsa-url-submit').textContent = 'Load Images';
+		prompt.querySelector('.rqe-url-submit').textContent = 'Load Images';
 		urlDialog.append(prompt);
 		urlSource.append(urlDialog);
 		opener.hidden = false;
@@ -282,14 +282,14 @@
 			urlDialog.showModal();
 			input.focus();
 		});
-		prompt.querySelector('.mrsa-url-cancel').addEventListener('click', () => urlDialog.close());
+		prompt.querySelector('.rqe-url-cancel').addEventListener('click', () => urlDialog.close());
 		urlDialog.addEventListener('close', () => {
 			input.value = '';
 			input.required = false;
 			opener.focus();
 		});
 	}
-	root.querySelectorAll('.mrsa-url-help').forEach(help => {
+	root.querySelectorAll('.rqe-url-help').forEach(help => {
 		help.addEventListener('mouseenter', () => { help.open = true; });
 		help.addEventListener('mouseleave', () => { help.open = false; });
 		help.addEventListener('focusin', () => { help.open = true; });
@@ -300,7 +300,7 @@
 			if (event.key === 'Escape') { help.open = false; event.stopPropagation(); }
 		});
 	});
-	root.querySelectorAll('.mrsa-email-config').forEach(form => {
+	root.querySelectorAll('.rqe-email-config').forEach(form => {
 		const provider = form.querySelector('[name="provider"]');
 		const refreshProviderFields = () => {
 			form.querySelectorAll('[data-email-provider-types]').forEach(group => {
@@ -314,14 +314,14 @@
 		provider.addEventListener('change', refreshProviderFields);
 		refreshProviderFields();
 	});
-	const galleryDialog = root.querySelector('.mrsa-gallery-dialog');
+	const galleryDialog = root.querySelector('.rqe-gallery-dialog');
 	if (galleryDialog && typeof galleryDialog.showModal === 'function') {
-		const image = galleryDialog.querySelector('.mrsa-gallery-full-image');
-		const title = galleryDialog.querySelector('#mrsa-gallery-title');
-		const imageError = galleryDialog.querySelector('.mrsa-gallery-image-error');
+		const image = galleryDialog.querySelector('.rqe-gallery-full-image');
+		const title = galleryDialog.querySelector('#rqe-gallery-title');
+		const imageError = galleryDialog.querySelector('.rqe-gallery-image-error');
 		let opener;
 		image.addEventListener('error', () => { image.hidden = true; imageError.hidden = false; });
-		root.querySelectorAll('.mrsa-bonus-image-link').forEach(link => {
+		root.querySelectorAll('.rqe-bonus-image-link').forEach(link => {
 			link.addEventListener('click', event => {
 				event.preventDefault();
 				opener = link;
@@ -333,7 +333,7 @@
 				galleryDialog.showModal();
 			});
 		});
-		galleryDialog.querySelector('.mrsa-gallery-close').addEventListener('click', () => galleryDialog.close());
+		galleryDialog.querySelector('.rqe-gallery-close').addEventListener('click', () => galleryDialog.close());
 		galleryDialog.addEventListener('click', event => {
 			const bounds = galleryDialog.getBoundingClientRect();
 			if (event.target === galleryDialog && (event.clientX < bounds.left || event.clientX > bounds.right ||
@@ -355,9 +355,9 @@
 			if (!window.confirm(button.dataset.confirm)) event.preventDefault();
 		});
 	});
-	root.querySelectorAll('.mrsa-user-select').forEach(select => {
+	root.querySelectorAll('.rqe-user-select').forEach(select => {
 		const form = select.closest('form');
-		const filter = form.querySelector('.mrsa-user-filter');
+		const filter = form.querySelector('.rqe-user-filter');
 		const choices = Array.from(select.options);
 		const refresh = () => {
 			const selected = select.selectedOptions[0];
@@ -375,13 +375,13 @@
 		refresh();
 	});
 	function setupBike(row) {
-		const catalog = row.querySelector('.mrsa-catalog');
+		const catalog = row.querySelector('.rqe-catalog');
 		const records = Array.from(catalog.options).filter(item => item.value).map(item => ({
 			id: item.value, make: item.dataset.make, model: item.dataset.model
 		}));
-		const dependent = row.querySelector('.mrsa-dependent');
-		const make = row.querySelector('.mrsa-make');
-		const model = row.querySelector('.mrsa-model');
+		const dependent = row.querySelector('.rqe-dependent');
+		const make = row.querySelector('.rqe-make');
+		const model = row.querySelector('.rqe-model');
 		function fill(select, values, label, current) {
 			select.replaceChildren(option('', label));
 			Array.from(new Set(values)).forEach(value => select.append(option(value, value)));
@@ -403,36 +403,36 @@
 		model.addEventListener('change', sync);
 		models(initial && initial.model);
 		dependent.hidden = false;
-		row.querySelector('.mrsa-catalog-label').hidden = true;
-		row.querySelector('.mrsa-remove-bike').addEventListener('click', () => row.remove());
+		row.querySelector('.rqe-catalog-label').hidden = true;
+		row.querySelector('.rqe-remove-bike').addEventListener('click', () => row.remove());
 	}
-	root.querySelectorAll('.mrsa-bike-row').forEach(setupBike);
-	const addBike = root.querySelector('.mrsa-add-bike');
+	root.querySelectorAll('.rqe-bike-row').forEach(setupBike);
+	const addBike = root.querySelector('.rqe-add-bike');
 	if (addBike) addBike.addEventListener('click', () => {
-		const holder = root.querySelector('.mrsa-bike-rows');
+		const holder = root.querySelector('.rqe-bike-rows');
 		if (holder.children.length >= 20) {
 			window.alert('At most 20 motorcycles are allowed.');
 			return;
 		}
-		const fragment = root.querySelector('#mrsa-bike-template').content.cloneNode(true);
-		const row = fragment.querySelector('.mrsa-bike-row');
+		const fragment = root.querySelector('#rqe-bike-template').content.cloneNode(true);
+		const row = fragment.querySelector('.rqe-bike-row');
 		setupBike(row);
 		holder.append(fragment);
 	});
-	const selectAllBikes = root.querySelector('.mrsa-select-all-bikes');
+	const selectAllBikes = root.querySelector('.rqe-select-all-bikes');
 	if (selectAllBikes) selectAllBikes.addEventListener('change', () => {
-		root.querySelectorAll('[form="mrsa-bulk-delete-bikes"]').forEach(checkbox => {
+		root.querySelectorAll('[form="rqe-bulk-delete-bikes"]').forEach(checkbox => {
 			checkbox.checked = selectAllBikes.checked;
 		});
 	});
-	root.querySelectorAll('.mrsa-table-region').forEach(region => {
+	root.querySelectorAll('.rqe-table-region').forEach(region => {
 		const table = region.querySelector('table');
 		const tbody = table.tBodies[0];
 		const rows = Array.from(tbody.rows);
-		const tools = region.querySelector('.mrsa-table-tools');
-		const search = region.querySelector('.mrsa-search');
-		const size = region.querySelector('.mrsa-page-size');
-		const paging = region.querySelector('.mrsa-pagination');
+		const tools = region.querySelector('.rqe-table-tools');
+		const search = region.querySelector('.rqe-search');
+		const size = region.querySelector('.rqe-page-size');
+		const paging = region.querySelector('.rqe-pagination');
 		const headers = Array.from(table.tHead.rows[0].cells);
 		const filters = [];
 		let page = 1;
@@ -446,7 +446,7 @@
 			const label = header.textContent;
 			const button = document.createElement('button');
 			button.type = 'button';
-			button.className = 'mrsa-sort';
+			button.className = 'rqe-sort';
 			button.textContent = label + ' ↕';
 			button.setAttribute('aria-label', 'Sort by ' + label);
 			header.replaceChildren(button);
@@ -503,14 +503,14 @@
 		size.addEventListener('change', () => { page = 1; render(); });
 		render();
 	});
-	root.querySelectorAll('.mrsa-logo').forEach(holder => {
+	root.querySelectorAll('.rqe-logo').forEach(holder => {
 		const input = holder.querySelector('[name="logo_id"]');
-		const preview = holder.querySelector('.mrsa-logo-preview');
-		holder.querySelector('.mrsa-clear-media').addEventListener('click', () => {
+		const preview = holder.querySelector('.rqe-logo-preview');
+		holder.querySelector('.rqe-clear-media').addEventListener('click', () => {
 			input.value = '0';
 			preview.replaceChildren();
 		});
-		holder.querySelector('.mrsa-media').addEventListener('click', () => {
+		holder.querySelector('.rqe-media').addEventListener('click', () => {
 			if (!window.wp || !window.wp.media) {
 				window.alert('WordPress media is unavailable. Enter an existing image attachment ID.');
 				return;
@@ -534,8 +534,8 @@
 		});
 	});
 	// Header chooser: the scavenger hunt style narrows the event list; a hidden selection is cleared.
-	const headerStyle = root.querySelector('#mrsa-header-style');
-	const headerEvent = root.querySelector('#mrsa-header-event');
+	const headerStyle = root.querySelector('#rqe-header-style');
+	const headerEvent = root.querySelector('#rqe-header-event');
 	if (headerStyle && headerEvent) {
 		const filterEvents = () => {
 			Array.from(headerEvent.options).forEach((choice) => {
@@ -550,7 +550,7 @@
 		filterEvents();
 	}
 	if (window.location.search.includes('score_rider=')) {
-		const scoring = root.querySelector('#mrsa-scoring');
+		const scoring = root.querySelector('#rqe-scoring');
 		if (scoring) scoring.scrollIntoView({block: 'start'});
 	}
 }());

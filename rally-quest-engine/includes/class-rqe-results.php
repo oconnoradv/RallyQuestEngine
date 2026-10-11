@@ -2,7 +2,8 @@
 /** Pure result rules shared by roster, scoring and result presentations. */
 defined( 'ABSPATH' ) || exit;
 
-final class MRSA_Results {
+final class RQE_Results {
+	/** Automatic Event Status: Preliminary Finisher strictly above Minimum Finisher Points, otherwise Registered, unless manually set. */
 	public static function status( array $row, $minimum ) {
 		return ! empty( $row['status_manual'] ) ? $row['status'] : ( (int) $row['score'] > (int) $minimum ? 'Preliminary Finisher' : 'Registered' );
 	}

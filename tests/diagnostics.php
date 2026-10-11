@@ -2,9 +2,9 @@
 /** Standalone diagnostics regression tests: php tests/diagnostics.php */
 define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
-define( 'MRSA_DB_VERSION', '11' );
+define( 'RQE_DB_VERSION', '11' );
 define( 'MINUTE_IN_SECONDS', 60 );
-final class MRSA {
+final class RQE {
 	public static function table( $name ) { return $name; }
 	public static function site_access() { return $GLOBALS['authorized']; }
 	public static function event_access( $id ) { return self::site_access(); }
@@ -91,7 +91,7 @@ function absint( $value ) { return abs( (int) $value ); }
 function admin_url( $path ) { return '/not-a-real-wordpress-endpoint/' . $path; }
 function wp_nonce_field( $action ) { echo '<input type="hidden" name="_wpnonce" value="test">'; }
 function wp_generate_password( $length, $special, $extra ) { return substr( str_repeat( 'AB12CD34', 2 ), 0, $length ); }
-function wp_upload_dir() { return array( 'basedir' => sys_get_temp_dir() . '/mrsa-diagnostics-no-gallery-' . bin2hex( random_bytes( 12 ) ) ); }
+function wp_upload_dir() { return array( 'basedir' => sys_get_temp_dir() . '/rqe-diagnostics-no-gallery-' . bin2hex( random_bytes( 12 ) ) ); }
 function trailingslashit( $value ) { return rtrim( $value, '/\\' ) . '/'; }
 function get_plugins() { return empty( $GLOBALS['scheduler_installed'] ) ? array() : array( 'action-scheduler/action-scheduler.php' => array() ); }
 function is_plugin_active( $file ) { return ! empty( $GLOBALS['scheduler_active'] ); }
@@ -109,19 +109,19 @@ function get_option( $key, $default = '' ) { return $GLOBALS['schema_version'] ?
 function wp_max_upload_size() { return $GLOBALS['upload_limit'] ?? 10485760; }
 function get_temp_dir() { return sys_get_temp_dir(); }
 function wp_normalize_path( $value ) { return str_replace( '\\', '/', $value ); }
-final class MRSA_File_Scan {
+final class RQE_File_Scan {
 	public static function check_connection() {
 		$GLOBALS['scan_checks'] = ( $GLOBALS['scan_checks'] ?? 0 ) + 1;
 		return array( 'passed' => ! empty( $GLOBALS['scanner_ready'] ), 'message' => empty( $GLOBALS['scanner_ready'] ) ? 'ClamAV unavailable.' : 'Harmless scan passed.' );
 	}
 }
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-admin.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-import-audit.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-import-adapters.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-bonus.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-views.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-diagnostics.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-diagnostics-deletion-service.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-admin.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-import-audit.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-import-adapters.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-bonus.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-views.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-diagnostics.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-diagnostics-deletion-service.php';
 function invoke_method( $class, $name, ...$args ) {
 	$method = new ReflectionMethod( $class, $name );
 	if ( PHP_VERSION_ID < 80100 ) { $method->setAccessible( true ); }
@@ -140,27 +140,27 @@ function check( $condition, $label ) {
 $wpdb = new Diagnostics_Test_DB();
 $GLOBALS['authorized'] = true;
 ob_start();
-invoke_method( 'MRSA_Views', 'diagnostics' );
+invoke_method( 'RQE_Views', 'diagnostics' );
 $html = ob_get_clean();
 if ( in_array( '--preview', $argv ?? array(), true ) ) {
-	echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="admin.css"><title>Diagnostics preview</title></head><body><main class="mrsa">' . $html . '</main><script src="admin.js"></script></body></html>';
+	echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="admin.css"><title>Diagnostics preview</title></head><body><main class="rqe">' . $html . '</main><script src="admin.js"></script></body></html>';
 	exit;
 }
-check( strpos( $html, 'mrsa-destructive-grid' ) !== false && substr_count( $html, 'mrsa-destructive-action' ) === 6, 'six destructive actions share a compact grid' );
-check( substr_count( $html, 'mrsa-diagnostics-section' ) === 10, 'configuration, exports, destructive group and individual actions can all collapse' );
-check( strpos( $html, '<details class="mrsa-diagnostics-section"><summary><h3>Destructive operations</h3></summary>' ) !== false, 'Destructive operations defaults to collapsed' );
+check( strpos( $html, 'rqe-destructive-grid' ) !== false && substr_count( $html, 'rqe-destructive-action' ) === 6, 'six destructive actions share a compact grid' );
+check( substr_count( $html, 'rqe-diagnostics-section' ) === 10, 'configuration, exports, destructive group and individual actions can all collapse' );
+check( strpos( $html, '<details class="rqe-diagnostics-section"><summary><h3>Destructive operations</h3></summary>' ) !== false, 'Destructive operations defaults to collapsed' );
 foreach ( array( 'Required Plugins and Configuration', 'Export Data', 'Database Backup', 'Destructive operations' ) as $heading ) {
 	check( strpos( $html, '<summary><h3>' . $heading . '</h3>' ) !== false, 'native collapse control wraps ' . $heading );
 }
-check( substr_count( $html, 'mrsa-destructive-action mrsa-diagnostics-section" open><summary><h4>' ) === 6, 'all destructive cards retain initially visible controls with individual collapse buttons' );
-check( strpos( $html, '<details class="mrsa-administrative-audit"><summary><h3>Administrative Audit</h3></summary>' ) !== false, 'Administrative Audit uses a native expand control and defaults to collapsed' );
-$audit_start = strpos( $html, '<details class="mrsa-administrative-audit">' );
+check( substr_count( $html, 'rqe-destructive-action rqe-diagnostics-section" open><summary><h4>' ) === 6, 'all destructive cards retain initially visible controls with individual collapse buttons' );
+check( strpos( $html, '<details class="rqe-administrative-audit"><summary><h3>Administrative Audit</h3></summary>' ) !== false, 'Administrative Audit uses a native expand control and defaults to collapsed' );
+$audit_start = strpos( $html, '<details class="rqe-administrative-audit">' );
 $audit_end = strpos( $html, '</details>', $audit_start );
 check( strpos( substr( $html, $audit_start, $audit_end - $audit_start ), 'Date/time (UTC)' ) !== false && $audit_end < strpos( $html, '<h3>Destructive operations' ), 'collapsed audit contains the existing history table without hiding destructive actions' );
 check( strpos( $html, 'Delete Virus Scan Audit Data' ) !== false && strpos( $html, 'reset remembered ClamAV overrides' ) !== false, 'audit deletion describes override reset and retained deletion record' );
-check( substr_count( $html, 'name="verification_hash"' ) === 6 && substr_count( $html, 'mrsa-delete-verification' ) === 6, 'each action retains separate server verification and dialog content' );
+check( substr_count( $html, 'name="verification_hash"' ) === 6 && substr_count( $html, 'rqe-delete-verification' ) === 6, 'each action retains separate server verification and dialog content' );
 check( substr_count( $html, 'name="_wpnonce"' ) === 9, 'configuration check, exports and destructive operations retain nonce fields' );
-check( strpos( $html, 'id="mrsa-configuration"' ) < strpos( $html, '<h3>Database Backup' ), 'configuration section precedes export and backup controls' );
+check( strpos( $html, 'id="rqe-configuration"' ) < strpos( $html, '<h3>Database Backup' ), 'configuration section precedes export and backup controls' );
 $operations = array( 'all', 'bikes', 'roster', 'bonus_points', 'rider', 'audit' );
 foreach ( $operations as $suffix ) {
 	$operation = 'diagnostics_delete_' . $suffix;
@@ -169,9 +169,9 @@ foreach ( $operations as $suffix ) {
 		array( 'user_id' => 1, 'action' => 'bypass_enabled' ),
 		array( 'user_id' => 2, 'action' => 'bypass_enabled' ),
 	);
-	$_POST = array( 'event_id' => '7', 'rider_id' => '9', 'verification_code' => 'AB12CD34', 'verification_hash' => MRSA_Admin::diagnostics_hash( $operation, 'AB12CD34' ) );
-	invoke_method( 'MRSA_Admin', 'verify_diagnostics', $operation );
-	$deletion = new MRSA_Diagnostics_Deletion_Service();
+	$_POST = array( 'event_id' => '7', 'rider_id' => '9', 'verification_code' => 'AB12CD34', 'verification_hash' => RQE_Admin::diagnostics_hash( $operation, 'AB12CD34' ) );
+	invoke_method( 'RQE_Admin', 'verify_diagnostics', $operation );
+	$deletion = new RQE_Diagnostics_Deletion_Service();
 	$input = array( 'event_id' => '7', 'rider_id' => '9' );
 	$before = $wpdb->tables;
 	$wpdb->fail_audit = true;
@@ -187,19 +187,19 @@ foreach ( $operations as $suffix ) {
 	check( $audit['action'] === $operation && $audit['username'] === 'admin-1' && preg_match( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/D', $audit['occurred_at'] ), $suffix . ': deletion records actor, operation and UTC timestamp' );
 	check( $audit['event_id'] === ( in_array( $suffix, array( 'roster', 'bonus_points' ), true ) ? 7 : 0 ), $suffix . ': audit records event scope or site-wide scope' );
 	if ( 'audit' === $suffix ) {
-		check( count( $wpdb->tables['import_audit'] ) === 1 && ! MRSA_Bonus::bypass_enabled(), 'clearing audit leaves only deletion activity and resets current administrator override' );
+		check( count( $wpdb->tables['import_audit'] ) === 1 && ! RQE_Bonus::bypass_enabled(), 'clearing audit leaves only deletion activity and resets current administrator override' );
 		$GLOBALS['user_id'] = 2;
-		check( ! MRSA_Bonus::bypass_enabled(), 'audit deletion resets other administrators overrides too' );
+		check( ! RQE_Bonus::bypass_enabled(), 'audit deletion resets other administrators overrides too' );
 		$GLOBALS['user_id'] = 1;
 	} else {
-		check( count( $wpdb->tables['import_audit'] ) === 3 && MRSA_Bonus::bypass_enabled(), $suffix . ': ordinary deletions preserve previous audit and overrides' );
+		check( count( $wpdb->tables['import_audit'] ) === 3 && RQE_Bonus::bypass_enabled(), $suffix . ': ordinary deletions preserve previous audit and overrides' );
 	}
 	if ( 'rider' === $suffix ) {
 		check( strpos( $audit['detail'], 'Participant ID: 9' ) !== false, 'rider deletion retains deleted rider ID in audit details' );
 	}
 	$_POST['verification_code'] = 'WRONG';
 	try {
-		invoke_method( 'MRSA_Admin', 'verify_diagnostics', $operation );
+		invoke_method( 'RQE_Admin', 'verify_diagnostics', $operation );
 		throw new RuntimeException( 'Invalid verification unexpectedly accepted.' );
 	} catch ( RuntimeException $exception ) {
 		check( strpos( $exception->getMessage(), 'did not match' ) !== false, $suffix . ': mismatched verification rejected' );
@@ -207,7 +207,7 @@ foreach ( $operations as $suffix ) {
 }
 $GLOBALS['authorized'] = false;
 try {
-	invoke_method( 'MRSA_Admin', 'require_site_admin' );
+	invoke_method( 'RQE_Admin', 'require_site_admin' );
 	throw new RuntimeException( 'Non-site administrator unexpectedly authorized.' );
 } catch ( RuntimeException $exception ) {
 	check( strpos( $exception->getMessage(), 'WordPress administrator' ) !== false, 'Diagnostics mutation authorization rejects non-site administrators' );

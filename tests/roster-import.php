@@ -2,9 +2,9 @@
 /** Standalone roster import regression tests: php tests/roster-import.php */
 define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
-define( 'MRSA_VERSION', 'test' );
-define( 'MRSA_FILE', __DIR__ . '/../motorcycle-rally-scoring-application/motorcycle-rally-scoring-application.php' );
-final class MRSA {
+define( 'RQE_VERSION', 'test' );
+define( 'RQE_FILE', __DIR__ . '/../rally-quest-engine/rally-quest-engine.php' );
+final class RQE {
 	public static $site_admin = true;
 	public static function site_access() { return self::$site_admin; }
 	public static function event_access( $id ) { return 7 === $id; }
@@ -37,11 +37,11 @@ final class Roster_Test_DB {
 	public function get_results( $query, $format ) {
 		$sql = is_array( $query ) ? $query[0] : $query;
 		if ( strpos( $sql, 'FROM status_options' ) !== false ) {
-			return array_map( function ( $label ) { return array( 'label' => $label, 'enabled' => 1 ); }, MRSA_Statuses::defaults( $query[1][1] ) );
+			return array_map( function ( $label ) { return array( 'label' => $label, 'enabled' => 1 ); }, RQE_Statuses::defaults( $query[1][1] ) );
 		}
 		if ( $this->view_mode ) {
 			$sql = is_array( $query ) ? $query[0] : $query;
-			return strpos( $sql, 'SELECT e.*' ) === 0 ? array( MRSA::row( 'events', 7 ) ) : array();
+			return strpos( $sql, 'SELECT e.*' ) === 0 ? array( RQE::row( 'events', 7 ) ) : array();
 		}
 		return array_values( array_filter( $this->registrations, function ( $row ) use ( $query ) { return $row['event_id'] === $query[1][0]; } ) );
 	}
@@ -62,7 +62,7 @@ function esc_attr( $value ) { return esc_html( $value ); }
 function esc_url( $value ) { return esc_html( $value ); }
 function admin_url( $path ) { return 'https://example.test/wp-admin/' . $path; }
 function add_query_arg( $args, $url ) { return $url . '?' . http_build_query( $args ); }
-function plugins_url( $path, $file ) { return 'https://example.test/plugins/mrsa/' . $path; }
+function plugins_url( $path, $file ) { return 'https://example.test/plugins/rqe/' . $path; }
 function wp_nonce_field( $action ) { echo '<input name="_wpnonce" value="test">'; }
 function wp_list_pluck( $rows, $key ) { return array_column( $rows, $key ); }
 function selected( $first, $second ) { if ( (string) $first === (string) $second ) { echo ' selected'; } }
@@ -70,18 +70,18 @@ function get_current_user_id() { return 1; }
 function get_user_option( $key, $user_id ) { return $GLOBALS['selected_event'] ?? 0; }
 function update_user_option( $user_id, $key, $value, $global = false ) { $GLOBALS['selected_event'] = $value; return true; }
 function wp_die( $message, $title = '', $args = array() ) { throw new RuntimeException( $args['response'] . ': ' . $message ); }
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-admin.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-statuses.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-file-scan.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-spreadsheet-reader.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-roster-import-service.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-bonus.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-admin.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-statuses.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-file-scan.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-spreadsheet-reader.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-roster-import-service.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-bonus.php';
 function check( $ok, $label ) {
 	if ( ! $ok ) { throw new RuntimeException( 'FAIL: ' . $label ); }
 	echo 'PASS: ' . $label . PHP_EOL;
 }
 function import_rows( $rows, $header = array( 'Participant ID', 'Email', 'Bib ID', 'Status', 'Pillion' ) ) {
-	return MRSA_Roster_Import_Service::import_rows( 7, $header, $rows );
+	return RQE_Roster_Import_Service::import_rows( 7, $header, $rows );
 }
 $wpdb = new Roster_Test_DB();
 $wpdb->registrations = array( array( 'event_id' => 7, 'rider_id' => 5, 'bib' => 2 ), array( 'event_id' => 8, 'rider_id' => 1, 'bib' => 1 ) );
@@ -130,8 +130,8 @@ foreach ( array( array( 'Name' ), array( 'Rider ID', 'Rider ID' ) ) as $header )
 }
 import_rows( array( array( 'rider1@example.com' ) ), array( 'Email' ) );
 check( end( $wpdb->registrations )['bib'] === 1, 'email-only roster assigns next free bib' );
-$sample = __DIR__ . '/../motorcycle-rally-scoring-application/samples/event-roster.csv';
-list( $header, $rows ) = MRSA_Bonus::read_spreadsheet( $sample, 'csv' );
+$sample = __DIR__ . '/../rally-quest-engine/samples/event-roster.csv';
+list( $header, $rows ) = RQE_Bonus::read_spreadsheet( $sample, 'csv' );
 check( $header === array( 'Participant ID', 'Email', 'Bib ID', 'Registration Status', 'Pillion' ) && count( $rows ) === 2, 'downloadable sample CSV parses with documented columns' );
 // Archive fixture supplies components; the production parser still validates the XML.
 define( 'PCLZIP_OPT_BY_NAME', 1 );
@@ -153,28 +153,28 @@ PclZip::$entries = array(
 	'xl/_rels/workbook.xml.rels' => '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
 	'xl/worksheets/sheet1.xml' => '<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Rider ID</t></is></c><c r="C1" t="inlineStr"><is><t>Bib ID</t></is></c></row><row r="2"><c r="A2"><v>3</v></c><c r="C2"><v>4</v></c></row></sheetData></worksheet>',
 );
-list( $header, $rows ) = MRSA_Bonus::read_spreadsheet( 'fixture.xlsx', 'xlsx' );
+list( $header, $rows ) = RQE_Bonus::read_spreadsheet( 'fixture.xlsx', 'xlsx' );
 check( $header === array( 0 => 'Rider ID', 2 => 'Bib ID' ) && $rows === array( array( 0 => '3', 2 => '4' ) ), 'XLSX parser preserves sparse columns and numeric cells' );
 $wpdb->registrations = $baseline;
 import_rows( $rows, $header );
 check( end( $wpdb->registrations )['rider_id'] === 3 && end( $wpdb->registrations )['bib'] === 4, 'parsed XLSX rows enroll into selected event' );
 PclZip::$entries['xl/worksheets/sheet1.xml'] = '<worksheet><sheetData><row><c r="A1"><f>1+1</f><v>2</v></c></row></sheetData></worksheet>';
-try { MRSA_Bonus::read_spreadsheet( 'fixture.xlsx', 'xlsx' ); throw new LogicException( 'Formula workbook accepted.' ); }
+try { RQE_Bonus::read_spreadsheet( 'fixture.xlsx', 'xlsx' ); throw new LogicException( 'Formula workbook accepted.' ); }
 catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), 'formulas' ) !== false, 'roster XLSX formulas rejected' ); }
 PclZip::$entries['xl/vbaProject.bin'] = 'unsafe';
-try { MRSA_Bonus::read_spreadsheet( 'fixture.xlsx', 'xlsx' ); throw new LogicException( 'Macro workbook accepted.' ); }
+try { RQE_Bonus::read_spreadsheet( 'fixture.xlsx', 'xlsx' ); throw new LogicException( 'Macro workbook accepted.' ); }
 catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), 'macros' ) !== false, 'roster XLSX macros rejected' ); }
 
-$sample = new PharData( __DIR__ . '/../motorcycle-rally-scoring-application/samples/bonus-listing.xlsx' );
+$sample = new PharData( __DIR__ . '/../rally-quest-engine/samples/bonus-listing.xlsx' );
 PclZip::$entries = array();
 foreach ( new RecursiveIteratorIterator( $sample ) as $entry ) {
 	$path = str_replace( '\\', '/', $entry->getPathname() );
 	$name = substr( $path, strpos( $path, 'bonus-listing.xlsx/' ) + strlen( 'bonus-listing.xlsx/' ) );
 	PclZip::$entries[ $name ] = $entry->getContent();
 }
-list( $header, $rows ) = MRSA_Bonus::read_spreadsheet( 'sample.xlsx', 'xlsx' );
+list( $header, $rows ) = RQE_Bonus::read_spreadsheet( 'sample.xlsx', 'xlsx' );
 check( array_values( $header ) === array( 'Bonus ID', 'Bonus Description', 'Bonus Category', 'Bonus Points', 'Bonus Locations (GPS coordinates)' ), 'sample bonus XLSX parses with all five required headings' );
-$normalize = new ReflectionMethod( 'MRSA_Bonus', 'normalize_rows' );
+$normalize = new ReflectionMethod( 'RQE_Bonus', 'normalize_rows' );
 if ( PHP_VERSION_ID < 80100 ) { $normalize->setAccessible( true ); }
 $bonuses = $normalize->invoke( null, $header, $rows );
 check( count( $bonuses ) === 1 && $bonuses[0]['bonus_id'] === 'B12' && $bonuses[0]['points'] === 100 && $bonuses[0]['locations'] === '47.6205000,-122.3493000', 'sample bonus XLSX example passes importer validation' );
@@ -184,28 +184,28 @@ if ( ! function_exists( 'get_option' ) ) {
 		return $GLOBALS['test_options'][ $key ] ?? $default;
 	}
 }
-require_once __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-styles.php';
-require_once __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-horses.php';
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-views.php';
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-styles.php';
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-horses.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-views.php';
 $_GET = array( 'event_id' => '7' );
 $wpdb->view_mode = true;
-$rosters = new ReflectionMethod( 'MRSA_Views', 'event_rosters' );
+$rosters = new ReflectionMethod( 'RQE_Views', 'event_rosters' );
 if ( PHP_VERSION_ID < 80100 ) { $rosters->setAccessible( true ); }
 ob_start();
 $rosters->invoke( null );
 $html = ob_get_clean();
 check( strpos( $html, '>Add Participant</a>' ) !== false && strpos( $html, '>Import Participants</a>' ) !== false, 'roster toolbar shows Add Participant and Import Participants' );
-check( strpos( $html, 'page=mrsa-roster-import&amp;event_id=7' ) !== false && strpos( $html, 'name="roster_file"' ) === false, 'import link retains event and inline import form is removed' );
+check( strpos( $html, 'page=rqe-roster-import&amp;event_id=7' ) !== false && strpos( $html, 'name="roster_file"' ) === false, 'import link retains event and inline import form is removed' );
 ob_start();
-MRSA_Views::render_roster_import();
+RQE_Views::render_roster_import();
 $html = ob_get_clean();
 check( strpos( $html, 'Import Participants — Test Rally' ) !== false && strpos( $html, 'tab=rosters&amp;event_id=7' ) !== false, 'import screen names event and returns to selected roster' );
 check( strpos( $html, 'multipart/form-data' ) !== false && strpos( $html, 'name="op" value="roster_import"' ) !== false && strpos( $html, 'name="event_id" value="7"' ) !== false, 'dedicated screen submits existing import operation with event and nonce' );
 check( strpos( $html, 'samples/event-roster.csv' ) !== false && strpos( $html, 'bonus-import scanning overrides do not apply' ) !== false, 'sample download and mandatory scanning instructions remain available' );
-MRSA::$site_admin = false;
-try { MRSA_Views::render_roster_import(); throw new LogicException( 'Non-site-administrator import screen accepted.' ); }
+RQE::$site_admin = false;
+try { RQE_Views::render_roster_import(); throw new LogicException( 'Non-site-administrator import screen accepted.' ); }
 catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), '403:' ) === 0, 'import screen rejects non-site administrators' ); }
-MRSA::$site_admin = true;
+RQE::$site_admin = true;
 $_GET['event_id'] = '8';
-try { MRSA_Views::render_roster_import(); throw new LogicException( 'Unknown event accepted.' ); }
+try { RQE_Views::render_roster_import(); throw new LogicException( 'Unknown event accepted.' ); }
 catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), '404:' ) === 0, 'import screen rejects missing or inaccessible events' ); }

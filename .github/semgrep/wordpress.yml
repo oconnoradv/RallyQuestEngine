@@ -1,5 +1,5 @@
 rules:
-  - id: mrsa-wordpress-sql-injection
+  - id: rqe-wordpress-sql-injection
     languages: [php]
     severity: ERROR
     message: Use wpdb->prepare with a trusted query template and placeholders for request data.
@@ -12,8 +12,8 @@ rules:
       - pattern: $_REQUEST
       - pattern: $_COOKIE
       - pattern: $_FILES
-      - pattern: MRSA_Admin::posted(...)
-      - pattern: MRSA_Admin::query(...)
+      - pattern: RQE_Admin::posted(...)
+      - pattern: RQE_Admin::query(...)
       - pattern: self::posted(...)
       - pattern: self::query(...)
     pattern-sanitizers:
@@ -29,7 +29,7 @@ rules:
               regex: ^(query|get_results|get_row|get_col|get_var)$
           - focus-metavariable: $QUERY
 
-  - id: mrsa-wordpress-tainted-sql-template
+  - id: rqe-wordpress-tainted-sql-template
     languages: [php]
     severity: ERROR
     message: Do not concatenate or interpolate request data into the prepare query template; pass values as placeholder arguments.
@@ -46,7 +46,7 @@ rules:
           - pattern: $wpdb->prepare($QUERY, ...)
           - focus-metavariable: $QUERY
 
-  - id: mrsa-wordpress-reflected-xss
+  - id: rqe-wordpress-reflected-xss
     languages: [php]
     severity: ERROR
     message: Escape request data for its HTML output context before displaying it.
@@ -67,7 +67,7 @@ rules:
       - pattern: echo $VALUE;
       - pattern: print $VALUE;
 
-  - id: mrsa-wordpress-unsafe-request
+  - id: rqe-wordpress-unsafe-request
     languages: [php]
     severity: ERROR
     message: Use wp_safe_remote_get/post/request for user-controlled URLs to reject unsafe network destinations.

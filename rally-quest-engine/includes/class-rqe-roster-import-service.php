@@ -2,17 +2,17 @@
 /** Validate and atomically enroll existing riders from CSV/XLSX data. */
 defined( 'ABSPATH' ) || exit;
 
-final class MRSA_Roster_Import_Service {
+final class RQE_Roster_Import_Service {
 	public static function import_uploaded( $event_id, $file ) {
 		if ( ! is_array( $file ) || ! isset( $file['error'], $file['tmp_name'], $file['name'] ) || ! is_scalar( $file['error'] ) || ! is_string( $file['tmp_name'] ) || ! is_string( $file['name'] ) || UPLOAD_ERR_OK !== (int) $file['error'] || ! is_uploaded_file( $file['tmp_name'] ) ) {
 			throw new RuntimeException( 'Choose a successfully uploaded roster CSV or XLSX file.' );
 		}
 		$size = filesize( $file['tmp_name'] );
-		if ( false === $size || $size < 1 || $size > MRSA_Bonus::MAX_SHEET_SIZE ) { throw new RuntimeException( 'Roster files must be nonempty and no larger than 10 MB.' ); }
+		if ( false === $size || $size < 1 || $size > RQE_Bonus::MAX_SHEET_SIZE ) { throw new RuntimeException( 'Roster files must be nonempty and no larger than 10 MB.' ); }
 		$extension = strtolower( pathinfo( $file['name'], PATHINFO_EXTENSION ) );
 		if ( ! in_array( $extension, array( 'csv', 'xlsx' ), true ) ) { throw new RuntimeException( 'Choose a CSV or XLSX file.' ); }
-		( new MRSA_Scan_Session() )->scan( $file['tmp_name'], $file['name'] );
-		list( $header, $rows ) = MRSA_Spreadsheet_Reader::read( $file['tmp_name'], $extension );
+		( new RQE_Scan_Session() )->scan( $file['tmp_name'], $file['name'] );
+		list( $header, $rows ) = RQE_Spreadsheet_Reader::read( $file['tmp_name'], $extension );
 		return self::import_rows( $event_id, $header, $rows );
 	}
 
@@ -36,24 +36,24 @@ final class MRSA_Roster_Import_Service {
 		if ( ! isset( $columns['rider id'] ) && ! isset( $columns['email'] ) ) {
 			throw new RuntimeException( 'The roster must have a Participant ID or Email column.' );
 		}
-		if ( count( $rows ) > MRSA_Bonus::MAX_RECORDS ) {
+		if ( count( $rows ) > RQE_Bonus::MAX_RECORDS ) {
 			throw new RuntimeException( 'Import no more than 5,000 roster rows at once.' );
 		}
-		MRSA::begin_transaction();
+		RQE::begin_transaction();
 		try {
-			$event = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $event_id ), ARRAY_A );
+			$event = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $event_id ), ARRAY_A );
 			if ( ! $event ) {
 				throw new RuntimeException( 'The selected event no longer exists.' );
 			}
-			$existing = $wpdb->get_results( $wpdb->prepare( 'SELECT rider_id,bib FROM ' . MRSA::table( 'registrations' ) . ' WHERE event_id=%d', $event_id ), ARRAY_A );
+			$existing = $wpdb->get_results( $wpdb->prepare( 'SELECT rider_id,bib FROM ' . RQE::table( 'registrations' ) . ' WHERE event_id=%d', $event_id ), ARRAY_A );
 			if ( $wpdb->last_error ) {
 				throw new RuntimeException( 'The existing roster could not be read. No participants were imported.' );
 			}
 			$used = array_fill_keys( array_column( $existing, 'bib' ), true );
 			$enrolled = array_fill_keys( array_column( $existing, 'rider_id' ), true );
 			$records = array();
-			$statuses = MRSA_Statuses::enabled_labels( MRSA_Statuses::options( $event_id, 'registration' ) );
-			$default_status = MRSA_Statuses::initial_registration( $event_id );
+			$statuses = RQE_Statuses::enabled_labels( RQE_Statuses::options( $event_id, 'registration' ) );
+			$default_status = RQE_Statuses::initial_registration( $event_id );
 			foreach ( $rows as $line => $row ) {
 				if ( ! array_filter( $row, function ( $value ) { return '' !== trim( (string) $value ); } ) ) {
 					continue;
@@ -73,9 +73,9 @@ final class MRSA_Roster_Import_Service {
 					if ( '' === $id && '' === $email ) {
 						throw new RuntimeException( 'Supply a Participant ID or Email.' );
 					}
-					if ( '' !== $email ) { $email = MRSA_Admin::email( $email ); }
-					$rider = '' !== $id ? $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'riders' ) . ' WHERE id=%d FOR UPDATE', MRSA_Admin::integer( $id, 1 ) ), ARRAY_A ) :
-						$wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'riders' ) . ' WHERE email=%s FOR UPDATE', $email ), ARRAY_A );
+					if ( '' !== $email ) { $email = RQE_Admin::email( $email ); }
+					$rider = '' !== $id ? $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'riders' ) . ' WHERE id=%d FOR UPDATE', RQE_Admin::integer( $id, 1 ) ), ARRAY_A ) :
+						$wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'riders' ) . ' WHERE email=%s FOR UPDATE', $email ), ARRAY_A );
 					if ( $wpdb->last_error || ! $rider || preg_match( '/^erased-\d+@example\.invalid$/', $rider['email'] ) ) {
 						throw new RuntimeException( 'No eligible existing participant matches this identifier.' );
 					}
@@ -86,7 +86,7 @@ final class MRSA_Roster_Import_Service {
 						throw new RuntimeException( 'Participant is already enrolled or repeated in this file.' );
 					}
 					$enrolled[ $rider['id'] ] = true;
-					$bib = '' === $get( 'bib id' ) ? null : MRSA_Admin::integer( $get( 'bib id' ), 1, (int) $event['max_bib'] );
+					$bib = '' === $get( 'bib id' ) ? null : RQE_Admin::integer( $get( 'bib id' ), 1, (int) $event['max_bib'] );
 					if ( null !== $bib ) {
 						if ( isset( $used[ $bib ] ) ) { throw new RuntimeException( 'Bib ID is already assigned or repeated in this file.' ); }
 						$used[ $bib ] = true;
@@ -95,7 +95,7 @@ final class MRSA_Roster_Import_Service {
 					if ( ! in_array( $status, $statuses, true ) ) {
 						throw new RuntimeException( 'Select an enabled Registration Status for this event.' );
 					}
-					$records[] = array_merge( array( 'event_id' => $event_id, 'rider_id' => (int) $rider['id'], 'bib' => $bib, 'pillion' => MRSA_Admin::text( $get( 'pillion' ), 160 ) ), MRSA_Statuses::registration_data( $status ) );
+					$records[] = array_merge( array( 'event_id' => $event_id, 'rider_id' => (int) $rider['id'], 'bib' => $bib, 'pillion' => RQE_Admin::text( $get( 'pillion' ), 160 ) ), RQE_Statuses::registration_data( $status ) );
 				} catch ( RuntimeException $exception ) {
 					throw new RuntimeException( 'Roster row ' . ( $line + 2 ) . ': ' . $exception->getMessage() . ' No participants were imported.' );
 				}
@@ -109,11 +109,11 @@ final class MRSA_Roster_Import_Service {
 					$record['bib'] = $next;
 					$used[ $next ] = true;
 				}
-				self::checked( $wpdb->insert( MRSA::table( 'registrations' ), $record ) );
+				self::checked( $wpdb->insert( RQE::table( 'registrations' ), $record ) );
 			}
-			MRSA::commit_transaction();
+			RQE::commit_transaction();
 		} catch ( RuntimeException $exception ) {
-			if ( ! MRSA::rollback_transaction() ) {
+			if ( ! RQE::rollback_transaction() ) {
 				throw new RuntimeException( $exception->getMessage() . ' Database rollback failed; inspect the roster before retrying.' );
 			}
 			throw $exception;

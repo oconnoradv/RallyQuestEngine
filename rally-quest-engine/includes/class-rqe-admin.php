@@ -2,46 +2,46 @@
 /** Admin request handling. Every mutation has an explicit authorization boundary. */
 defined( 'ABSPATH' ) || exit;
 
-final class MRSA_Admin {
+final class RQE_Admin {
 	private static $selected_event = null;
 
 	public static function init() {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'assets' ) );
-		add_action( 'admin_post_mrsa_save', array( __CLASS__, 'save' ) );
-		add_action( 'admin_post_mrsa_diagnostics_download', array( __CLASS__, 'diagnostics_download' ) );
-		add_action( 'admin_post_mrsa_diagnostics_check', array( __CLASS__, 'diagnostics_check' ) );
-		add_action( 'admin_post_mrsa_image_queue', array( __CLASS__, 'image_queue' ) );
+		add_action( 'admin_post_rqe_save', array( __CLASS__, 'save' ) );
+		add_action( 'admin_post_rqe_diagnostics_download', array( __CLASS__, 'diagnostics_download' ) );
+		add_action( 'admin_post_rqe_diagnostics_check', array( __CLASS__, 'diagnostics_check' ) );
+		add_action( 'admin_post_rqe_image_queue', array( __CLASS__, 'image_queue' ) );
 	}
 
 	public static function menu() {
-		if ( MRSA::access() ) {
-			add_menu_page( 'Motorcycle Rally Scoring Application', 'Rally Scoring', 'read', 'mrsa', array( 'MRSA_Views', 'render' ), 'dashicons-location-alt', 58 );
-			add_submenu_page( null, 'Event Scoring', 'Event Scoring', 'read', 'mrsa-scoring', array( 'MRSA_Views', 'render_scoring' ) );
-			add_submenu_page( null, 'Edit Participant', 'Edit Participant', 'read', 'mrsa-rider-edit', array( 'MRSA_Views', 'render_rider_edit' ) );
-			add_submenu_page( null, 'Edit Event', 'Edit Event', 'read', 'mrsa-event-edit', array( 'MRSA_Views', 'render_event_edit' ) );
-			add_submenu_page( null, 'Event Email Submissions', 'Event Email Submissions', 'read', 'mrsa-event-email', array( 'MRSA_Views', 'render_event_email' ) );
-			add_submenu_page( null, 'Event Roster', 'Event Roster', 'read', 'mrsa-event-roster', array( 'MRSA_Views', 'render_event_roster' ) );
-			add_submenu_page( null, 'Add Participant to Event', 'Add Participant to Event', 'read', 'mrsa-event-enroll', array( 'MRSA_Views', 'render_event_enroll' ) );
-			add_submenu_page( null, 'Import Participants', 'Import Participants', 'read', 'mrsa-roster-import', array( 'MRSA_Views', 'render_roster_import' ) );
-			add_submenu_page( null, 'Participant Overall Event Score Sheet', 'Participant Overall Event Score Sheet', 'read', 'mrsa-rider-score', array( 'MRSA_Views', 'render_rider_score' ) );
-			add_submenu_page( null, 'Edit Bonus Point', 'Edit Bonus Point', 'read', 'mrsa-bonus-edit', array( 'MRSA_Views', 'render_bonus_edit' ) );
+		if ( RQE::access() ) {
+			add_menu_page( 'Rally Quest Engine', 'Rally Quest', 'read', 'rqe', array( 'RQE_Views', 'render' ), 'dashicons-location-alt', 58 );
+			add_submenu_page( null, 'Event Scoring', 'Event Scoring', 'read', 'rqe-scoring', array( 'RQE_Views', 'render_scoring' ) );
+			add_submenu_page( null, 'Edit Participant', 'Edit Participant', 'read', 'rqe-rider-edit', array( 'RQE_Views', 'render_rider_edit' ) );
+			add_submenu_page( null, 'Edit Event', 'Edit Event', 'read', 'rqe-event-edit', array( 'RQE_Views', 'render_event_edit' ) );
+			add_submenu_page( null, 'Event Email Submissions', 'Event Email Submissions', 'read', 'rqe-event-email', array( 'RQE_Views', 'render_event_email' ) );
+			add_submenu_page( null, 'Event Roster', 'Event Roster', 'read', 'rqe-event-roster', array( 'RQE_Views', 'render_event_roster' ) );
+			add_submenu_page( null, 'Add Participant to Event', 'Add Participant to Event', 'read', 'rqe-event-enroll', array( 'RQE_Views', 'render_event_enroll' ) );
+			add_submenu_page( null, 'Import Participants', 'Import Participants', 'read', 'rqe-roster-import', array( 'RQE_Views', 'render_roster_import' ) );
+			add_submenu_page( null, 'Participant Overall Event Score Sheet', 'Participant Overall Event Score Sheet', 'read', 'rqe-rider-score', array( 'RQE_Views', 'render_rider_score' ) );
+			add_submenu_page( null, 'Edit Bonus Point', 'Edit Bonus Point', 'read', 'rqe-bonus-edit', array( 'RQE_Views', 'render_bonus_edit' ) );
 		}
 	}
 
 	public static function assets( $hook ) {
-		if ( ! MRSA::access() ) {
+		if ( ! RQE::access() ) {
 			return;
 		}
-		wp_add_inline_style( 'dashicons', '#adminmenu .toplevel_page_mrsa .wp-menu-image::before,#adminmenu .toplevel_page_mrsa:hover .wp-menu-image::before,#adminmenu .toplevel_page_mrsa.current .wp-menu-image::before{color:#ff0800}' );
-		if ( ! in_array( $hook, array( 'toplevel_page_mrsa', 'admin_page_mrsa-scoring', 'admin_page_mrsa-rider-edit', 'admin_page_mrsa-event-edit', 'admin_page_mrsa-event-email', 'admin_page_mrsa-event-roster', 'admin_page_mrsa-event-enroll', 'admin_page_mrsa-roster-import', 'admin_page_mrsa-rider-score', 'admin_page_mrsa-bonus-edit' ), true ) ) {
+		wp_add_inline_style( 'dashicons', '#adminmenu .toplevel_page_rqe .wp-menu-image::before,#adminmenu .toplevel_page_rqe:hover .wp-menu-image::before,#adminmenu .toplevel_page_rqe.current .wp-menu-image::before{color:#ff0800}' );
+		if ( ! in_array( $hook, array( 'toplevel_page_rqe', 'admin_page_rqe-scoring', 'admin_page_rqe-rider-edit', 'admin_page_rqe-event-edit', 'admin_page_rqe-event-email', 'admin_page_rqe-event-roster', 'admin_page_rqe-event-enroll', 'admin_page_rqe-roster-import', 'admin_page_rqe-rider-score', 'admin_page_rqe-bonus-edit' ), true ) ) {
 			return;
 		}
 		// Rebuilt releases can retain their version; invalidate cached UI assets when their contents change.
-		$asset_version = MRSA_VERSION . '.' . MRSA_DB_VERSION . '.' . substr( hash_file( 'sha256', dirname( MRSA_FILE ) . '/assets/admin.js' ), 0, 12 ) . '.' . substr( hash_file( 'sha256', dirname( MRSA_FILE ) . '/assets/admin.css' ), 0, 12 );
-		wp_enqueue_style( 'mrsa-admin', plugins_url( 'assets/admin.css', MRSA_FILE ), array(), $asset_version );
-		wp_enqueue_script( 'mrsa-admin', plugins_url( 'assets/admin.js', MRSA_FILE ), array(), $asset_version, true );
-		if ( 'admin_page_mrsa-event-edit' === $hook ) {
+		$asset_version = RQE_VERSION . '.' . RQE_DB_VERSION . '.' . substr( hash_file( 'sha256', dirname( RQE_FILE ) . '/assets/admin.js' ), 0, 12 ) . '.' . substr( hash_file( 'sha256', dirname( RQE_FILE ) . '/assets/admin.css' ), 0, 12 );
+		wp_enqueue_style( 'rqe-admin', plugins_url( 'assets/admin.css', RQE_FILE ), array(), $asset_version );
+		wp_enqueue_script( 'rqe-admin', plugins_url( 'assets/admin.js', RQE_FILE ), array(), $asset_version, true );
+		if ( 'admin_page_rqe-event-edit' === $hook ) {
 			wp_enqueue_media();
 		}
 	}
@@ -113,17 +113,17 @@ final class MRSA_Admin {
 
 	public static function url( $tab, $extra = array() ) {
 		if ( in_array( $tab, array( 'rider-edit', 'event-edit', 'event-email', 'event-roster', 'event-enroll', 'roster-import', 'rider-score', 'bonus-edit' ), true ) ) {
-			return add_query_arg( array_merge( array( 'page' => 'mrsa-' . $tab ), $extra ), admin_url( 'admin.php' ) );
+			return add_query_arg( array_merge( array( 'page' => 'rqe-' . $tab ), $extra ), admin_url( 'admin.php' ) );
 		}
-		return add_query_arg( array_merge( array( 'page' => 'mrsa', 'tab' => $tab ), $extra ), admin_url( 'admin.php' ) );
+		return add_query_arg( array_merge( array( 'page' => 'rqe', 'tab' => $tab ), $extra ), admin_url( 'admin.php' ) );
 	}
 
 	public static function remember_event( $id ) {
-		if ( ! MRSA::scoring_access( $id ) || ! MRSA::row( 'events', $id ) ) {
+		if ( ! RQE::scoring_access( $id ) || ! RQE::row( 'events', $id ) ) {
 			throw new RuntimeException( 'Event not found or you are not assigned to it.' );
 		}
-		$current = (int) get_user_option( 'mrsa_selected_event', get_current_user_id() );
-		if ( $current !== $id && ! update_user_option( get_current_user_id(), 'mrsa_selected_event', $id, false ) ) {
+		$current = (int) get_user_option( 'rqe_selected_event', get_current_user_id() );
+		if ( $current !== $id && ! update_user_option( get_current_user_id(), 'rqe_selected_event', $id, false ) ) {
 			throw new RuntimeException( 'The selected event could not be remembered.' );
 		}
 		self::$selected_event = $id;
@@ -142,8 +142,8 @@ final class MRSA_Admin {
 			}
 			return self::$selected_event;
 		}
-		$id = (int) get_user_option( 'mrsa_selected_event', get_current_user_id() );
-		if ( $id && ( ! MRSA::scoring_access( $id ) || ! MRSA::row( 'events', $id ) ) ) {
+		$id = (int) get_user_option( 'rqe_selected_event', get_current_user_id() );
+		if ( $id && ( ! RQE::scoring_access( $id ) || ! RQE::row( 'events', $id ) ) ) {
 			echo '<div class="notice notice-warning"><p>Your selected event no longer exists or is no longer accessible. Choose an event in the header.</p></div>';
 			$id = 0;
 		}
@@ -152,19 +152,19 @@ final class MRSA_Admin {
 	}
 
 	private static function require_site_admin() {
-		if ( ! MRSA::site_access() ) {
+		if ( ! RQE::site_access() ) {
 			throw new RuntimeException( 'You must be a WordPress administrator to manage shared participants, motorcycles, events, diagnostics, or event administrator assignments.' );
 		}
 	}
 
 	public static function require_event( $id ) {
-		if ( ! MRSA::event_access( $id ) || ! MRSA::row( 'events', $id ) ) {
+		if ( ! RQE::event_access( $id ) || ! RQE::row( 'events', $id ) ) {
 			throw new RuntimeException( 'Event not found or you are not assigned to it.' );
 		}
 	}
 
 	private static function require_scoring_event( $id ) {
-		if ( ! MRSA::scorer_access( $id ) || ! MRSA::row( 'events', $id ) ) {
+		if ( ! RQE::scorer_access( $id ) || ! RQE::row( 'events', $id ) ) {
 			throw new RuntimeException( 'Scoring event not found or you are not assigned to it.' );
 		}
 	}
@@ -196,10 +196,10 @@ final class MRSA_Admin {
 	}
 
 	public static function save() {
-		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! MRSA::access() ) {
+		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! RQE::access() ) {
 			wp_die( esc_html( 'Unauthorized request.' ), '', array( 'response' => 403 ) );
 		}
-		check_admin_referer( 'mrsa_save' );
+		check_admin_referer( 'rqe_save' );
 		$op = self::posted( 'op' );
 		$return_url = self::return_url();
 		$tab = 'events';
@@ -220,11 +220,11 @@ final class MRSA_Admin {
 					if ( ! in_array( $tab, array( 'riders', 'events', 'rosters', 'scoring', 'results', 'bikes', 'horses', 'diagnostics', 'about' ), true ) ) {
 						throw new RuntimeException( 'Select an application tab.' );
 					}
-					if ( ! MRSA::site_access() && ! MRSA::event_ids() && ! in_array( $tab, array( 'scoring', 'about' ), true ) ) {
+					if ( ! RQE::site_access() && ! RQE::event_ids() && ! in_array( $tab, array( 'scoring', 'about' ), true ) ) {
 						$tab = 'scoring';
 					}
 					self::remember_event( self::integer( self::posted( 'event_id' ), 1 ) );
-					if ( in_array( $tab, array( 'rosters', 'results' ), true ) && ! MRSA::event_access( self::$selected_event ) ) {
+					if ( in_array( $tab, array( 'rosters', 'results' ), true ) && ! RQE::event_access( self::$selected_event ) ) {
 						$tab = 'scoring';
 					}
 					$message = 'Selected event updated.';
@@ -232,13 +232,13 @@ final class MRSA_Admin {
 				case 'status_option':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
-					MRSA_Statuses::change_option( $extra['event_id'], self::posted( 'status_kind' ), self::posted( 'status_action' ), self::posted( 'status_label' ) );
+					RQE_Statuses::change_option( $extra['event_id'], self::posted( 'status_kind' ), self::posted( 'status_action' ), self::posted( 'status_label' ) );
 					$tab = 'event-edit';
 					break;
 				case 'public_results':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
-					MRSA_Public_Results::save_visibility( $extra['event_id'], self::integer( self::posted( 'public_results_enabled', '0' ), 0, 1 ) );
+					RQE_Public_Results::save_visibility( $extra['event_id'], self::integer( self::posted( 'public_results_enabled', '0' ), 0, 1 ) );
 					$message = 'Public results setting saved. Purge WordPress/CDN page caches to update previously cached embeds.';
 					$tab = 'event-edit';
 					break;
@@ -263,25 +263,25 @@ final class MRSA_Admin {
 					foreach ( array( 'provider', 'enabled', 'mailbox', 'host', 'port', 'encryption', 'username', 'folder', 'password', 'client_id', 'client_secret', 'refresh_token', 'tenant_id' ) as $key ) {
 						$input[ $key ] = self::posted( $key );
 					}
-					$message = MRSA_Email_Submissions::save_configuration( $extra['event_id'], $input );
+					$message = RQE_Email_Submissions::save_configuration( $extra['event_id'], $input );
 					$tab = 'event-email';
 					break;
 				case 'event_email_check':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
-					$message = MRSA_Email_Submissions::process_event( $extra['event_id'] );
+					$message = RQE_Email_Submissions::process_event( $extra['event_id'] );
 					$tab = 'event-email';
 					break;
 				case 'event_email_test':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
-					$message = MRSA_Email_Submissions::test_connection( $extra['event_id'] );
+					$message = RQE_Email_Submissions::test_connection( $extra['event_id'] );
 					$tab = 'event-edit';
 					break;
 				case 'submission_review':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_scoring_event( $extra['event_id'] );
-					$message = MRSA_Email_Submissions::review(
+					$message = RQE_Email_Submissions::review(
 						$extra['event_id'],
 						self::integer( self::posted( 'submission_id' ), 1 ),
 						self::posted( 'decision' ),
@@ -293,17 +293,17 @@ final class MRSA_Admin {
 					break;
 				case 'primary_style':
 					self::require_site_admin();
-					MRSA_Styles::save_primary( self::posted( 'primary_style' ) );
+					RQE_Styles::save_primary( self::posted( 'primary_style' ) );
 					$message = 'Primary scavenger hunt style saved.';
 					break;
 				case 'horse':
 					self::require_site_admin();
-					$extra['horse_id'] = MRSA_Horses::save( self::integer( self::posted( 'id', '0' ) ), MRSA_Horses::data( wp_unslash( $_POST ) ) );
+					$extra['horse_id'] = RQE_Horses::save( self::integer( self::posted( 'id', '0' ) ), RQE_Horses::data( wp_unslash( $_POST ) ) );
 					$tab = 'horses';
 					break;
 				case 'delete_horse':
 					self::require_site_admin();
-					MRSA_Horses::delete( self::integer( self::posted( 'id' ), 1 ) );
+					RQE_Horses::delete( self::integer( self::posted( 'id' ), 1 ) );
 					$message = 'Horse deleted.';
 					$tab = 'horses';
 					break;
@@ -327,7 +327,7 @@ final class MRSA_Admin {
 					if ( '1' !== self::posted( 'source_consent' ) ) {
 						throw new RuntimeException( 'Confirm that you understand the source and review requirements before importing the factual catalog data.' );
 					}
-					$message = MRSA_Importer::import( self::posted( 'import_make' ) );
+					$message = RQE_Importer::import( self::posted( 'import_make' ) );
 					$tab = 'bikes';
 					break;
 				case 'rider':
@@ -377,9 +377,9 @@ final class MRSA_Admin {
 				case 'bonus_clamav_check':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
-					$check = MRSA_File_Scan::check_connection();
+					$check = RQE_File_Scan::check_connection();
 					$check_id = wp_generate_password( 24, false, false );
-					if ( ! set_transient( 'mrsa_clamav_check_' . get_current_user_id() . '_' . $check_id, array_merge( $check, array( 'event_id' => $extra['event_id'] ) ), 15 * MINUTE_IN_SECONDS ) ) {
+					if ( ! set_transient( 'rqe_clamav_check_' . get_current_user_id() . '_' . $check_id, array_merge( $check, array( 'event_id' => $extra['event_id'] ) ), 15 * MINUTE_IN_SECONDS ) ) {
 						throw new RuntimeException( 'The connection-check result could not be stored. ' . $check['message'] );
 					}
 					$extra['clamav_check'] = $check_id;
@@ -391,7 +391,7 @@ final class MRSA_Admin {
 				case 'bonus_import_approve':
 				case 'bonus_import_bypass':
 				case 'bonus_import_cancel':
-					$service = new MRSA_Bonus_Application_Service();
+					$service = new RQE_Bonus_Application_Service();
 					$input = self::bonus_input();
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
@@ -404,7 +404,7 @@ final class MRSA_Admin {
 					$message = $result['message'];
 					if ( $result['errors'] ) {
 						$report_id = wp_generate_password( 24, false, false );
-						if ( ! set_transient( 'mrsa_bonus_report_' . get_current_user_id() . '_' . $report_id, array( 'event_id' => $extra['event_id'], 'step' => $bonus_step, 'errors' => $result['errors'] ), 15 * MINUTE_IN_SECONDS ) ) {
+						if ( ! set_transient( 'rqe_bonus_report_' . get_current_user_id() . '_' . $report_id, array( 'event_id' => $extra['event_id'], 'step' => $bonus_step, 'errors' => $result['errors'] ), 15 * MINUTE_IN_SECONDS ) ) {
 							throw new RuntimeException( $message . ' The detailed error report could not be stored. Errors: ' . implode( '; ', $result['errors'] ) );
 						}
 						$extra['bonus_report'] = $report_id;
@@ -416,7 +416,7 @@ final class MRSA_Admin {
 				case 'bonus_import_require_scan':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
-					$message = ( new MRSA_Bonus_Application_Service() )->set_scan_override(
+					$message = ( new RQE_Bonus_Application_Service() )->set_scan_override(
 						$extra['event_id'],
 						'bonus_import_disable_scan' === $op,
 						'1' === self::posted( 'bypass_confirmation' )
@@ -427,7 +427,7 @@ final class MRSA_Admin {
 				case 'bonus_point':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
-					( new MRSA_Bonus_Application_Service() )->save( $extra['event_id'], self::text( self::posted( 'bonus_id' ), 64, true ), self::bonus_input() );
+					( new RQE_Bonus_Application_Service() )->save( $extra['event_id'], self::text( self::posted( 'bonus_id' ), 64, true ), self::bonus_input() );
 					$tab = 'scoring';
 					$extra['score_tab'] = 'library';
 					break;
@@ -463,11 +463,11 @@ final class MRSA_Admin {
 			wp_safe_redirect( $redirect );
 			exit;
 		} catch ( RuntimeException $e ) {
-			if ( 'event_email_test' === $op && ! empty( $extra['event_id'] ) && MRSA::event_access( $extra['event_id'] ) && MRSA::row( 'events', $extra['event_id'] ) ) {
+			if ( 'event_email_test' === $op && ! empty( $extra['event_id'] ) && RQE::event_access( $extra['event_id'] ) && RQE::row( 'events', $extra['event_id'] ) ) {
 				wp_safe_redirect( self::url( 'event-edit', array( 'event_id' => $extra['event_id'], 'error' => $e->getMessage() ) ) );
 				exit;
 			}
-			if ( null !== $bonus_step && ! empty( $extra['event_id'] ) && MRSA::event_access( $extra['event_id'] ) && MRSA::row( 'events', $extra['event_id'] ) ) {
+			if ( null !== $bonus_step && ! empty( $extra['event_id'] ) && RQE::event_access( $extra['event_id'] ) && RQE::row( 'events', $extra['event_id'] ) ) {
 				self::bonus_redirect( array( 'event_id' => $extra['event_id'] ), $bonus_step, $e->getMessage(), 'error' );
 			}
 			wp_die( esc_html( $e->getMessage() ), esc_html( 'Rally update not saved' ), array( 'response' => 400, 'back_link' => true ) );
@@ -476,7 +476,7 @@ final class MRSA_Admin {
 
 	private static function bonus_redirect( $extra, $step, $message, $severity ) {
 		$id = wp_generate_password( 24, false, false );
-		if ( ! set_transient( 'mrsa_bonus_feedback_' . get_current_user_id() . '_' . $id, array(
+		if ( ! set_transient( 'rqe_bonus_feedback_' . get_current_user_id() . '_' . $id, array(
 			'event_id' => $extra['event_id'], 'step' => $step, 'message' => $message, 'severity' => $severity,
 		), 15 * MINUTE_IN_SECONDS ) ) {
 			wp_die( esc_html( $message . ' The section feedback could not be stored.' ), '', array( 'response' => 500, 'back_link' => true ) );
@@ -484,7 +484,7 @@ final class MRSA_Admin {
 		unset( $extra['notice'] );
 		$extra['score_tab'] = 'library';
 		$extra['bonus_feedback'] = $id;
-		wp_safe_redirect( self::url( 'scoring', $extra ) . '#mrsa-import-feedback' );
+		wp_safe_redirect( self::url( 'scoring', $extra ) . '#rqe-import-feedback' );
 		exit;
 	}
 
@@ -501,25 +501,25 @@ final class MRSA_Admin {
 			self::require_user( $id );
 		}
 		$where = array( 'event_id' => $event_id, 'user_id' => $id );
-		$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . MRSA::table( $table ) . ' WHERE event_id=%d AND user_id=%d', $event_id, $id ) );
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . RQE::table( $table ) . ' WHERE event_id=%d AND user_id=%d', $event_id, $id ) );
 		if ( $remove ) {
-			self::checked( $wpdb->delete( MRSA::table( $table ), $where ) );
+			self::checked( $wpdb->delete( RQE::table( $table ), $where ) );
 		} elseif ( ! $exists ) {
-			self::checked( $wpdb->insert( MRSA::table( $table ), $where ) );
+			self::checked( $wpdb->insert( RQE::table( $table ), $where ) );
 		}
 	}
 
 	private static function bike() {
 		global $wpdb;
 		$id = self::integer( self::posted( 'id', '0' ) );
-		if ( $id && ! MRSA::row( 'bikes', $id ) ) {
+		if ( $id && ! RQE::row( 'bikes', $id ) ) {
 			throw new RuntimeException( 'Motorcycle not found.' );
 		}
 		$data = array( 'make' => self::text( self::posted( 'make' ), 80, true ), 'model' => self::text( self::posted( 'model' ), 120, true ), 'year' => 0 );
 		if ( ! $id ) {
 			$data['source'] = 'Manual entry';
 		}
-		self::checked( $id ? $wpdb->update( MRSA::table( 'bikes' ), $data, array( 'id' => $id ) ) : $wpdb->insert( MRSA::table( 'bikes' ), $data ) );
+		self::checked( $id ? $wpdb->update( RQE::table( 'bikes' ), $data, array( 'id' => $id ) ) : $wpdb->insert( RQE::table( 'bikes' ), $data ) );
 	}
 
 	private static function delete_bikes( $bulk ) {
@@ -536,14 +536,14 @@ final class MRSA_Admin {
 		}
 		$ids = array_values( array_unique( $ids ) );
 		sort( $ids, SORT_NUMERIC );
-		MRSA::begin_transaction();
+		RQE::begin_transaction();
 		try {
 			foreach ( $ids as $id ) {
-				$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'bikes' ) . ' WHERE id=%d FOR UPDATE', $id ) );
+				$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . RQE::table( 'bikes' ) . ' WHERE id=%d FOR UPDATE', $id ) );
 				if ( ! $locked ) {
 					throw new RuntimeException( 'A selected motorcycle no longer exists or could not be locked.' );
 				}
-				$used = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'rider_bikes' ) . ' WHERE bike_id=%d LIMIT 1', $id ) );
+				$used = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . RQE::table( 'rider_bikes' ) . ' WHERE bike_id=%d LIMIT 1', $id ) );
 				if ( $wpdb->last_error ) {
 					throw new RuntimeException( 'Unable to check motorcycle assignments. No catalog records were deleted.' );
 				}
@@ -552,11 +552,11 @@ final class MRSA_Admin {
 				}
 			}
 			foreach ( $ids as $id ) {
-				self::checked( $wpdb->delete( MRSA::table( 'bikes' ), array( 'id' => $id ) ) );
+				self::checked( $wpdb->delete( RQE::table( 'bikes' ), array( 'id' => $id ) ) );
 			}
-			MRSA::commit_transaction();
+			RQE::commit_transaction();
 		} catch ( RuntimeException $e ) {
-			MRSA::rollback_transaction();
+			RQE::rollback_transaction();
 			throw $e;
 		}
 		return count( $ids ) . ' motorcycle catalog record(s) deleted.';
@@ -565,7 +565,7 @@ final class MRSA_Admin {
 	private static function rider() {
 		global $wpdb;
 		$id = self::integer( self::posted( 'id', '0' ) );
-		if ( $id && ! MRSA::row( 'riders', $id ) ) {
+		if ( $id && ! RQE::row( 'riders', $id ) ) {
 			throw new RuntimeException( 'Participant not found.' );
 		}
 		$data = array();
@@ -603,31 +603,31 @@ final class MRSA_Admin {
 				'fuel_capacity' => self::text( array_values( $fuel )[ $i ], 100 ),
 			);
 		}
-		MRSA::begin_transaction();
+		RQE::begin_transaction();
 		try {
 			$lock_ids = array_values( array_unique( array_column( $bikes, 'bike_id' ) ) );
 			sort( $lock_ids, SORT_NUMERIC );
 			foreach ( $lock_ids as $bike_id ) {
 				// Catalog deletion uses the same row lock; ordered locking avoids deadlocks.
-				$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'bikes' ) . ' WHERE id=%d FOR UPDATE', $bike_id ) );
+				$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . RQE::table( 'bikes' ) . ' WHERE id=%d FOR UPDATE', $bike_id ) );
 				if ( ! $locked ) {
 					throw new RuntimeException( 'A selected motorcycle no longer exists or could not be locked. Refresh the catalog and try again.' );
 				}
 			}
-			self::checked( $id ? $wpdb->update( MRSA::table( 'riders' ), $data, array( 'id' => $id ) ) : $wpdb->insert( MRSA::table( 'riders' ), $data ) );
+			self::checked( $id ? $wpdb->update( RQE::table( 'riders' ), $data, array( 'id' => $id ) ) : $wpdb->insert( RQE::table( 'riders' ), $data ) );
 			$id = $id ?: (int) $wpdb->insert_id;
 			if ( $vehicles ) {
-				self::checked( $wpdb->delete( MRSA::table( 'rider_bikes' ), array( 'rider_id' => $id ) ) );
+				self::checked( $wpdb->delete( RQE::table( 'rider_bikes' ), array( 'rider_id' => $id ) ) );
 				foreach ( $bikes as $bike ) {
-					self::checked( $wpdb->insert( MRSA::table( 'rider_bikes' ), array_merge( array( 'rider_id' => $id ), $bike ) ) );
+					self::checked( $wpdb->insert( RQE::table( 'rider_bikes' ), array_merge( array( 'rider_id' => $id ), $bike ) ) );
 				}
 			}
 			if ( $horses ) {
-				MRSA_Horses::assign( $id, $horse_ids );
+				RQE_Horses::assign( $id, $horse_ids );
 			}
-			MRSA::commit_transaction();
+			RQE::commit_transaction();
 		} catch ( RuntimeException $e ) {
-			MRSA::rollback_transaction();
+			RQE::rollback_transaction();
 			throw $e;
 		}
 		return $id;
@@ -652,8 +652,8 @@ final class MRSA_Admin {
 				throw new RuntimeException( $label . ' is required.' );
 			}
 		}
-		$style = self::posted( 'hunt_style', MRSA_Styles::primary() );
-		if ( ! MRSA_Styles::valid( $style ) ) {
+		$style = self::posted( 'hunt_style', RQE_Styles::primary() );
+		if ( ! RQE_Styles::valid( $style ) ) {
 			throw new RuntimeException( 'Choose a valid scavenger hunt style.' );
 		}
 		$data = array( 'name' => self::text( self::posted( 'name' ), 160, true ), 'description' => $description, 'hunt_style' => $style, 'max_bib' => self::integer( self::posted( 'max_bib' ), 1, 10000 ), 'logo_id' => self::integer( self::posted( 'logo_id', '0' ) ), 'location' => self::text( self::posted( 'location' ), 200 ), 'min_finisher_points' => self::integer( self::posted( 'min_finisher_points' ), 0, 1000000000 ) );
@@ -675,15 +675,15 @@ final class MRSA_Admin {
 		if ( ( null === $data['latitude'] ) !== ( null === $data['longitude'] ) ) {
 			throw new RuntimeException( 'Provide both coordinates or leave both blank.' );
 		}
-		MRSA::begin_transaction();
+		RQE::begin_transaction();
 		try {
 			if ( $id ) {
 				// Serialize capacity changes with enrollment, not just duplicate bib assignment.
-				$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $id ) );
+				$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . RQE::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $id ) );
 				if ( ! $locked ) {
 					throw new RuntimeException( 'Event no longer exists.' );
 				}
-				$highest_bib = $wpdb->get_var( $wpdb->prepare( 'SELECT MAX(bib) FROM ' . MRSA::table( 'registrations' ) . ' WHERE event_id=%d', $id ) );
+				$highest_bib = $wpdb->get_var( $wpdb->prepare( 'SELECT MAX(bib) FROM ' . RQE::table( 'registrations' ) . ' WHERE event_id=%d', $id ) );
 				if ( $wpdb->last_error ) {
 					throw new RuntimeException( 'Unable to check existing bib assignments. No event update was saved.' );
 				}
@@ -691,85 +691,85 @@ final class MRSA_Admin {
 					throw new RuntimeException( 'Maximum bib cannot be below an existing assigned bib.' );
 				}
 			}
-			self::checked( $id ? $wpdb->update( MRSA::table( 'events' ), $data, array( 'id' => $id ) ) : $wpdb->insert( MRSA::table( 'events' ), $data ) );
+			self::checked( $id ? $wpdb->update( RQE::table( 'events' ), $data, array( 'id' => $id ) ) : $wpdb->insert( RQE::table( 'events' ), $data ) );
 			$is_new = ! $id;
 			$id = $id ?: (int) $wpdb->insert_id;
 			if ( $is_new ) {
-				MRSA_Statuses::seed( $id );
+				RQE_Statuses::seed( $id );
 			}
-			MRSA::commit_transaction();
+			RQE::commit_transaction();
 		} catch ( RuntimeException $e ) {
-			MRSA::rollback_transaction();
+			RQE::rollback_transaction();
 			throw $e;
 		}
 		return $id;
 	}
 
-	private static function roster_import( $event_id ) { return MRSA_Roster_Import_Service::import_uploaded( $event_id, $_FILES['roster_file'] ?? null ); }
+	private static function roster_import( $event_id ) { return RQE_Roster_Import_Service::import_uploaded( $event_id, $_FILES['roster_file'] ?? null ); }
 
 	private static function registration( $event_id, $op ) {
 		global $wpdb;
 		$staged_submission_files = array( 'root' => '', 'files' => array() );
-		MRSA::begin_transaction();
+		RQE::begin_transaction();
 		try {
-			$event = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $event_id ), ARRAY_A );
+			$event = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $event_id ), ARRAY_A );
 			if ( ! $event ) {
 				throw new RuntimeException( 'Event no longer exists.' );
 			}
 			$id = self::integer( self::posted( 'id', '0' ) );
-			$row = $id ? MRSA::row( 'registrations', $id ) : null;
+			$row = $id ? RQE::row( 'registrations', $id ) : null;
 			if ( 'registration' !== $op && ( ! $row || (int) $row['event_id'] !== $event_id ) ) {
 				throw new RuntimeException( 'Registration not found in the selected event.' );
 			}
 			if ( 'remove_registration' === $op ) {
-				$submission_rows = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,image_file FROM ' . MRSA::table( 'bonus_submissions' ) . ' WHERE registration_id=%d', $id ), ARRAY_A );
-				$staged_submission_files = MRSA_Bonus::stage_submission_files( $submission_rows ?: array() );
-				self::checked( $wpdb->delete( MRSA::table( 'bonus_submissions' ), array( 'registration_id' => $id ) ) );
-				self::checked( $wpdb->delete( MRSA::table( 'registrations' ), array( 'id' => $id, 'event_id' => $event_id ) ) );
+				$submission_rows = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,image_file FROM ' . RQE::table( 'bonus_submissions' ) . ' WHERE registration_id=%d', $id ), ARRAY_A );
+				$staged_submission_files = RQE_Bonus::stage_submission_files( $submission_rows ?: array() );
+				self::checked( $wpdb->delete( RQE::table( 'bonus_submissions' ), array( 'registration_id' => $id ) ) );
+				self::checked( $wpdb->delete( RQE::table( 'registrations' ), array( 'id' => $id, 'event_id' => $event_id ) ) );
 			} else {
 				$data = array( 'bib' => self::integer( self::posted( 'bib' ), 1, (int) $event['max_bib'] ), 'pillion' => self::text( self::posted( 'pillion' ), 160 ) );
 				if ( 'registration' === $op ) {
 					// Event administrators never browse or enroll unregistered master PII.
 					self::require_site_admin();
 					$rider_id = self::integer( self::posted( 'rider_id' ), 1 );
-					$rider = MRSA::row( 'riders', $rider_id );
+					$rider = RQE::row( 'riders', $rider_id );
 					if ( ! $rider || preg_match( '/^erased-\d+@example\.invalid$/', $rider['email'] ) ) {
 						throw new RuntimeException( 'The selected participant no longer exists or was erased.' );
 					}
 					$data['rider_id'] = $rider_id;
 					$data['event_id'] = $event_id;
-					$data = array_merge( $data, MRSA_Statuses::registration_data( MRSA_Statuses::initial_registration( $event_id ) ) );
-					self::checked( $wpdb->insert( MRSA::table( 'registrations' ), $data ) );
+					$data = array_merge( $data, RQE_Statuses::registration_data( RQE_Statuses::initial_registration( $event_id ) ) );
+					self::checked( $wpdb->insert( RQE::table( 'registrations' ), $data ) );
 				} else {
-					self::checked( $wpdb->update( MRSA::table( 'registrations' ), $data, array( 'id' => $id, 'event_id' => $event_id ) ) );
+					self::checked( $wpdb->update( RQE::table( 'registrations' ), $data, array( 'id' => $id, 'event_id' => $event_id ) ) );
 				}
 			}
-			MRSA::commit_transaction();
+			RQE::commit_transaction();
 		} catch ( RuntimeException $e ) {
-			MRSA::rollback_transaction();
+			RQE::rollback_transaction();
 			if ( ! empty( $staged_submission_files['root'] ) ) {
-				MRSA_Bonus::restore_submission_files( $staged_submission_files );
+				RQE_Bonus::restore_submission_files( $staged_submission_files );
 			}
 			throw $e;
 		}
 		if ( ! empty( $staged_submission_files['root'] ) ) {
-			MRSA_Bonus::finish_staged_submission_files( $staged_submission_files );
+			RQE_Bonus::finish_staged_submission_files( $staged_submission_files );
 		}
 	}
 
 	private static function enroll_new_rider( $event_id, $rider_id ) {
 		global $wpdb;
-		MRSA::begin_transaction();
+		RQE::begin_transaction();
 		try {
-			$event = $wpdb->get_row( $wpdb->prepare( 'SELECT id,max_bib FROM ' . MRSA::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $event_id ), ARRAY_A );
+			$event = $wpdb->get_row( $wpdb->prepare( 'SELECT id,max_bib FROM ' . RQE::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $event_id ), ARRAY_A );
 			if ( ! $event ) {
 				throw new RuntimeException( 'The event no longer exists. The participant was saved but could not be enrolled.' );
 			}
-			$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . MRSA::table( 'registrations' ) . ' WHERE event_id=%d AND rider_id=%d', $event_id, $rider_id ) );
+			$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . RQE::table( 'registrations' ) . ' WHERE event_id=%d AND rider_id=%d', $event_id, $rider_id ) );
 			if ( $exists ) {
 				throw new RuntimeException( 'The participant was saved and is already registered for this event.' );
 			}
-			$used = array_fill_keys( array_map( 'intval', $wpdb->get_col( $wpdb->prepare( 'SELECT bib FROM ' . MRSA::table( 'registrations' ) . ' WHERE event_id=%d', $event_id ) ) ), true );
+			$used = array_fill_keys( array_map( 'intval', $wpdb->get_col( $wpdb->prepare( 'SELECT bib FROM ' . RQE::table( 'registrations' ) . ' WHERE event_id=%d', $event_id ) ) ), true );
 			$bib = 0;
 			for ( $candidate = 1; $candidate <= (int) $event['max_bib']; ++$candidate ) {
 				if ( ! isset( $used[ $candidate ] ) ) {
@@ -780,27 +780,27 @@ final class MRSA_Admin {
 			if ( ! $bib ) {
 				throw new RuntimeException( 'The participant was saved, but every event bib is assigned. Increase the maximum bib before enrolling the participant.' );
 			}
-			self::checked( $wpdb->insert( MRSA::table( 'registrations' ), array_merge( array( 'event_id' => $event_id, 'rider_id' => $rider_id, 'bib' => $bib, 'pillion' => '' ), MRSA_Statuses::registration_data( MRSA_Statuses::initial_registration( $event_id ) ) ) ) );
-			MRSA::commit_transaction();
+			self::checked( $wpdb->insert( RQE::table( 'registrations' ), array_merge( array( 'event_id' => $event_id, 'rider_id' => $rider_id, 'bib' => $bib, 'pillion' => '' ), RQE_Statuses::registration_data( RQE_Statuses::initial_registration( $event_id ) ) ) ) );
+			RQE::commit_transaction();
 		} catch ( RuntimeException $e ) {
-			MRSA::rollback_transaction();
+			RQE::rollback_transaction();
 			throw $e;
 		}
 	}
 
 	private static function registration_status( $event_id ) {
-		MRSA_Statuses::assign( $event_id, self::integer( self::posted( 'id' ), 1 ), 'event', self::posted( 'status' ) );
+		RQE_Statuses::assign( $event_id, self::integer( self::posted( 'id' ), 1 ), 'event', self::posted( 'status' ) );
 	}
 
 	private static function registration_lifecycle( $event_id ) {
-		MRSA_Statuses::assign( $event_id, self::integer( self::posted( 'id' ), 1 ), 'registration', self::posted( 'registration_status' ) );
+		RQE_Statuses::assign( $event_id, self::integer( self::posted( 'id' ), 1 ), 'registration', self::posted( 'registration_status' ) );
 	}
 
 	public static function image_queue() {
-		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! MRSA::access() ) {
+		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! RQE::access() ) {
 			wp_send_json_error( array( 'message' => 'Unauthorized image upload request.' ), 403 );
 		}
-		check_admin_referer( 'mrsa_save' );
+		check_admin_referer( 'rqe_save' );
 		try {
 			$event_id = self::integer( self::posted( 'event_id' ), 1 );
 			self::require_event( $event_id );
@@ -822,9 +822,9 @@ final class MRSA_Admin {
 				throw new RuntimeException( 'The sequential upload accepts only a local image, not listings or URL sources.' );
 			}
 			$input = self::bonus_input();
-			$result = ( new MRSA_Bonus_Application_Service() )->import( $event_id, $input );
+			$result = ( new RQE_Bonus_Application_Service() )->import( $event_id, $input );
 			if ( isset( $result['pending_token'] ) ) {
-				$pending = MRSA_Bonus::pending( $event_id, $result['pending_token'] );
+				$pending = RQE_Bonus::pending( $event_id, $result['pending_token'] );
 				return array(
 					'state' => 'review', 'token' => $result['pending_token'],
 					'message' => $result['message'], 'scans' => $pending['scans'],
@@ -839,7 +839,7 @@ final class MRSA_Admin {
 			throw new RuntimeException( 'Unsupported sequential image operation.' );
 		}
 		$token = self::posted( 'pending_token' );
-		$service = new MRSA_Bonus_Application_Service();
+		$service = new RQE_Bonus_Application_Service();
 		$pending = $service->pending( $event_id, $token );
 		if ( 'images' !== $pending['import_step'] || count( $pending['images'] ) > 1 || $pending['rows'] ) {
 			throw new RuntimeException( 'This review is not for a single image.' );
@@ -854,21 +854,21 @@ final class MRSA_Admin {
 	}
 
 	public static function diagnostics_check() {
-		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! MRSA::site_access() ) {
-			wp_die( esc_html( 'Only WordPress administrators may check MRSA configuration.' ), '', array( 'response' => 403 ) );
+		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! RQE::site_access() ) {
+			wp_die( esc_html( 'Only WordPress administrators may check RQE configuration.' ), '', array( 'response' => 403 ) );
 		}
-		check_admin_referer( 'mrsa_diagnostics_check' );
-		$report = MRSA_Diagnostics::check();
-		if ( ! set_transient( 'mrsa_configuration_' . get_current_user_id(), $report, 15 * MINUTE_IN_SECONDS ) ) {
+		check_admin_referer( 'rqe_diagnostics_check' );
+		$report = RQE_Diagnostics::check();
+		if ( ! set_transient( 'rqe_configuration_' . get_current_user_id(), $report, 15 * MINUTE_IN_SECONDS ) ) {
 			wp_die( esc_html( 'The configuration report could not be saved. Rerun the check.' ), '', array( 'response' => 500 ) );
 		}
-		$state = MRSA_Diagnostic_Report::state( $report['rows'] );
+		$state = RQE_Diagnostic_Report::state( $report['rows'] );
 		// Retain only the last outcome for this administrator/site, not expired diagnostic details.
-		update_user_option( get_current_user_id(), 'mrsa_configuration_last_state', $state );
-		if ( get_user_option( 'mrsa_configuration_last_state', get_current_user_id() ) !== $state ) {
+		update_user_option( get_current_user_id(), 'rqe_configuration_last_state', $state );
+		if ( get_user_option( 'rqe_configuration_last_state', get_current_user_id() ) !== $state ) {
 			wp_die( esc_html( 'The last configuration outcome could not be saved. Rerun the check.' ), '', array( 'response' => 500 ) );
 		}
-		wp_safe_redirect( self::url( 'diagnostics' ) . '#mrsa-configuration' );
+		wp_safe_redirect( self::url( 'diagnostics' ) . '#rqe-configuration' );
 		exit;
 	}
 
@@ -882,13 +882,13 @@ final class MRSA_Admin {
 
 	private static function diagnostics_delete( $operation ) {
 		$input = array( 'event_id' => self::posted( 'event_id' ), 'rider_id' => self::posted( 'rider_id' ) );
-		return ( new MRSA_Diagnostics_Deletion_Service() )->delete( $operation, $input );
+		return ( new RQE_Diagnostics_Deletion_Service() )->delete( $operation, $input );
 	}
 	public static function diagnostics_download() {
-		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! MRSA::site_access() ) {
+		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! RQE::site_access() ) {
 			wp_die( esc_html( 'Unauthorized request.' ), '', array( 'response' => 403 ) );
 		}
-		check_admin_referer( 'mrsa_diagnostics_download' );
+		check_admin_referer( 'rqe_diagnostics_download' );
 		$type = self::posted( 'download_type' );
 		if ( ! in_array( $type, array( 'json', 'sql' ), true ) ) {
 			wp_die( esc_html( 'Unsupported diagnostics download.' ), '', array( 'response' => 400 ) );
@@ -898,21 +898,21 @@ final class MRSA_Admin {
 		$stamp = gmdate( 'Ymd-His' );
 		nocache_headers();
 		if ( 'json' === $type ) {
-			$data = array( 'generated_at' => gmdate( 'c' ), 'site' => site_url(), 'plugin_version' => MRSA_VERSION, 'tables' => array() );
+			$data = array( 'generated_at' => gmdate( 'c' ), 'site' => site_url(), 'plugin_version' => RQE_VERSION, 'tables' => array() );
 			foreach ( $tables as $name ) {
-				$data['tables'][ $name ] = $wpdb->get_results( 'SELECT * FROM ' . MRSA::table( $name ), ARRAY_A );
+				$data['tables'][ $name ] = $wpdb->get_results( 'SELECT * FROM ' . RQE::table( $name ), ARRAY_A );
 			}
 			header( 'Content-Type: application/json; charset=utf-8' );
-			header( 'Content-Disposition: attachment; filename="mrsa-export-' . $stamp . '.json"' );
+			header( 'Content-Disposition: attachment; filename="rqe-export-' . $stamp . '.json"' );
 			echo wp_json_encode( $data, JSON_PRETTY_PRINT );
 			exit;
 		}
 		header( 'Content-Type: application/sql; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename="mrsa-backup-' . $stamp . '.sql"' );
-		echo "-- Motorcycle Rally Scoring Application database backup\n";
+		header( 'Content-Disposition: attachment; filename="rqe-backup-' . $stamp . '.sql"' );
+		echo "-- Rally Quest Engine database backup\n";
 		echo '-- Generated: ' . esc_sql( gmdate( 'c' ) ) . " UTC\n\n";
 		foreach ( $tables as $name ) {
-			$table = MRSA::table( $name );
+			$table = RQE::table( $name );
 			$create = $wpdb->get_row( 'SHOW CREATE TABLE ' . $table, ARRAY_N );
 			if ( ! $create || ! isset( $create[1] ) ) {
 				wp_die( esc_html( 'Unable to read a plugin table definition.' ), '', array( 'response' => 500 ) );

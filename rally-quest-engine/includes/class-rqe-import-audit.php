@@ -2,7 +2,7 @@
 /** Persistent administrative audit events and per-administrator scan overrides. */
 defined( 'ABSPATH' ) || exit;
 
-final class MRSA_Import_Audit {
+final class RQE_Import_Audit {
 	private $database;
 
 	public function __construct( $database = null ) {
@@ -15,7 +15,7 @@ final class MRSA_Import_Audit {
 
 	public function record( $event_id, $action, $detail ) {
 		$user = wp_get_current_user();
-		if ( ! $user->ID || false === $this->database->insert( MRSA::table( 'import_audit' ), array(
+		if ( ! $user->ID || false === $this->database->insert( RQE::table( 'import_audit' ), array(
 			'user_id' => $user->ID,
 			'username' => $user->user_login,
 			'occurred_at' => gmdate( 'Y-m-d H:i:s' ),
@@ -30,7 +30,7 @@ final class MRSA_Import_Audit {
 	public function bypass_enabled( $user_id = null ) {
 		$user_id = null === $user_id ? get_current_user_id() : (int) $user_id;
 		return 'bypass_enabled' === $this->database->get_var( $this->database->prepare(
-			'SELECT action FROM ' . MRSA::table( 'import_audit' ) . " WHERE user_id=%d AND action IN ('bypass_enabled','bypass_disabled') ORDER BY id DESC LIMIT 1",
+			'SELECT action FROM ' . RQE::table( 'import_audit' ) . " WHERE user_id=%d AND action IN ('bypass_enabled','bypass_disabled') ORDER BY id DESC LIMIT 1",
 			$user_id
 		) );
 	}

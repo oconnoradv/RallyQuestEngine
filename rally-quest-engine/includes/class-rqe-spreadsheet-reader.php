@@ -2,7 +2,7 @@
 /** Hardened, format-neutral CSV/XLSX reader shared by roster and bonus imports. */
 defined( 'ABSPATH' ) || exit;
 
-final class MRSA_Spreadsheet_Reader {
+final class RQE_Spreadsheet_Reader {
 	const MAX_RECORDS = 5000;
 	const MAX_SHEET_SIZE = 10485760;
 	const MAX_ARCHIVE_SIZE = 52428800;

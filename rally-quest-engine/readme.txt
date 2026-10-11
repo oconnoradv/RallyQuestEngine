@@ -1,16 +1,31 @@
-=== Motorcycle Rally Scoring Application ===
+=== Rally Quest Engine ===
 Contributors: oconnoradv
-Tags: motorcycle, rally, registration, events
+Tags: rally, scavenger hunt, motorcycle, bicycle, geocache
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.1.20
+Stable tag: 0.2.0
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
-Manage motorcycle rally administrators, motorcycles, riders, and event registrations in WordPress.
+Produce and manage scavenger-hunt style rallies for motorcycle, bicycle, horseback and geocache participants.
 
 == Description ==
+
+Rally Quest Engine (formerly Motorcycle Rally Scoring Application) helps organizers
+produce and manage a high-quality scavenger-hunt style rally for Motorcyclists,
+Bicyclists, Geocachers or Horseback participants. Efficient setup guides each
+event through its required details, focused administration keeps participants,
+conveyances, rosters and roles in one place, and near-real-time results update
+as emailed bonus submissions are reviewed.
+
+A Welcome section explains how to use the application and where to get help,
+and stores the primary scavenger hunt style: Motorcycle (MC), Bicycle (BC),
+Horseback (HB) or GeoCache (GC). The primary style sets the default style for
+new events and the conveyance tab: Bikes for Motorcycle and Bicycle (Bicycle
+hides the NHTSA import, renames Manual Bicycle Entry and greys out fuel
+capacity), Horses for Horseback (Name, Breed, Sex, Age, Color), and none for
+GeoCache. Event IDs combine the event style code and numeric ID, such as MC-7.
 
 Local scoring bonus images upload and scan one file per request with JavaScript.
 After scanning, every successful image appears in one combined review and one
@@ -35,16 +50,17 @@ read-only RELEASE_SECURITY_TOKEN Actions secret as documented in README.md.
 Unavailable alert access or failed required analysis blocks publication. CodeQL does
 not analyze PHP; PHP remains covered by Semgrep.
 
-Motorcycle Rally Scoring Application provides administrative tabs for:
+Rally Quest Engine provides administrative tabs for:
 
-* Riders: rider details, make/model-filtered motorcycles with optional manually entered four-digit years, emergency contacts, insurance information, and registered events.
-* Events: event configuration, separate per-event Administrator and Scorer assignments, encrypted event inbox configuration, and Roster links.
+* Participants: participant details, conveyances for the primary style (make/model-filtered motorcycles or bicycles with optional manually entered four-digit years, or horses), emergency contacts, insurance information, and registered events.
+* Events: style-coded Event IDs, required event details including a description, separate per-event Administrator and Scorer assignments, encrypted event inbox configuration, and Roster links.
 * Rosters: persistent header event context and a roster table with rider ID, bib ID, editable Registration Status, name, email, score, and overall placing. Rider IDs open rider details/editing, bibs open event scoring, and enrollment remains a separate screen.
 * Scoring: event-specific Bonus Point Library, CSV/XLSX listing import, local-folder and public-URL image import, email submission review, required rejection reasons, and transactional point awards.
 * Results: score ordering, computed overall placing, accepted/rejected submission counts, editable independent Event Status, and rider score sheets with submission history.
-* Bikes: side-by-side manual entry and motorcycle make/model import on wide screens, stacked on narrow screens, plus transactional bulk deletion of unassigned catalog rows.
-* Rosters: Import Riders beside Add Rider opens a separate selected-event CSV/XLSX import screen for existing riders by Rider ID or Email, with a downloadable sample CSV and a Back to Rosters link. Optional Bib ID, Registration Status (legacy Status accepted) and Pillion columns; statuses must be enabled for the event and blank bibs receive the next available number. WordPress administrators only, maximum 10 MB / 5,000 rows. ClamAV is required; invalid or conflicting rows reject the whole batch.
-* Diagnostics: on-demand required-plugin/environment checks with native WordPress install/activate controls for required Action Scheduler; Gallery for SpotWalla remains optional. PHP, database/InnoDB/schema, ClamAV, private staging/storage and upload capacity are checked against current MRSA limits (10 MB spreadsheets/images, 50 MB ZIP/download, 100 MB / 200 images per batch). Unverifiable hosting and scanner policies are labeled Manual review. JSON export, restorable SQL backup, and verification-string-protected scoped deletion are also available. Gallery image files are stored separately and are not included in database exports or backups.
+* Horses (Horseback style): Name, Breed, Sex, Age and Color records assignable to participants.
+* Bikes (Motorcycle and Bicycle styles): side-by-side manual entry and motorcycle make/model import on wide screens, stacked on narrow screens, plus transactional bulk deletion of unassigned catalog rows.
+* Rosters: Import Participants beside Add Participant opens a separate selected-event CSV/XLSX import screen for existing participants by Participant ID (or legacy Rider ID) or Email, with a downloadable sample CSV and a Back to Rosters link. Optional Bib ID, Registration Status (legacy Status accepted) and Pillion columns; statuses must be enabled for the event and blank bibs receive the next available number. WordPress administrators only, maximum 10 MB / 5,000 rows. ClamAV is required; invalid or conflicting rows reject the whole batch.
+* Diagnostics: on-demand required-plugin/environment checks with native WordPress install/activate controls for required Action Scheduler; Gallery for SpotWalla remains optional. PHP, database/InnoDB/schema, ClamAV, private staging/storage and upload capacity are checked against current RQE limits (10 MB spreadsheets/images, 50 MB ZIP/download, 100 MB / 200 images per batch). Unverifiable hosting and scanner policies are labeled Manual review. JSON export, restorable SQL backup, and verification-string-protected scoped deletion are also available. Gallery image files are stored separately and are not included in database exports or backups.
 * About: version, licensing, attribution, scope, and an optional Gallery for SpotWalla recommendation with documentation and download links.
 
 The Bonus Point Library stores event-specific bonus IDs, descriptions,
@@ -113,12 +129,12 @@ guidance plus a Check ClamAV Connection button. Run installation commands in
 the server terminal with server-administrator access, not WordPress. Existing
 pre-installed ClamAV is supported. The check scans a harmless local test file
 without importing data; it does not certify signatures or scan configuration.
-The default Unix socket can be overridden with MRSA_CLAMAV_SOCKET in
+The default Unix socket can be overridden with RQE_CLAMAV_SOCKET in
 wp-config.php (local Unix sockets or loopback TCP only). Configure clamd to
 scan archives and Office/executable formats, enable AlertExceedsMax, and allow
 at least 60 MB streams/files and 200 MB expanded scans. See README for setup.
 Pending files stay outside the web root in private temporary storage.
-MRSA_IMPORT_TEMP_DIR can override the temporary directory. Reviews expire in
+RQE_IMPORT_TEMP_DIR can override the temporary directory. Reviews expire in
 15 minutes, verify fingerprints, and require the original user/event.
 Cancellation deletes staged files; WordPress cron cleans expired imports.
 Formulas, macros, embedded files, script markers, and appended image data
@@ -154,7 +170,7 @@ manual assignments override later automatic calculations. Registration Status
 is separately editable on Rosters. New registrations use Initial Registration
 when enabled (otherwise the first enabled choice), automatic Event Status unless Cancelled,
 score 0, and unset stored placing. Gallery files live in
-the dedicated uploads/mrsa-event-gallery directory and must be backed up
+the dedicated uploads/rqe-event-gallery directory and must be backed up
 separately from the JSON and SQL database exports.
 Diagnostics can delete all bonus listings, submissions, scoring images, and
 submission-awarded score points for a selected event.
@@ -178,17 +194,28 @@ Changing WordPress authentication salts requires re-entering saved inbox
 credentials. Exports and SQL backups contain encrypted credential ciphertext
 and should still be protected as sensitive administrative backups.
 
-Tables use the current site's WordPress prefix followed by MRSA_, avoiding
+Tables use the current site's WordPress prefix followed by RQE_, avoiding
 collisions between sites. No WordPress core tables or users are replaced.
 
 == Installation ==
 
 1. Back up the database and use a supported, patched WordPress/PHP installation.
-2. Upload motorcycle-rally-scoring-application-vX.Y.Z.zip through Plugins > Add New > Upload Plugin.
-3. Activate Motorcycle Rally Scoring Application.
-4. Open the rally administration menu as a WordPress administrator.
-5. Assign administrators, populate Bikes, register riders, and configure events.
-6. Enroll riders in an event using an unused bib number.
+2. Upload rally-quest-engine-vX.Y.Z.zip through Plugins > Add New > Upload Plugin.
+3. Activate Rally Quest Engine.
+4. Open Rally Quest in the administration menu as a WordPress administrator.
+5. In Welcome, save the primary scavenger hunt style.
+6. Populate Bikes or Horses, add participants, and configure events.
+7. Enroll participants in an event using an unused bib number.
+
+Upgrading from Motorcycle Rally Scoring Application: version 0.2.0 uses new
+tables (RQE_*), options and gallery folder (rqe-event-gallery), so it installs
+as a separate plugin. Back up first, activate Rally Quest Engine, deactivate
+Motorcycle Rally Scoring Application (upgrade it to 0.1.20 first if older),
+then open wp-admin as a WordPress administrator. Existing data and gallery files
+are imported once in a single transaction and an admin notice reports the
+result. The import is skipped if Rally Quest Engine already has data, and the
+legacy tables and gallery are left unchanged. Imported events presume the
+Motorcycle style. Delete the former plugin only after verifying the import.
 
 Event dates are derived from the configured start date/time in the WordPress
 site timezone. Add Rider and Add Event open dedicated edit pages with one
@@ -211,13 +238,14 @@ cannot be deleted. The schema 11 upgrade assigns DNS once to existing Cancelled
 registrations, replacing their previous Event Status without changing scores
 or placing. Back up before upgrading and review affected final statuses.
 
-Public Results Embed on Event Configuration displays the read-only MRSA Event
-ID and a copyable shortcode, for example [mrsa_results id="7"]. Publication is
+Public Results Embed on Event Configuration displays the read-only RQE Event
+ID and a copyable shortcode, for example [rqe_results id="MC-7"]. The style`ncode must match the event; a numeric ID is also accepted, and former`n[mrsa_results] embeds keep working while the old plugin is inactive. Publication is
 off by default; a WordPress administrator or assigned Event Administrator must
 enable it and save. Add the existing WordPress Shortcode block to a post/page,
 paste the shortcode, then publish or update. Its explicit ID does not depend
 on the administrator header selection; multiple event embeds are supported.
-Logged-out visitors see only Bib, Rider Name, Total Score, Accepted Bonuses,
+Logged-out visitors see the event name, description and image, then only Bib,
+Participant Name, Total Score, Accepted Bonuses,
 Rejected Bonuses, Event Status and Overall Placing for enabled events.
 Contact details, Registration Status, photos, review details, administrative
 controls and score-sheet links are excluded. Disabled/missing events show an
@@ -225,7 +253,8 @@ unavailable message. Purge WordPress page and CDN caches after visibility or
 score/status changes; disabling publication cannot recall previously cached
 or delivered results.
 
-Choose Event in the header and press Set Event; this event persists per user
+Choose a scavenger hunt style (defaulting to the primary style), then one of
+its events in the header and press Set Event; this event persists per user
 and site across Rosters, Scoring and Results until changed. Changing the
 header event clears record filters; already-open forms keep their own event.
 Two-column event configuration places separate status catalogs on the left
@@ -327,10 +356,21 @@ No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
 
+= 0.2.0 =
+* Renamed the plugin to Rally Quest Engine with RQE tables, options, hooks and gallery folder, plus a one-time transactional import of Motorcycle Rally Scoring Application data, gallery files and settings.
+* Added a Welcome section with usage guidance, help links and a saved primary scavenger hunt style (Motorcycle, Bicycle, Horseback, GeoCache) that turns green and minimizes once set.
+* Added style-aware conveyances: Bicycle hides the NHTSA import, renames Manual Bicycle Entry and greys out fuel capacity; Horseback replaces Bikes with a Horses tab (Name, Breed, Sex, Age, Color).
+* Renamed Rider terminology to Participant throughout the interface; roster imports accept Participant ID or the former Rider ID header.
+* Added a required Event Description and required event details; complete Event Details, Email Bonus Submissions and role-assignment sections turn green and minimize.
+* Moved the Event Status catalog to the bottom of the right column and introduced style-coded Event IDs such as MC-7; existing events presume Motorcycle.
+* Split the header chooser into scavenger hunt style and event menus.
+* Public results embeds show the event description and image and accept [rqe_results id="MC-7"]; legacy [mrsa_results] embeds remain supported.
+* Expanded inline documentation and updated the About tab and README.
+
 = 0.1.20 =
 * Assign manual DNS when Registration Status changes to Cancelled, including imports and enrollments, while allowing later administrator overrides.
 * Protect DNS from deletion without requiring it to remain enabled for manual selection.
-* Add an off-by-default Public Results Embed section with MRSA Event ID, explicit publication control and copyable [mrsa_results id="7"] shortcode for WordPress Shortcode blocks.
+* Add an off-by-default Public Results Embed section with RQE Event ID, explicit publication control and copyable [rqe_results id="7"] shortcode for WordPress Shortcode blocks.
 * Publish only rider names, bibs, scores, accepted/rejected counts, Event Status and placing with escaped, responsive read-only output.
 * Upgrade database schema to 11, backfilling existing Cancelled riders to DNS once, preserving scores and placing, and defaulting public results off.
 * Document publication privacy boundaries and WordPress/CDN cache-purge requirements.
@@ -407,7 +447,7 @@ No. Rider and pillion prices are event configuration values only.
 * Added an on-demand Required Plugins and Configuration check above Diagnostics export and backup controls.
 * Declared Action Scheduler as a required plugin and added permission-checked native WordPress installation and activation links; Gallery for SpotWalla remains optional.
 * Checked WordPress/PHP requirements, import functions, database version, InnoDB tables/schema, upload limits, gallery storage, private staging and a live ClamAV scan.
-* Displayed existing MRSA import safety limits and marked unverifiable hosting resources, cron delivery and antivirus policies/signatures for manual review.
+* Displayed existing RQE import safety limits and marked unverifiable hosting resources, cron delivery and antivirus policies/signatures for manual review.
 * Added private expiring configuration reports and regression coverage for permissions, nonces, dependency controls and exact upload thresholds.
 
 = 0.1.9 =

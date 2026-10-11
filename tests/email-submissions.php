@@ -95,7 +95,7 @@ final class Email_Submission_Test_DB {
 	}
 }
 
-final class MRSA {
+final class RQE {
 	public static function table( $name ) { return $name; }
 	public static function begin_transaction() { global $wpdb; $wpdb->query( 'START TRANSACTION' ); }
 	public static function commit_transaction() { global $wpdb; $wpdb->query( 'COMMIT' ); }
@@ -122,20 +122,20 @@ function is_wp_error( $value ) { return false; }
 function wp_remote_retrieve_response_code( $response ) { return $response['response']['code']; }
 function wp_remote_retrieve_body( $response ) { return $response['body']; }
 
-require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-email-submissions.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-email-submissions.php';
 
 function check( $condition, $label ) {
 	if ( ! $condition ) { throw new RuntimeException( 'FAIL: ' . $label ); }
 	echo 'PASS: ' . $label . PHP_EOL;
 }
 function invoke_private( $name, ...$args ) {
-	$method = new ReflectionMethod( 'MRSA_Email_Submissions', $name );
+	$method = new ReflectionMethod( 'RQE_Email_Submissions', $name );
 	if ( PHP_VERSION_ID < 80100 ) { $method->setAccessible( true ); }
 	return $method->invoke( null, ...$args );
 }
 
 $wpdb = new Email_Submission_Test_DB();
-MRSA_Email_Submissions::save_configuration( 7, array(
+RQE_Email_Submissions::save_configuration( 7, array(
 	'provider' => 'imap',
 	'enabled' => '1',
 	'mailbox' => 'submissions@example.test',
@@ -147,9 +147,9 @@ MRSA_Email_Submissions::save_configuration( 7, array(
 	'password' => 'first-secret',
 ) );
 $first_ciphertext = $wpdb->tables['event_email_settings'][7]['encrypted_settings'];
-$config = MRSA_Email_Submissions::configuration( 7, true );
+$config = RQE_Email_Submissions::configuration( 7, true );
 check( 'first-secret' === $config['settings']['password'] && false === strpos( $first_ciphertext, 'first-secret' ), 'event inbox credentials are encrypted at rest and decrypt correctly' );
-MRSA_Email_Submissions::save_configuration( 7, array(
+RQE_Email_Submissions::save_configuration( 7, array(
 	'provider' => 'imap',
 	'enabled' => '1',
 	'mailbox' => 'submissions@example.test',
@@ -160,11 +160,11 @@ MRSA_Email_Submissions::save_configuration( 7, array(
 	'folder' => 'INBOX',
 	'password' => '',
 ) );
-check( 'first-secret' === MRSA_Email_Submissions::configuration( 7, true )['settings']['password'], 'blank secret fields preserve the saved credential' );
-$status = MRSA_Email_Submissions::configuration_status( 7 );
+check( 'first-secret' === RQE_Email_Submissions::configuration( 7, true )['settings']['password'], 'blank secret fields preserve the saved credential' );
+$status = RQE_Email_Submissions::configuration_status( 7 );
 check( $status['configured'] && ! $status['connected'] && 'IMAP' === $status['provider_label'], 'a complete saved inbox is displayed but remains unverified before a connection test' );
 try {
-	MRSA_Email_Submissions::save_configuration( 7, array(
+	RQE_Email_Submissions::save_configuration( 7, array(
 		'provider' => 'gmail',
 		'enabled' => '1',
 		'mailbox' => 'submissions@example.test',
@@ -176,7 +176,7 @@ try {
 } catch ( RuntimeException $exception ) {
 	check( false !== strpos( $exception->getMessage(), 'OAuth client secret' ), 'Gmail setup identifies the exact missing OAuth credential' );
 }
-MRSA_Email_Submissions::save_configuration( 7, array(
+RQE_Email_Submissions::save_configuration( 7, array(
 	'provider' => 'gmail',
 	'enabled' => '1',
 	'mailbox' => 'submissions@example.test',
@@ -184,27 +184,27 @@ MRSA_Email_Submissions::save_configuration( 7, array(
 	'client_secret' => 'gmail-client-secret',
 	'refresh_token' => 'gmail-refresh-token',
 ) );
-check( false !== strpos( MRSA_Email_Submissions::test_connection( 7 ), 'passed' ), 'the email inbox test authenticates without processing messages' );
+check( false !== strpos( RQE_Email_Submissions::test_connection( 7 ), 'passed' ), 'the email inbox test authenticates without processing messages' );
 check( in_array( 'https://gmail.googleapis.com/gmail/v1/users/me/profile', $GLOBALS['email_test_requests'], true ), 'Gmail connection tests address the authenticated OAuth account' );
-$status = MRSA_Email_Submissions::configuration_status( 7 );
+$status = RQE_Email_Submissions::configuration_status( 7 );
 check( $status['connected'] && 'Gmail API (OAuth)' === $status['provider_label'] && $status['last_tested_at'], 'a successful current connection test marks the inbox as connected' );
 check( 'B12' === invoke_private( 'subject_bonus_id', 7, 'Rider submission B12' ), 'one subject bonus code resolves to its library ID' );
 check( '' === invoke_private( 'subject_bonus_id', 7, 'B12 and B13' ), 'multiple subject bonus codes are rejected' );
 check( '' === invoke_private( 'subject_bonus_id', 7, 'B120' ), 'partial bonus-code matches are rejected' );
 
-$message = MRSA_Email_Submissions::review( 7, 1, 'accepted' );
+$message = RQE_Email_Submissions::review( 7, 1, 'accepted' );
 check( 135 === $wpdb->tables['registrations'][4]['score'] && 'accepted' === $wpdb->tables['bonus_submissions'][1]['status'] && 125 === $wpdb->tables['bonus_submissions'][1]['points_awarded'], 'accepting awards the library points and records the review' );
 try {
-	MRSA_Email_Submissions::review( 7, 1, 'accepted' );
+	RQE_Email_Submissions::review( 7, 1, 'accepted' );
 	throw new RuntimeException( 'Second acceptance unexpectedly succeeded.' );
 } catch ( RuntimeException $exception ) {
 	check( 135 === $wpdb->tables['registrations'][4]['score'] && false !== strpos( $exception->getMessage(), 'no longer pending' ), 'an accepted submission cannot award points twice' );
 }
 try {
-	MRSA_Email_Submissions::review( 7, 2, 'rejected', 'other', '' );
+	RQE_Email_Submissions::review( 7, 2, 'rejected', 'other', '' );
 	throw new RuntimeException( 'Other rejection without description unexpectedly succeeded.' );
 } catch ( RuntimeException $exception ) {
 	check( 'pending' === $wpdb->tables['bonus_submissions'][2]['status'], 'Other rejection requires a description before changing state' );
 }
-MRSA_Email_Submissions::review( 7, 2, 'rejected', 'wrong_image', 'The submitted motorcycle is not at the library location.' );
+RQE_Email_Submissions::review( 7, 2, 'rejected', 'wrong_image', 'The submitted motorcycle is not at the library location.' );
 check( 'rejected' === $wpdb->tables['bonus_submissions'][2]['status'] && 0 === $wpdb->tables['bonus_submissions'][2]['points_awarded'] && 135 === $wpdb->tables['registrations'][4]['score'], 'rejecting records the reason without changing the rider score' );

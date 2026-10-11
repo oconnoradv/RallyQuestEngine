@@ -2,12 +2,12 @@
 /** Explicit, bounded import of factual catalog labels only. */
 defined( 'ABSPATH' ) || exit;
 
-final class MRSA_Importer {
+final class RQE_Importer {
 	const SOURCE = 'https://vpic.nhtsa.dot.gov/api/';
 	const API = 'https://vpic.nhtsa.dot.gov/api/vehicles';
 
 	public static function import( $make ) {
-		$make = MRSA_Admin::text( $make, 80, true );
+		$make = RQE_Admin::text( $make, 80, true );
 		$all_models = self::fetch( '/GetModelsForMake/' . rawurlencode( $make ) . '?format=json' );
 		$motorcycles = self::fetch( '/GetModelsForMakeYear/make/' . rawurlencode( $make ) . '/vehicletype/motorcycle?format=json' );
 		$model_ids = array();
@@ -52,7 +52,7 @@ final class MRSA_Importer {
 		$added = 0;
 		foreach ( $rows as $row ) {
 			$result = $wpdb->query( $wpdb->prepare(
-				'INSERT INTO ' . MRSA::table( 'bikes' ) . ' (make,model,year,source) VALUES (%s,%s,%d,%s) ON DUPLICATE KEY UPDATE id=id',
+				'INSERT INTO ' . RQE::table( 'bikes' ) . ' (make,model,year,source) VALUES (%s,%s,%d,%s) ON DUPLICATE KEY UPDATE id=id',
 				$row['make'],
 				$row['model'],
 				$row['year'],

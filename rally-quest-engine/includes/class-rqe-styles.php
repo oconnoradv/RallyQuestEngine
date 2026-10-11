@@ -8,8 +8,8 @@
  */
 defined( 'ABSPATH' ) || exit;
 
-final class MRSA_Styles {
-	const OPTION = 'mrsa_primary_style';
+final class RQE_Styles {
+	const OPTION = 'rqe_primary_style';
 	const DEFAULT_STYLE = 'motorcycle';
 
 	/** Ordered style catalog: key => label, event-code prefix and participant noun. */
@@ -22,6 +22,7 @@ final class MRSA_Styles {
 		);
 	}
 
+	/** True when the key is a supported scavenger hunt style. */
 	public static function valid( $style ) {
 		return is_string( $style ) && isset( self::all()[ $style ] );
 	}
@@ -38,6 +39,7 @@ final class MRSA_Styles {
 		return $style ? $style : self::DEFAULT_STYLE;
 	}
 
+	/** Stores the site-wide primary style; throws when the style is invalid or cannot be saved. */
 	public static function save_primary( $style ) {
 		if ( ! self::valid( $style ) ) {
 			throw new RuntimeException( 'Choose Motorcycle, Bicycle, Horseback or GeoCache as the primary scavenger hunt style.' );
@@ -47,10 +49,12 @@ final class MRSA_Styles {
 		}
 	}
 
+	/** Human-readable style label, falling back to the default style. */
 	public static function label( $style ) {
 		return self::valid( $style ) ? self::all()[ $style ]['label'] : self::all()[ self::DEFAULT_STYLE ]['label'];
 	}
 
+	/** Two-letter style code used as the Event ID prefix (MC, BC, HB, GC). */
 	public static function code( $style ) {
 		return self::valid( $style ) ? self::all()[ $style ]['code'] : self::all()[ self::DEFAULT_STYLE ]['code'];
 	}
@@ -92,10 +96,12 @@ final class MRSA_Styles {
 		return in_array( $style, array( 'motorcycle', 'bicycle' ), true );
 	}
 
+	/** True when fuel-capacity fields are editable (Motorcycle only). */
 	public static function uses_fuel( $style ) {
 		return 'motorcycle' === $style;
 	}
 
+	/** True when the style uses the Horses tab instead of Bikes. */
 	public static function uses_horses( $style ) {
 		return 'horse' === $style;
 	}
