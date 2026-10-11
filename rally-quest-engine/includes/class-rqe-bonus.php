@@ -726,6 +726,7 @@ final class RQE_Bonus {
 		$installed = array();
 		RQE::begin_transaction();
 		try {
+			RQE_Event_State::writable( $event_id );
 			foreach ( $rows as $row ) {
 				$existing = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . RQE::table( 'bonus_points' ) . ' WHERE event_id=%d AND bonus_id=%s', $event_id, $row['bonus_id'] ) );
 				$data = array(
@@ -1020,6 +1021,8 @@ final class RQE_Bonus {
 		$backup = '';
 		$installed = false;
 		try {
+			RQE::begin_transaction();
+			RQE_Event_State::writable( $event_id );
 			if ( $has_image || ( $old_file && ! $remove_image && $new_bonus_id !== $bonus_id ) ) {
 				if ( ! $stage_dir ) {
 					$stage_dir = self::create_stage_directory();
@@ -1050,7 +1053,6 @@ final class RQE_Bonus {
 					$installed = true;
 				}
 			}
-			RQE::begin_transaction();
 			if ( false === $wpdb->update( RQE::table( 'bonus_points' ), $data, array( 'id' => $existing['id'], 'event_id' => $event_id ) ) ) {
 				throw new RuntimeException( 'The bonus listing could not be saved.' );
 			}

@@ -60,6 +60,8 @@ rules:
       - pattern: esc_url(...)
       - pattern: wp_kses(...)
       - pattern: wp_kses_post(...)
+      # This final-class validator returns only an integer or throws.
+      - pattern: RQE_Admin::integer(...)
       - pattern: intval(...)
       - pattern: absint(...)
       - pattern: (int) $VALUE

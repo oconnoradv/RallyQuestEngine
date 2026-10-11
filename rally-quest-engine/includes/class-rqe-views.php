@@ -57,6 +57,10 @@ final class RQE_Views {
 	private static function header() {
 		$id = RQE_Admin::selected_event();
 		$events = self::scoring_events();
+		$show_archived = RQE_Event_State::show_archived();
+		$events = array_values( array_filter( $events, function ( $event ) use ( $show_archived, $id ) {
+			return $show_archived || empty( $event['is_archived'] ) || (int) $event['id'] === $id;
+		} ) );
 		echo '<div class="rqe-header"><span class="dashicons dashicons-location-alt" aria-hidden="true"></span><div><h1>Rally Quest Engine</h1><p>an O&rsquo;ConnorADV project <span>v' . esc_html( RQE_VERSION ) . '</span></p></div>';
 		if ( $events ) {
 			$tab = RQE_Admin::query( 'tab', 'events' );
@@ -80,13 +84,21 @@ final class RQE_Views {
 			}
 			echo '</select></label><label for="rqe-header-event"><span>Choose Event</span><select id="rqe-header-event" name="event_id" required><option value="">Choose an event</option>';
 			foreach ( $events as $event ) {
-				echo '<option value="' . esc_attr( $event['id'] ) . '" data-style="' . esc_attr( RQE_Styles::valid( $event['hunt_style'] ?? '' ) ? $event['hunt_style'] : RQE_Styles::DEFAULT_STYLE ) . '"' . selected( $id, $event['id'], false ) . '>' . esc_html( $event['name'] . ' (' . RQE_Styles::event_code( $event ) . ')' ) . '</option>';
+				echo '<option value="' . esc_attr( $event['id'] ) . '" data-style="' . esc_attr( RQE_Styles::valid( $event['hunt_style'] ?? '' ) ? $event['hunt_style'] : RQE_Styles::DEFAULT_STYLE ) . '"' . selected( $id, $event['id'], false ) . '>' . esc_html( $event['name'] . ' (' . RQE_Styles::event_code( $event ) . ')' . ( ! empty( $event['is_archived'] ) ? ' — Archived' : '' ) ) . '</option>';
 			}
 			echo '</select></label>';
 			self::button( 'Set Event' );
 			echo '</form>';
 		}
+		self::form( 'archive_visibility', array( 'context_tab' => $tab ?? 'events' ), 'rqe-archive-visibility' );
+		echo '<label><input type="checkbox" name="show_archived" value="1"' . checked( $show_archived, true, false ) . '> Show archived events</label> ';
+		self::button( 'Apply Visibility' );
+		echo '</form>';
 		echo '</div><hr class="wp-header-end">';
+		$selected = $id ? RQE::row( 'events', $id ) : null;
+		if ( $selected && ( ! empty( $selected['is_locked'] ) || ! empty( $selected['is_archived'] ) ) ) {
+			echo '<div class="notice notice-info"><p>This event is ' . esc_html( ! empty( $selected['is_archived'] ) ? 'archived and locked' : 'locked' ) . '. Results are read-only. Certificates and enabled public embeds remain available. Only a site administrator can unlock it.</p></div>';
+		}
 	}
 
 	private static function field( $label, $name, $value = '', $type = 'text', $required = false, $attrs = array() ) {
@@ -655,7 +667,7 @@ final class RQE_Views {
 		foreach ( RQE_Results::tiers() as $key => $status ) {
 			self::field( str_replace( 'Preliminary ', '', $status ) . ' Points (optional)', $key, $event[ $key ] ?? '', 'number', false, array( 'min' => 0, 'max' => 1000000000, 'step' => 1, 'placeholder' => 'Not Used' ) );
 		}
-		echo '<p>Leave optional finisher thresholds blank for <strong>Not Used</strong>. Each configured tier must exceed the highest configured lower threshold. Scores must strictly exceed a threshold to qualify; manual Event Status assignments override automatic tiers.</p>';
+		echo '<p>Leave optional finisher thresholds blank for <strong>Not Used</strong>. Each configured tier must exceed the highest configured lower threshold. Scores equal to or greater than a threshold qualify; manual Event Status assignments override automatic tiers.</p>';
 		echo '<div class="rqe-logo">';
 		self::field( 'Existing media image ID (0 = none)', 'logo_id', $event['logo_id'] ?? 0, 'number', false, array( 'min' => 0, 'step' => 1 ) );
 		echo '<button type="button" class="button rqe-media">Select logo in WordPress media library</button><button type="button" class="button rqe-clear-media">Clear logo</button><div class="rqe-logo-preview">';
@@ -734,7 +746,7 @@ final class RQE_Views {
 
 	private static function public_results_embed( $event ) {
 		$id = (int) $event['id'];
-		echo '<section class="rqe-panel"><h2>Public Results Embed</h2><p>Publish this event&rsquo;s overall results in a WordPress post or page. Publication is off by default; enabling it allows anyone to view participant names, bibs, scores, accepted/rejected submission counts, Event Status and placing. The event description and image are shown above the results. Contact details, Registration Status, submission photos, and administrative controls are not published.</p>';
+		echo '<details class="rqe-panel rqe-embed-panel"><summary><h2>Embed this Event on a Post or Page</h2></summary><p>Publish this event&rsquo;s overall results in a WordPress post or page. Publication is off by default; enabling it allows anyone to view participant names, bibs, scores, accepted/rejected submission counts, Event Status and placing. The event description and image are shown above the results. Contact details, Registration Status, submission photos, and administrative controls are not published.</p>';
 		$code = RQE_Styles::event_code( $event );
 		self::field( 'RQE Event ID', 'rqe_embed_event_id', $code, 'text', false, array( 'readonly' => 'readonly' ) );
 		self::field( 'Results shortcode (copy into a WordPress Shortcode block)', 'rqe_results_shortcode', '[rqe_results id="' . $code . '"]', 'text', false, array( 'readonly' => 'readonly' ) );
@@ -742,23 +754,30 @@ final class RQE_Views {
 		self::form( 'public_results', array( 'event_id' => $id ), 'rqe-inline-form' );
 		echo '<label><input type="checkbox" name="public_results_enabled" value="1"' . ( ! empty( $event['public_results_enabled'] ) ? ' checked' : '' ) . '> Enable public results for this event</label> ';
 		self::button( 'Save Public Results Setting' );
-		echo '</form></section>';
+		echo '</form></details>';
 	}
 
 	private static function status_catalog( $event_id, $kind, $title ) {
 		echo '<details class="rqe-panel rqe-status-catalog"><summary><h2>' . esc_html( $title ) . '</h2></summary><p>Manage this event&rsquo;s status choices (maximum ' . ( 'event' === $kind ? '64' : '20' ) . ' bytes). Disabled values remain on existing participants but cannot be newly assigned. In-use values cannot be deleted.</p>';
+		$event = RQE::row( 'events', $event_id );
+		echo '<fieldset' . ( ! empty( $event['is_locked'] ) || ! empty( $event['is_archived'] ) ? ' disabled' : '' ) . '>';
 		if ( 'event' === $kind ) {
-			echo '<p>Automatic is a calculation mode. It uses Registered or the highest Preliminary Finisher tier whose configured threshold is strictly surpassed: Minimum, Bronze, Silver or Gold. Unused tiers are skipped. These system statuses and DNS cannot be deleted; disabling them affects manual choices only. Changing Registration Status to Cancelled sets manual Event Status to DNS. Manual assignments remain authoritative until returned to Automatic. At the end of the event, manually assign Finisher, DNF or DNS on Results.</p>';
+			echo '<p>Automatic is a calculation mode. It uses Registered or the highest Preliminary Finisher tier whose configured threshold is met or exceeded: Minimum, Bronze, Silver or Gold. Unused tiers are skipped. These system statuses and DNS cannot be deleted; disabling them affects manual choices only. Changing Registration Status to Cancelled sets manual Event Status to DNS. Manual assignments remain authoritative until returned to Automatic. At the end of the event, manually assign Finisher, DNF or DNS on Results. Mark custom final finisher statuses certificate eligible below.</p>';
 		} else {
 			echo '<p>Keep at least one value enabled. New participants default to Initial Registration when enabled, otherwise the first enabled value. Changing Registration Status to Cancelled sets Event Status to DNS. Saving an unchanged Cancelled value or changing registration away from Cancelled does not overwrite a later manual Event Status.</p>';
 		}
 		echo '<ul class="rqe-status-options">';
-		foreach ( RQE_Statuses::options( $event_id, $kind ) as $option ) {
+		$ordered_options = RQE_Statuses::options( $event_id, $kind );
+		foreach ( $ordered_options as $index => $option ) {
 			$used = RQE_Statuses::usage( $event_id, $kind, $option['label'] );
 			$protected = 'event' === $kind && in_array( $option['label'], RQE_Statuses::protected_labels(), true );
 			echo '<li><strong>' . esc_html( $option['label'] ) . '</strong> <span>' . esc_html( ( $option['enabled'] ? 'Enabled' : 'Disabled' ) . ' / ' . $used . ' participants' ) . '</span>';
 			self::form( 'status_option', array( 'event_id' => $event_id, 'status_kind' => $kind, 'status_label' => $option['label'] ), 'rqe-inline-form' );
 			echo '<button class="button" name="status_action" value="' . ( $option['enabled'] ? 'disable' : 'enable' ) . '">' . ( $option['enabled'] ? 'Disable' : 'Enable' ) . '</button>';
+			echo ' <button class="button" name="status_action" value="up"' . ( 0 === $index ? ' disabled' : '' ) . '>Move Up</button> <button class="button" name="status_action" value="down"' . ( count( $ordered_options ) - 1 === $index ? ' disabled' : '' ) . '>Move Down</button>';
+			if ( 'event' === $kind && ! $protected && 'DNF' !== $option['label'] ) {
+				echo ' <button class="button" name="status_action" value="' . ( ! empty( $option['certificate_eligible'] ) ? 'certificate_off' : 'certificate_on' ) . '">' . esc_html( ! empty( $option['certificate_eligible'] ) ? 'Certificate Eligible: Yes (disable)' : 'Certificate Eligible: No (enable)' ) . '</button>';
+			}
 			if ( ! $used && ! $protected ) {
 				echo ' <button class="button" name="status_action" value="delete" data-confirm="Delete this unused status?">Delete</button>';
 			}
@@ -768,10 +787,15 @@ final class RQE_Views {
 		self::form( 'status_option', array( 'event_id' => $event_id, 'status_kind' => $kind, 'status_action' => 'add' ), 'rqe-inline-form' );
 		self::field( 'New ' . $title, 'status_label', '', 'text', true, array( 'maxlength' => 'event' === $kind ? 64 : 20 ) );
 		self::button( 'Add Status' );
-		echo '</form></details>';
+		echo '</form></fieldset></details>';
 	}
 
 	private static function rider_status_control( $event_id, array $row, $kind, array $options ) {
+		$event = RQE::row( 'events', $event_id );
+		if ( $event && ( ! empty( $event['is_locked'] ) || ! empty( $event['is_archived'] ) ) ) {
+			echo '<p>Event is locked; status changes are disabled.</p>';
+			return;
+		}
 		$registration = 'registration' === $kind;
 		$name = $registration ? 'registration_status' : 'status';
 		$current = $registration ? $row['registration_status'] : ( $row['status_manual'] ? $row['status'] : 'Automatic' );
@@ -1407,15 +1431,42 @@ final class RQE_Views {
 		$event = RQE::row( 'events', $id );
 		$rows = self::queries()->results( $id, $event['min_finisher_points'] );
 		$options = RQE_Statuses::options( $id, 'event' );
-		echo '<h3>' . esc_html( $event['name'] ) . '</h3><p>Overall placing uses competition ranking by total score: equal scores share a place and the next place is skipped. Automatic Event Status uses the highest configured threshold strictly surpassed: Preliminary Finisher above Minimum Finisher Points (' . esc_html( $event['min_finisher_points'] ) . '), then Preliminary Bronze, Silver or Gold Finisher. Unused tiers are skipped. At the end of the event, an administrator must manually assign Finisher, DNF or DNS. Manual assignments override automatic calculation. Accepted/Rejected Bonuses count submissions, not point totals; pending and invalid messages are excluded.</p>';
-		self::table( array( 'Participant #', 'Participant Name', 'Total Score', 'Accepted Bonuses', 'Rejected Bonuses', 'Event Status', 'Overall Placing' ) );
+		echo '<section class="rqe-panel"><h3>Event Protection and Certificates</h3><p>State: <strong>' . esc_html( ! empty( $event['is_archived'] ) ? 'Archived / Locked' : ( ! empty( $event['is_locked'] ) ? 'Locked' : 'Editable' ) ) . '</strong>. Archive hides the event by default and locks results. Unarchiving keeps it locked. Locking does not automatically finalize preliminary statuses.</p>';
+		self::form( 'event_state', array( 'event_id' => $id ), 'rqe-inline-form' );
+		if ( empty( $event['is_locked'] ) && empty( $event['is_archived'] ) ) {
+			echo '<button class="button" name="state_action" value="lock" data-confirm="Lock this event and prevent result changes?">Lock Event</button> ';
+		}
+		if ( RQE::site_access() ) {
+			if ( ! empty( $event['is_locked'] ) && empty( $event['is_archived'] ) ) {
+				echo '<button class="button" name="state_action" value="unlock" data-confirm="Unlock this event and allow editing?">Unlock Event</button> ';
+			}
+			echo '<button class="button" name="state_action" value="' . ( ! empty( $event['is_archived'] ) ? 'unarchive' : 'archive' ) . '" data-confirm="Change this event archive state?">' . esc_html( ! empty( $event['is_archived'] ) ? 'Unarchive Event (keep locked)' : 'Archive Event (also lock)' ) . '</button>';
+		}
+		echo '</form><p>Certificates require a manually finalized certificate-eligible status. Finisher is eligible by default; preliminary statuses, DNF and DNS are excluded.</p><p><a class="button" href="' . esc_url( RQE_Certificates::link( $id, 'print' ) ) . '">Print All Finisher Certificates / Save as PDF</a> <a class="button" href="' . esc_url( RQE_Certificates::link( $id, 'review' ) ) . '">Review &amp; Email All Certificates</a></p></section>';
+		global $wpdb;
+		$batches = $wpdb->get_col( $wpdb->prepare( 'SELECT batch FROM ' . RQE::table( 'certificate_mail' ) . ' WHERE event_id=%d AND user_id=%d GROUP BY batch ORDER BY MAX(id) DESC LIMIT 10', $id, get_current_user_id() ) );
+		if ( ! is_array( $batches ) || $wpdb->last_error ) {
+			throw new RuntimeException( 'Recent certificate deliveries could not be read.' );
+		}
+		foreach ( $batches as $batch ) {
+			$url = wp_nonce_url( add_query_arg( array( 'action' => 'rqe_certificates', 'event_id' => $id, 'mode' => 'outcomes', 'batch' => $batch ), admin_url( 'admin-post.php' ) ), 'rqe_certificates' );
+			echo '<p><a href="' . esc_url( $url ) . '">View / Continue Certificate Batch ' . esc_html( substr( $batch, 0, 8 ) ) . '</a></p>';
+		}
+		echo '<h3>' . esc_html( $event['name'] ) . '</h3><p>Overall placing uses competition ranking by total score: equal scores share a place and the next place is skipped. Automatic Event Status uses the highest configured threshold met or exceeded: Preliminary Finisher at Minimum Finisher Points (' . esc_html( $event['min_finisher_points'] ) . ') or above, then Preliminary Bronze, Silver or Gold Finisher. Unused tiers are skipped. At the end of the event, an administrator must manually assign Finisher, DNF or DNS. Manual assignments override automatic calculation. Accepted/Rejected Bonuses count submissions, not point totals; pending and invalid messages are excluded.</p>';
+		self::table( array( 'Participant #', 'Participant Name', 'Total Score', 'Accepted Bonuses', 'Rejected Bonuses', 'Event Status', 'Overall Placing', 'Certificate' ) );
 		foreach ( $rows as $row ) {
 			$rank = $row['overall_placing'];
 			$effective_status = $row['effective_status'];
 			$score_url = admin_url( 'admin.php?page=rqe-rider-score&event_id=' . $id . '&rider_id=' . (int) $row['rider_id'] );
 			echo '<tr><td><a href="' . esc_url( $score_url ) . '">' . esc_html( $row['bib'] ) . '</a></td><td>' . esc_html( $row['name'] ) . '</td><td>' . esc_html( $row['score'] ) . '</td><td>' . esc_html( $row['accepted_bonuses'] ) . '</td><td>' . esc_html( $row['rejected_bonuses'] ) . '</td><td data-value="' . esc_attr( $effective_status ) . '">' . esc_html( $effective_status ) . '<details><summary>Change Event Status</summary>';
 			self::rider_status_control( $id, $row, 'event', $options );
-			echo '</details></td><td>' . esc_html( $rank ) . '</td></tr>';
+			echo '</details></td><td>' . esc_html( $rank ) . '</td><td>';
+			if ( RQE_Certificates::eligible( $row, $options ) ) {
+				echo '<a href="' . esc_url( RQE_Certificates::link( $id, 'print', $row['rider_id'] ) ) . '">Print</a> | <a href="' . esc_url( RQE_Certificates::link( $id, 'pdf', $row['rider_id'] ) ) . '">Download PDF</a> | <a href="' . esc_url( RQE_Certificates::link( $id, 'review', $row['rider_id'] ) ) . '">Review &amp; Email</a>';
+			} else {
+				echo 'Not eligible';
+			}
+			echo '</td></tr>';
 		}
 		self::end_table();
 	}

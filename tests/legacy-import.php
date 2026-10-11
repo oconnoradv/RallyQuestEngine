@@ -88,6 +88,7 @@ final class RQE {
 }
 final class RQE_Statuses {
 	public static function migrate_tiers() { $GLOBALS['tier_migrations']++; }
+	public static function migrate_ordering() {}
 }
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-legacy-import.php';
 

@@ -41,6 +41,7 @@ final class RQE_Roster_Import_Service {
 		}
 		RQE::begin_transaction();
 		try {
+			RQE_Event_State::writable( $event_id );
 			$event = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $event_id ), ARRAY_A );
 			if ( ! $event ) {
 				throw new RuntimeException( 'The selected event no longer exists.' );

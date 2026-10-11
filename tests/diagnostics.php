@@ -4,6 +4,8 @@ define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
 define( 'RQE_DB_VERSION', '11' );
 define( 'MINUTE_IN_SECONDS', 60 );
+// Locking is covered by the SQL-backed event suite; this fixture isolates deletion rollback.
+final class RQE_Event_State { public static function protect_deletion( $operation, array $input ) {} }
 final class RQE {
 	public static function table( $name ) { return $name; }
 	public static function site_access() { return $GLOBALS['authorized']; }
@@ -167,7 +169,7 @@ check( strpos( $html, 'id="rqe-configuration"' ) < strpos( $html, '<h3>Database 
 $operations = array( 'all', 'bikes', 'roster', 'bonus_points', 'rider', 'audit' );
 foreach ( $operations as $suffix ) {
 	$operation = 'diagnostics_delete_' . $suffix;
-	$wpdb->tables = array_fill_keys( array( 'registrations', 'status_options', 'rider_bikes', 'horses', 'event_admins', 'event_scorers', 'event_email_settings', 'events', 'riders', 'bikes', 'bonus_points', 'bonus_submissions' ), array( array( 'id' => 9, 'event_id' => 7, 'rider_id' => 9, 'image_file' => '' ) ) );
+	$wpdb->tables = array_fill_keys( array( 'certificate_mail', 'registrations', 'status_options', 'rider_bikes', 'horses', 'event_admins', 'event_scorers', 'event_email_settings', 'events', 'riders', 'bikes', 'bonus_points', 'bonus_submissions' ), array( array( 'id' => 9, 'event_id' => 7, 'rider_id' => 9, 'image_file' => '' ) ) );
 	$wpdb->tables['import_audit'] = array(
 		array( 'user_id' => 1, 'action' => 'bypass_enabled' ),
 		array( 'user_id' => 2, 'action' => 'bypass_enabled' ),

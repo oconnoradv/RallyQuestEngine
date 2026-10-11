@@ -245,7 +245,7 @@ final class RQE_Email_Submissions {
 
 	public static function process_all() {
 		global $wpdb;
-		$event_ids = $wpdb->get_col( 'SELECT event_id FROM ' . RQE::table( 'event_email_settings' ) . ' WHERE enabled=1' );
+		$event_ids = $wpdb->get_col( 'SELECT s.event_id FROM ' . RQE::table( 'event_email_settings' ) . ' s JOIN ' . RQE::table( 'events' ) . ' e ON e.id=s.event_id WHERE s.enabled=1 AND e.is_locked=0 AND e.is_archived=0' );
 		foreach ( $event_ids as $event_id ) {
 			try {
 				self::process_event( (int) $event_id );
@@ -260,6 +260,15 @@ final class RQE_Email_Submissions {
 		if ( ! $config['enabled'] ) {
 			throw new RuntimeException( 'Email submission polling is disabled for this event.' );
 		}
+		RQE::begin_transaction();
+		try {
+			RQE_Event_State::writable( $event_id );
+			RQE::commit_transaction();
+		} catch ( RuntimeException $exception ) {
+			RQE::rollback_transaction();
+			throw $exception;
+		}
+		$transaction = false;
 		try {
 			$provider = $config['provider'];
 			if ( ! in_array( $provider, array( 'imap', 'gmail', 'microsoft' ), true ) ) {
@@ -268,7 +277,13 @@ final class RQE_Email_Submissions {
 			$messages = 'imap' === $provider ? self::imap_messages( $config['settings'] ) : ( 'gmail' === $provider ? self::gmail_messages( $config['settings'] ) : self::microsoft_messages( $config['settings'] ) );
 			$processed = 0;
 			foreach ( $messages as $message ) {
-				if ( self::process_message( $event_id, $provider, $message ) ) {
+				RQE::begin_transaction();
+				$transaction = true;
+				RQE_Event_State::writable( $event_id );
+				$recorded = self::process_message( $event_id, $provider, $message );
+				RQE::commit_transaction();
+				$transaction = false;
+				if ( $recorded ) {
 					++$processed;
 				}
 				if ( isset( $message['mark_processed'] ) && is_callable( $message['mark_processed'] ) ) {
@@ -278,6 +293,9 @@ final class RQE_Email_Submissions {
 			self::record_check( $event_id, '' );
 			return 'Inbox check completed. ' . $processed . ' new message(s) recorded.';
 		} catch ( RuntimeException $exception ) {
+			if ( $transaction ) {
+				RQE::rollback_transaction();
+			}
 			try {
 				self::record_check( $event_id, $exception->getMessage() );
 			} catch ( RuntimeException $status_exception ) {
@@ -426,6 +444,7 @@ final class RQE_Email_Submissions {
 		}
 		RQE::begin_transaction();
 		try {
+			RQE_Event_State::writable( $event_id );
 			$submission = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'bonus_submissions' ) . ' WHERE id=%d AND event_id=%d FOR UPDATE', $submission_id, $event_id ), ARRAY_A );
 			if ( ! $submission || 'pending' !== $submission['status'] ) {
 				throw new RuntimeException( 'This submission is no longer pending review.' );

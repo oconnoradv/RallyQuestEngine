@@ -105,6 +105,7 @@ final class RQE_Legacy_Import {
 				throw new RuntimeException( 'Unable to import legacy selected events. No legacy data was imported.' );
 			}
 			RQE_Statuses::migrate_tiers();
+			RQE_Statuses::migrate_ordering();
 			RQE::commit_transaction();
 		} catch ( Throwable $exception ) {
 			RQE::rollback_transaction();

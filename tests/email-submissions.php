@@ -2,9 +2,13 @@
 /** Standalone email-submission regression tests: php tests/email-submissions.php */
 define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-event-state.php';
 
 final class Email_Submission_Test_DB {
+	public $last_error = '';
+	public $active_transaction = false;
 	public $tables = array(
+		'events' => array( 7 => array( 'id' => 7, 'is_locked' => 0, 'is_archived' => 0 ) ),
 		'event_email_settings' => array(),
 		'bonus_points' => array(
 			array( 'event_id' => 7, 'bonus_id' => 'B12', 'points' => 125 ),
@@ -21,6 +25,9 @@ final class Email_Submission_Test_DB {
 	public function get_row( $query, $format ) {
 		$sql = $query['sql'];
 		$args = $query['args'];
+		if ( strpos( $sql, 'FROM events' ) !== false ) {
+			return $this->tables['events'][ (int) $args[0] ] ?? null;
+		}
 		if ( strpos( $sql, 'FROM event_email_settings' ) !== false ) {
 			return $this->tables['event_email_settings'][ (int) $args[0] ] ?? null;
 		}
@@ -65,6 +72,11 @@ final class Email_Submission_Test_DB {
 			$this->tables[ $table ][ (int) $data['event_id'] ] = array_merge( array( 'last_checked_at' => null, 'last_error' => '' ), $data );
 			return 1;
 		}
+		if ( 'bonus_submissions' === $table ) {
+			if ( 'poll-second' === $data['provider_message_id'] ) { return false; }
+			$this->tables[ $table ][] = $data;
+			return 1;
+		}
 		return false;
 	}
 	public function update( $table, $data, $where ) {
@@ -82,9 +94,9 @@ final class Email_Submission_Test_DB {
 		return false;
 	}
 	public function query( $query ) {
-		if ( 'START TRANSACTION' === $query ) { $this->snapshot = $this->tables; return 1; }
-		if ( 'COMMIT' === $query ) { return 1; }
-		if ( 'ROLLBACK' === $query ) { $this->tables = $this->snapshot; return 1; }
+		if ( 'START TRANSACTION' === $query ) { $this->snapshot = $this->tables; $this->active_transaction = true; return 1; }
+		if ( 'COMMIT' === $query ) { $this->active_transaction = false; return 1; }
+		if ( 'ROLLBACK' === $query ) { $this->tables = $this->snapshot; $this->active_transaction = false; return 1; }
 		if ( is_array( $query ) && strpos( $query['sql'], 'UPDATE registrations SET score=score+' ) === 0 ) {
 			$points = (int) $query['args'][0];
 			$id = (int) $query['args'][1];
@@ -115,6 +127,17 @@ function wp_safe_remote_request( $url, $args ) {
 	}
 	if ( false !== strpos( $url, '/profile' ) ) {
 		return array( 'response' => array( 'code' => 200 ), 'body' => json_encode( array( 'emailAddress' => 'submissions@example.test' ) ) );
+	}
+	if ( ! empty( $GLOBALS['poll_fixture'] ) && false !== strpos( $url, '/messages?' ) ) {
+		return array( 'response' => array( 'code' => 200 ), 'body' => '{"messages":[{"id":"poll-first"},{"id":"poll-second"}]}' );
+	}
+	if ( ! empty( $GLOBALS['poll_fixture'] ) && false !== strpos( $url, '/modify' ) ) {
+		check( ! $GLOBALS['wpdb']->active_transaction, 'mailbox messages are marked processed only after database commit' );
+		$GLOBALS['marked'][] = $url;
+		return array( 'response' => array( 'code' => 200 ), 'body' => '{}' );
+	}
+	if ( ! empty( $GLOBALS['poll_fixture'] ) && false !== strpos( $url, '?format=full' ) ) {
+		return array( 'response' => array( 'code' => 200 ), 'body' => '{"payload":{"headers":[]}}' );
 	}
 	return array( 'response' => array( 'code' => 404 ), 'body' => '{}' );
 }
@@ -208,3 +231,26 @@ try {
 }
 RQE_Email_Submissions::review( 7, 2, 'rejected', 'wrong_image', 'The submitted motorcycle is not at the library location.' );
 check( 'rejected' === $wpdb->tables['bonus_submissions'][2]['status'] && 0 === $wpdb->tables['bonus_submissions'][2]['points_awarded'] && 135 === $wpdb->tables['registrations'][4]['score'], 'rejecting records the reason without changing the rider score' );
+$wpdb->tables['events'][7]['is_locked'] = 1;
+$before = count( $GLOBALS['email_test_requests'] );
+try {
+	RQE_Email_Submissions::process_event( 7 );
+	throw new LogicException( 'Locked polling unexpectedly succeeded.' );
+} catch ( RuntimeException $exception ) {
+	check( false !== strpos( $exception->getMessage(), 'locked or archived' ) && $before === count( $GLOBALS['email_test_requests'] ), 'locked inbox polling does not fetch or consume provider messages' );
+}
+try {
+	RQE_Email_Submissions::review( 7, 2, 'accepted' );
+	throw new LogicException( 'Locked review unexpectedly succeeded.' );
+} catch ( RuntimeException $exception ) {
+	check( false !== strpos( $exception->getMessage(), 'locked or archived' ) && 135 === $wpdb->tables['registrations'][4]['score'], 'locked events reject submission score changes' );
+}
+$wpdb->tables['events'][7]['is_locked'] = 0;
+$GLOBALS['poll_fixture'] = true;
+$GLOBALS['marked'] = array();
+try {
+	RQE_Email_Submissions::process_event( 7 );
+	throw new LogicException( 'Second message insertion unexpectedly succeeded.' );
+} catch ( RuntimeException $exception ) {
+	check( false !== strpos( $exception->getMessage(), 'could not be recorded' ) && count( $GLOBALS['marked'] ) === 1 && count( $wpdb->tables['bonus_submissions'] ) === 3, 'later intake failures retain committed earlier messages without consuming the failing message' );
+}

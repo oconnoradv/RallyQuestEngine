@@ -6,7 +6,7 @@ final class RQE {
 	/** Returns the prefixed RQE table name for an allow-listed table key; unknown keys throw. */
 	public static function table( $name ) {
 		global $wpdb;
-		$allowed = array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
+		$allowed = array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'certificate_mail', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
 		if ( ! in_array( $name, $allowed, true ) ) {
 			throw new InvalidArgumentException( 'Unknown RQE table.' );
 		}
@@ -153,6 +153,8 @@ final class RQE {
 			silver_finisher_points bigint(20) unsigned DEFAULT NULL,
 			gold_finisher_points bigint(20) unsigned DEFAULT NULL,
 			public_results_enabled tinyint(1) unsigned NOT NULL DEFAULT 0,
+			is_locked tinyint(1) unsigned NOT NULL DEFAULT 0,
+			is_archived tinyint(1) unsigned NOT NULL DEFAULT 0,
 			PRIMARY KEY  (id)
 		) ENGINE=InnoDB $c;" );
 		$t = self::table( 'registrations' );
@@ -234,8 +236,31 @@ final class RQE {
 			kind varchar(20) NOT NULL,
 			label varchar(64) NOT NULL,
 			enabled tinyint(1) unsigned NOT NULL DEFAULT 1,
+			sort_order bigint(20) unsigned NOT NULL DEFAULT 0,
+			certificate_eligible tinyint(1) unsigned NOT NULL DEFAULT 0,
 			PRIMARY KEY  (id),
 			UNIQUE KEY event_kind_label (event_id,kind,label)
+		) ENGINE=InnoDB $c;" );
+		$t = self::table( 'certificate_mail' );
+		dbDelta( "CREATE TABLE $t (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			batch varchar(48) NOT NULL,
+			event_id bigint(20) unsigned NOT NULL,
+			rider_id bigint(20) unsigned NOT NULL,
+			user_id bigint(20) unsigned NOT NULL,
+			snapshot longtext NOT NULL,
+			fingerprint char(64) NOT NULL,
+			subject varchar(200) NOT NULL,
+			message text NOT NULL,
+			state varchar(20) NOT NULL DEFAULT 'pending',
+			detail text NOT NULL,
+			created_at datetime NOT NULL,
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY batch_rider (batch,rider_id),
+			KEY batch_state (batch,state),
+			KEY event_rider (event_id,rider_id),
+			KEY retention (updated_at)
 		) ENGINE=InnoDB $c;" );
 		if ( (int) $previous_db_version < 10 ) {
 			RQE_Statuses::migrate();
@@ -249,6 +274,15 @@ final class RQE {
 		}
 		if ( (int) $previous_db_version < 13 ) {
 			RQE_Statuses::migrate_tiers();
+		}
+		if ( (int) $previous_db_version < 14 ) {
+			foreach ( array( 'events' => 'is_locked,is_archived', 'status_options' => 'sort_order,certificate_eligible', 'certificate_mail' => 'batch,snapshot,state' ) as $table => $columns ) {
+				$verified = $wpdb->get_results( 'SELECT ' . $columns . ' FROM ' . self::table( $table ) . ' LIMIT 0', ARRAY_A );
+				if ( ! is_array( $verified ) || $wpdb->last_error ) {
+					throw new RuntimeException( 'Event protection and certificate schema upgrade failed. Check database permissions and retry.' );
+				}
+			}
+			RQE_Statuses::migrate_ordering();
 		}
 		update_option( 'rqe_db_version', RQE_DB_VERSION, false );
 	}
@@ -373,6 +407,13 @@ final class RQE {
 			foreach ( $submissions as $submission ) {
 				$fields[] = array( 'name' => 'Bonus email submission', 'value' => implode( ' / ', array( $submission['name'], $submission['bib'], $submission['bonus_id'], $submission['email_subject'], $submission['submission_description'], $submission['submitted_at'], $submission['status'], $submission['points_awarded'], $submission['rejection_code'], $submission['rejection_description'] ) ) );
 			}
+			$deliveries = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,state,detail,snapshot,subject,message,created_at,updated_at FROM ' . self::table( 'certificate_mail' ) . ' WHERE rider_id=%d ORDER BY id', $rider['id'] ), ARRAY_A );
+			if ( ! is_array( $deliveries ) || $wpdb->last_error ) {
+				throw new RuntimeException( 'Certificate personal data could not be exported.' );
+			}
+			foreach ( $deliveries as $delivery ) {
+				$fields[] = array( 'name' => 'Certificate delivery', 'value' => wp_json_encode( $delivery ) );
+			}
 			$data[] = array( 'group_id' => 'rqe', 'group_label' => 'Rally registrations', 'item_id' => 'rqe-rider-' . $rider['id'], 'data' => $fields );
 		}
 		$user = get_user_by( 'email', $email );
@@ -412,7 +453,8 @@ final class RQE {
 				$submission_files = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,image_file FROM ' . self::table( 'bonus_submissions' ) . ' WHERE rider_id=%d', $id ), ARRAY_A );
 				$staged_submission_files = RQE_Bonus::stage_submission_files( $submission_files ?: array() );
 				self::begin_transaction();
-				$success = false !== $wpdb->update( self::table( 'riders' ), array( 'name' => 'Erased participant ' . $id, 'alias' => '', 'email' => 'erased-' . $id . '@example.invalid', 'phone' => '', 'emergency_name' => '', 'emergency_email' => '', 'emergency_phone' => '', 'insurance' => '', 'other' => '' ), array( 'id' => $id ) );
+				$success = false !== $wpdb->delete( self::table( 'certificate_mail' ), array( 'rider_id' => $id ) );
+				$success = false !== $wpdb->update( self::table( 'riders' ), array( 'name' => 'Erased participant ' . $id, 'alias' => '', 'email' => 'erased-' . $id . '@example.invalid', 'phone' => '', 'emergency_name' => '', 'emergency_email' => '', 'emergency_phone' => '', 'insurance' => '', 'other' => '' ), array( 'id' => $id ) ) && $success;
 				$success = false !== $wpdb->delete( self::table( 'rider_bikes' ), array( 'rider_id' => $id ) ) && $success;
 				$success = false !== $wpdb->delete( self::table( 'horses' ), array( 'rider_id' => $id ) ) && $success;
 				$success = false !== $wpdb->update( self::table( 'registrations' ), array( 'pillion' => '' ), array( 'rider_id' => $id ) ) && $success;

@@ -45,6 +45,10 @@ function output_and_requests() {
 	echo esc_html( $_GET['name'] );
 	// ok: rqe-wordpress-reflected-xss
 	echo '<input value="' . esc_attr( $_GET['name'] ) . '">';
+	// ok: rqe-wordpress-reflected-xss
+	echo RQE_Admin::integer( $_GET['event_id'], 1 );
+	// ruleid: rqe-wordpress-reflected-xss
+	echo RQE_Admin::text( $_GET['name'], 200 );
 	// ruleid: rqe-wordpress-unsafe-request
 	wp_remote_get( $_POST['url'] );
 	// ruleid: rqe-wordpress-unsafe-request

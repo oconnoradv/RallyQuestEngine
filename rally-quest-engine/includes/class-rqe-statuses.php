@@ -11,6 +11,12 @@ final class RQE_Statuses {
 		return array_merge( array( 'Registered', 'Preliminary Finisher', 'DNS' ), array_values( RQE_Results::tiers() ) );
 	}
 
+	public static function migrate_ordering() {
+		global $wpdb;
+		RQE_Admin::checked( $wpdb->query( 'UPDATE ' . RQE::table( 'status_options' ) . ' SET sort_order=id' ) );
+		RQE_Admin::checked( $wpdb->query( 'UPDATE ' . RQE::table( 'status_options' ) . " SET certificate_eligible=1 WHERE kind='event' AND label='Finisher'" ) );
+	}
+
 	/** Seed only the new tier statuses, preserving existing catalog choices. */
 	public static function migrate_tiers() {
 		global $wpdb;
@@ -41,7 +47,8 @@ final class RQE_Statuses {
 			$existing = array_column( self::options( $event_id, $kind ), 'label' );
 			foreach ( self::defaults( $kind ) as $label ) {
 				if ( ! in_array( $label, $existing, true ) ) {
-					RQE_Admin::checked( $wpdb->insert( RQE::table( 'status_options' ), array( 'event_id' => $event_id, 'kind' => $kind, 'label' => $label, 'enabled' => 1 ) ) );
+					RQE_Admin::checked( $wpdb->insert( RQE::table( 'status_options' ), array( 'event_id' => $event_id, 'kind' => $kind, 'label' => $label, 'enabled' => 1, 'sort_order' => count( $existing ), 'certificate_eligible' => 'event' === $kind && 'Finisher' === $label ? 1 : 0 ) ) );
+					$existing[] = $label;
 				}
 			}
 		}
@@ -108,7 +115,7 @@ final class RQE_Statuses {
 
 	public static function options( $event_id, $kind ) {
 		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'status_options' ) . ' WHERE event_id=%d AND kind=%s ORDER BY id', $event_id, self::kind( $kind ) ), ARRAY_A );
+		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'status_options' ) . ' WHERE event_id=%d AND kind=%s ORDER BY sort_order,id', $event_id, self::kind( $kind ) ), ARRAY_A );
 		if ( ! is_array( $rows ) || $wpdb->last_error ) {
 			throw new RuntimeException( 'Event status choices could not be read.' );
 		}
@@ -128,11 +135,7 @@ final class RQE_Statuses {
 	}
 
 	public static function lock_event( $event_id ) {
-		global $wpdb;
-		$id = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . RQE::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $event_id ) );
-		if ( ! $id || $wpdb->last_error ) {
-			throw new RuntimeException( 'The event no longer exists or could not be locked.' );
-		}
+		RQE_Event_State::writable( $event_id );
 	}
 
 	public static function usage( $event_id, $kind, $label ) {
@@ -155,7 +158,7 @@ final class RQE_Statuses {
 		if ( 0 === strcasecmp( 'Automatic', $label ) ) {
 			throw new RuntimeException( 'Automatic is a calculation mode, not a custom status.' );
 		}
-		if ( ! in_array( $action, array( 'add', 'enable', 'disable', 'delete' ), true ) ) {
+		if ( ! in_array( $action, array( 'add', 'enable', 'disable', 'delete', 'up', 'down', 'certificate_on', 'certificate_off' ), true ) ) {
 			throw new RuntimeException( 'Unsupported status option action.' );
 		}
 		RQE::begin_transaction();
@@ -167,12 +170,36 @@ final class RQE_Statuses {
 				if ( $matches ) {
 					throw new RuntimeException( 'That status already exists. Re-enable it if it is disabled.' );
 				}
-				RQE_Admin::checked( $wpdb->insert( RQE::table( 'status_options' ), array( 'event_id' => $event_id, 'kind' => $kind, 'label' => $label, 'enabled' => 1 ) ) );
+				$order = $options ? max( array_column( $options, 'sort_order' ) ) + 1 : 0;
+				RQE_Admin::checked( $wpdb->insert( RQE::table( 'status_options' ), array( 'event_id' => $event_id, 'kind' => $kind, 'label' => $label, 'enabled' => 1, 'sort_order' => $order, 'certificate_eligible' => 0 ) ) );
 			} else {
 				if ( ! $matches ) {
 					throw new RuntimeException( 'The status option no longer exists.' );
 				}
 				$row = $matches[0];
+				if ( in_array( $action, array( 'up', 'down' ), true ) ) {
+					$index = array_search( $row['id'], array_column( $options, 'id' ) );
+					$target = $index + ( 'up' === $action ? -1 : 1 );
+					if ( ! isset( $options[ $target ] ) ) {
+						throw new RuntimeException( 'This status is already at the end of the list.' );
+					}
+					$swap = $options[ $target ];
+					$options[ $target ] = $row;
+					$options[ $index ] = $swap;
+					foreach ( $options as $position => $option ) {
+						RQE_Admin::checked( $wpdb->update( RQE::table( 'status_options' ), array( 'sort_order' => $position ), array( 'id' => $option['id'] ) ) );
+					}
+					RQE::commit_transaction();
+					return;
+				}
+				if ( in_array( $action, array( 'certificate_on', 'certificate_off' ), true ) ) {
+					if ( 'event' !== $kind || in_array( strtolower( $label ), array_map( 'strtolower', array_merge( self::protected_labels(), array( 'DNF', 'Automatic' ) ) ), true ) ) {
+						throw new RuntimeException( 'Only final finisher statuses can be certificate eligible.' );
+					}
+					RQE_Admin::checked( $wpdb->update( RQE::table( 'status_options' ), array( 'certificate_eligible' => 'certificate_on' === $action ? 1 : 0 ), array( 'id' => $row['id'] ) ) );
+					RQE::commit_transaction();
+					return;
+				}
 				if ( 'delete' === $action ) {
 					if ( self::usage( $event_id, $kind, $row['label'] ) ) {
 						throw new RuntimeException( 'This status is in use. Disable it instead of deleting it.' );
