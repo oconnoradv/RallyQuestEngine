@@ -115,7 +115,7 @@ final class MRSA_Diagnostics {
 		$version = $wpdb->get_var( 'SELECT VERSION()' );
 		$rows[] = array( 'name' => 'Database server', 'status' => ! $wpdb->last_error && is_string( $version ) && self::database_version_supported( $version ) ? 'passed' : 'failed', 'detail' => $wpdb->last_error ? 'Database version query failed.' : 'Current: ' . (string) $version . '. Requires MySQL 8.0+ or MariaDB 10.6+.', 'remedy' => 'If the query failed, ask the host to verify DB_HOST, DB_NAME, DB_USER and DB_PASSWORD in wp-config.php and database connectivity/permissions; do not share credentials in support screenshots. For an old server, back up and test a host-managed migration to a supported MySQL 8.0+ or MariaDB 10.6+ release. Rerun the check after reconnecting.' );
 		$invalid = array();
-		foreach ( array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' ) as $table ) {
+		foreach ( array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' ) as $table ) {
 			$row = $wpdb->get_row( $wpdb->prepare( 'SHOW TABLE STATUS WHERE Name = %s', MRSA::table( $table ) ), ARRAY_A );
 			if ( $wpdb->last_error || ! $row || 'innodb' !== strtolower( $row['Engine'] ?? '' ) ) {
 				$invalid[] = $table;

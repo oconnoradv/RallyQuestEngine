@@ -94,9 +94,9 @@ final class MRSA_Queries {
 		);
 	}
 
-	public function public_results( $event_id ) {
-		$events = $this->rows( 'SELECT name,min_finisher_points FROM ' . MRSA::table( 'events' ) . ' WHERE id=%d AND public_results_enabled=1', array( $event_id ) );
-		if ( ! $events ) {
+	public function public_results( $event_id, $style = null ) {
+		$events = $this->rows( 'SELECT name,description,logo_id,hunt_style,min_finisher_points FROM ' . MRSA::table( 'events' ) . ' WHERE id=%d AND public_results_enabled=1', array( $event_id ) );
+		if ( ! $events || ( null !== $style && $events[0]['hunt_style'] !== $style ) ) {
 			return null;
 		}
 		$rows = $this->ranked( $this->result_rows( $event_id, true ), $events[0]['min_finisher_points'] );
@@ -104,7 +104,7 @@ final class MRSA_Queries {
 			unset( $row['status'], $row['status_manual'] );
 		}
 		unset( $row );
-		return array( 'name' => $events[0]['name'], 'rows' => $rows );
+		return array( 'name' => $events[0]['name'], 'description' => $events[0]['description'], 'logo_id' => (int) $events[0]['logo_id'], 'rows' => $rows );
 	}
 
 	private function ranked( array $rows, $minimum = null ) {
@@ -127,7 +127,7 @@ final class MRSA_Queries {
 		$row = $rows[0];
 		$count = $this->db->get_var( $this->db->prepare( 'SELECT COUNT(*) FROM ' . MRSA::table( 'registrations' ) . ' WHERE event_id=%d AND score>%d', $event_id, $row['score'] ) );
 		if ( ! empty( $this->db->last_error ) ) {
-			throw new RuntimeException( 'The rider placing could not be read. Check the database connection and server logs.' );
+			throw new RuntimeException( 'The participant placing could not be read. Check the database connection and server logs.' );
 		}
 		$row['overall_placing'] = 1 + (int) $count;
 		$row['effective_status'] = MRSA_Results::status( $row, $row['min_finisher_points'] );
@@ -153,7 +153,7 @@ final class MRSA_Queries {
 	public function rider_visible( $rider_id, $user_id ) {
 		$visible = $this->db->get_var( $this->db->prepare( 'SELECT reg.rider_id FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'event_admins' ) . ' a ON a.event_id=reg.event_id WHERE a.user_id=%d AND reg.rider_id=%d LIMIT 1', $user_id, $rider_id ) );
 		if ( ! empty( $this->db->last_error ) ) {
-			throw new RuntimeException( 'Rider access could not be verified. Check the database connection and server logs.' );
+			throw new RuntimeException( 'Participant access could not be verified. Check the database connection and server logs.' );
 		}
 		return (bool) $visible;
 	}
@@ -163,6 +163,15 @@ final class MRSA_Queries {
 			'catalog' => $this->rows( 'SELECT id,make,model FROM ' . MRSA::table( 'bikes' ) . ' ORDER BY make,model,id' ),
 			'owned' => $rider_id ? $this->rows( 'SELECT bike_id,model_year,fuel_capacity FROM ' . MRSA::table( 'rider_bikes' ) . ' WHERE rider_id=%d ORDER BY id', array( $rider_id ) ) : array(),
 		);
+	}
+
+	public function horses() {
+		return $this->rows( 'SELECT h.*,r.name rider_name FROM ' . MRSA::table( 'horses' ) . ' h LEFT JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=h.rider_id ORDER BY h.name,h.id' );
+	}
+
+	/** Horses this participant owns plus unassigned horses available for selection. */
+	public function rider_horses( $rider_id ) {
+		return $this->rows( 'SELECT id,name,breed,sex,age,color,rider_id FROM ' . MRSA::table( 'horses' ) . ' WHERE rider_id=0 OR rider_id=%d ORDER BY name,id', array( (int) $rider_id ) );
 	}
 
 	public function event_administrators( $event_id ) {

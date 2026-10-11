@@ -5,3 +5,6 @@
 .mrsa-public-results caption { text-align: left; font-weight: bold; padding: .5em 0; }
 .mrsa-public-results th, .mrsa-public-results td { padding: .6em; border: 1px solid #c3c4c7; text-align: left; vertical-align: top; }
 .mrsa-public-results th { white-space: nowrap; }
+.mrsa-public-results-image { margin: 0 0 1em; }
+.mrsa-public-results-image img { max-width: 100%; height: auto; }
+.mrsa-public-results-description { margin-bottom: 1em; }

@@ -1120,7 +1120,7 @@ final class MRSA_Bonus {
 			$destination = trailingslashit( $directory ) . $image_file;
 			if ( ! self::filesystem()->move( $source, $destination ) ) {
 				self::restore_submission_files( array( 'root' => $staged_root, 'files' => $moved ) );
-				throw new RuntimeException( 'A rider submission image could not be safely staged for deletion.' );
+				throw new RuntimeException( 'A participant submission image could not be safely staged for deletion.' );
 			}
 			$moved[] = array( 'source' => $source, 'staged' => $destination );
 		}
@@ -1131,7 +1131,7 @@ final class MRSA_Bonus {
 		foreach ( array_reverse( $staged['files'] ?? array() ) as $file ) {
 			self::ensure_directory( dirname( $file['source'] ) );
 			if ( self::filesystem()->is_file( $file['staged'] ) && ( self::filesystem()->exists( $file['source'] ) || ! self::filesystem()->move( $file['staged'], $file['source'] ) ) ) {
-				throw new RuntimeException( 'A rider submission image could not be restored after deletion failed.' );
+				throw new RuntimeException( 'A participant submission image could not be restored after deletion failed.' );
 			}
 		}
 		if ( ! empty( $staged['root'] ) && self::filesystem()->is_dir( $staged['root'] ) ) {

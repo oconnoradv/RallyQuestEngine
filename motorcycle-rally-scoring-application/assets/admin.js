@@ -533,6 +533,22 @@
 			frame.open();
 		});
 	});
+	// Header chooser: the scavenger hunt style narrows the event list; a hidden selection is cleared.
+	const headerStyle = root.querySelector('#mrsa-header-style');
+	const headerEvent = root.querySelector('#mrsa-header-event');
+	if (headerStyle && headerEvent) {
+		const filterEvents = () => {
+			Array.from(headerEvent.options).forEach((choice) => {
+				if (!choice.value) return;
+				const match = choice.dataset.style === headerStyle.value;
+				choice.hidden = !match;
+				choice.disabled = !match;
+			});
+			if (headerEvent.selectedOptions[0] && headerEvent.selectedOptions[0].disabled) headerEvent.value = '';
+		};
+		headerStyle.addEventListener('change', filterEvents);
+		filterEvents();
+	}
 	if (window.location.search.includes('score_rider=')) {
 		const scoring = root.querySelector('#mrsa-scoring');
 		if (scoring) scoring.scrollIntoView({block: 'start'});

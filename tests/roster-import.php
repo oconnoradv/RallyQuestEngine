@@ -80,7 +80,7 @@ function check( $ok, $label ) {
 	if ( ! $ok ) { throw new RuntimeException( 'FAIL: ' . $label ); }
 	echo 'PASS: ' . $label . PHP_EOL;
 }
-function import_rows( $rows, $header = array( 'Rider ID', 'Email', 'Bib ID', 'Status', 'Pillion' ) ) {
+function import_rows( $rows, $header = array( 'Participant ID', 'Email', 'Bib ID', 'Status', 'Pillion' ) ) {
 	return MRSA_Roster_Import_Service::import_rows( 7, $header, $rows );
 }
 $wpdb = new Roster_Test_DB();
@@ -132,7 +132,7 @@ import_rows( array( array( 'rider1@example.com' ) ), array( 'Email' ) );
 check( end( $wpdb->registrations )['bib'] === 1, 'email-only roster assigns next free bib' );
 $sample = __DIR__ . '/../motorcycle-rally-scoring-application/samples/event-roster.csv';
 list( $header, $rows ) = MRSA_Bonus::read_spreadsheet( $sample, 'csv' );
-check( $header === array( 'Rider ID', 'Email', 'Bib ID', 'Registration Status', 'Pillion' ) && count( $rows ) === 2, 'downloadable sample CSV parses with documented columns' );
+check( $header === array( 'Participant ID', 'Email', 'Bib ID', 'Registration Status', 'Pillion' ) && count( $rows ) === 2, 'downloadable sample CSV parses with documented columns' );
 // Archive fixture supplies components; the production parser still validates the XML.
 define( 'PCLZIP_OPT_BY_NAME', 1 );
 define( 'PCLZIP_OPT_EXTRACT_AS_STRING', 2 );
@@ -179,6 +179,13 @@ if ( PHP_VERSION_ID < 80100 ) { $normalize->setAccessible( true ); }
 $bonuses = $normalize->invoke( null, $header, $rows );
 check( count( $bonuses ) === 1 && $bonuses[0]['bonus_id'] === 'B12' && $bonuses[0]['points'] === 100 && $bonuses[0]['locations'] === '47.6205000,-122.3493000', 'sample bonus XLSX example passes importer validation' );
 
+if ( ! function_exists( 'get_option' ) ) {
+	function get_option( $key, $default = false ) {
+		return $GLOBALS['test_options'][ $key ] ?? $default;
+	}
+}
+require_once __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-styles.php';
+require_once __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-horses.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-views.php';
 $_GET = array( 'event_id' => '7' );
 $wpdb->view_mode = true;
@@ -187,12 +194,12 @@ if ( PHP_VERSION_ID < 80100 ) { $rosters->setAccessible( true ); }
 ob_start();
 $rosters->invoke( null );
 $html = ob_get_clean();
-check( strpos( $html, '>Add Rider</a>' ) !== false && strpos( $html, '>Import Riders</a>' ) !== false, 'roster toolbar shows Add Rider and Import Riders' );
+check( strpos( $html, '>Add Participant</a>' ) !== false && strpos( $html, '>Import Participants</a>' ) !== false, 'roster toolbar shows Add Participant and Import Participants' );
 check( strpos( $html, 'page=mrsa-roster-import&amp;event_id=7' ) !== false && strpos( $html, 'name="roster_file"' ) === false, 'import link retains event and inline import form is removed' );
 ob_start();
 MRSA_Views::render_roster_import();
 $html = ob_get_clean();
-check( strpos( $html, 'Import Riders — Test Rally' ) !== false && strpos( $html, 'tab=rosters&amp;event_id=7' ) !== false, 'import screen names event and returns to selected roster' );
+check( strpos( $html, 'Import Participants — Test Rally' ) !== false && strpos( $html, 'tab=rosters&amp;event_id=7' ) !== false, 'import screen names event and returns to selected roster' );
 check( strpos( $html, 'multipart/form-data' ) !== false && strpos( $html, 'name="op" value="roster_import"' ) !== false && strpos( $html, 'name="event_id" value="7"' ) !== false, 'dedicated screen submits existing import operation with event and nonce' );
 check( strpos( $html, 'samples/event-roster.csv' ) !== false && strpos( $html, 'bonus-import scanning overrides do not apply' ) !== false, 'sample download and mandatory scanning instructions remain available' );
 MRSA::$site_admin = false;

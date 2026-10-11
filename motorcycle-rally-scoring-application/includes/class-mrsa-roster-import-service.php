@@ -24,14 +24,17 @@ final class MRSA_Roster_Import_Service {
 			$name = strtolower( trim( preg_replace( '/^\xEF\xBB\xBF/', '', (string) $value ) ) );
 			if ( 'registration status' === $name ) {
 				$name = 'status';
+			} elseif ( 'participant id' === $name ) {
+				// Legacy rosters may still use the Rider ID heading.
+				$name = 'rider id';
 			}
 			if ( ! in_array( $name, $allowed, true ) || isset( $columns[ $name ] ) ) {
-				throw new RuntimeException( 'Use the sample columns only, without duplicate headers: Rider ID, Email, Bib ID, Registration Status (or Status), Pillion.' );
+				throw new RuntimeException( 'Use the sample columns only, without duplicate headers: Participant ID (or Rider ID), Email, Bib ID, Registration Status (or Status), Pillion.' );
 			}
 			$columns[ $name ] = $index;
 		}
 		if ( ! isset( $columns['rider id'] ) && ! isset( $columns['email'] ) ) {
-			throw new RuntimeException( 'The roster must have a Rider ID or Email column.' );
+			throw new RuntimeException( 'The roster must have a Participant ID or Email column.' );
 		}
 		if ( count( $rows ) > MRSA_Bonus::MAX_RECORDS ) {
 			throw new RuntimeException( 'Import no more than 5,000 roster rows at once.' );
@@ -44,7 +47,7 @@ final class MRSA_Roster_Import_Service {
 			}
 			$existing = $wpdb->get_results( $wpdb->prepare( 'SELECT rider_id,bib FROM ' . MRSA::table( 'registrations' ) . ' WHERE event_id=%d', $event_id ), ARRAY_A );
 			if ( $wpdb->last_error ) {
-				throw new RuntimeException( 'The existing roster could not be read. No riders were imported.' );
+				throw new RuntimeException( 'The existing roster could not be read. No participants were imported.' );
 			}
 			$used = array_fill_keys( array_column( $existing, 'bib' ), true );
 			$enrolled = array_fill_keys( array_column( $existing, 'rider_id' ), true );
@@ -68,19 +71,19 @@ final class MRSA_Roster_Import_Service {
 					$id = $get( 'rider id' );
 					$email = $get( 'email' );
 					if ( '' === $id && '' === $email ) {
-						throw new RuntimeException( 'Supply a Rider ID or Email.' );
+						throw new RuntimeException( 'Supply a Participant ID or Email.' );
 					}
 					if ( '' !== $email ) { $email = MRSA_Admin::email( $email ); }
 					$rider = '' !== $id ? $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'riders' ) . ' WHERE id=%d FOR UPDATE', MRSA_Admin::integer( $id, 1 ) ), ARRAY_A ) :
 						$wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . MRSA::table( 'riders' ) . ' WHERE email=%s FOR UPDATE', $email ), ARRAY_A );
 					if ( $wpdb->last_error || ! $rider || preg_match( '/^erased-\d+@example\.invalid$/', $rider['email'] ) ) {
-						throw new RuntimeException( 'No eligible existing rider matches this identifier.' );
+						throw new RuntimeException( 'No eligible existing participant matches this identifier.' );
 					}
 					if ( '' !== $email && 0 !== strcasecmp( $email, $rider['email'] ) ) {
-						throw new RuntimeException( 'Rider ID and Email identify different riders.' );
+						throw new RuntimeException( 'Participant ID and Email identify different participants.' );
 					}
 					if ( isset( $enrolled[ $rider['id'] ] ) ) {
-						throw new RuntimeException( 'Rider is already enrolled or repeated in this file.' );
+						throw new RuntimeException( 'Participant is already enrolled or repeated in this file.' );
 					}
 					$enrolled[ $rider['id'] ] = true;
 					$bib = '' === $get( 'bib id' ) ? null : MRSA_Admin::integer( $get( 'bib id' ), 1, (int) $event['max_bib'] );
@@ -94,15 +97,15 @@ final class MRSA_Roster_Import_Service {
 					}
 					$records[] = array_merge( array( 'event_id' => $event_id, 'rider_id' => (int) $rider['id'], 'bib' => $bib, 'pillion' => MRSA_Admin::text( $get( 'pillion' ), 160 ) ), MRSA_Statuses::registration_data( $status ) );
 				} catch ( RuntimeException $exception ) {
-					throw new RuntimeException( 'Roster row ' . ( $line + 2 ) . ': ' . $exception->getMessage() . ' No riders were imported.' );
+					throw new RuntimeException( 'Roster row ' . ( $line + 2 ) . ': ' . $exception->getMessage() . ' No participants were imported.' );
 				}
 			}
-			if ( ! $records ) { throw new RuntimeException( 'The roster file contains no riders.' ); }
+			if ( ! $records ) { throw new RuntimeException( 'The roster file contains no participants.' ); }
 			$next = 1;
 			foreach ( $records as $record ) {
 				if ( null === $record['bib'] ) {
 					while ( isset( $used[ $next ] ) ) { ++$next; }
-					if ( $next > (int) $event['max_bib'] ) { throw new RuntimeException( 'The event has insufficient available bibs. No riders were imported.' ); }
+					if ( $next > (int) $event['max_bib'] ) { throw new RuntimeException( 'The event has insufficient available bibs. No participants were imported.' ); }
 					$record['bib'] = $next;
 					$used[ $next ] = true;
 				}
@@ -115,12 +118,12 @@ final class MRSA_Roster_Import_Service {
 			}
 			throw $exception;
 		}
-		return 'Imported ' . count( $records ) . ' riders into the selected event roster.';
+		return 'Imported ' . count( $records ) . ' participants into the selected event roster.';
 	}
 
 	private static function checked( $result ) {
 		if ( false === $result ) {
-			throw new RuntimeException( 'The record could not be saved. Check for duplicate emails, catalog rows, assigned riders or bibs, then refresh and try again.' );
+			throw new RuntimeException( 'The record could not be saved. Check for duplicate emails, catalog rows, assigned participants or bibs, then refresh and try again.' );
 		}
 		return $result;
 	}

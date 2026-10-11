@@ -19,7 +19,7 @@ final class MRSA_Diagnostics_Deletion_Service {
 					$all_galleries = true;
 					MRSA_Admin::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( 'bonus_submissions' ) ) );
 					MRSA_Admin::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( 'bonus_points' ) ) );
-					foreach ( array( 'registrations', 'status_options', 'event_email_settings', 'event_scorers', 'rider_bikes', 'event_admins', 'events', 'riders', 'bikes' ) as $table ) {
+					foreach ( array( 'registrations', 'status_options', 'event_email_settings', 'event_scorers', 'rider_bikes', 'horses', 'event_admins', 'events', 'riders', 'bikes' ) as $table ) {
 						MRSA_Admin::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( $table ) ) );
 					}
 					$message = 'All application data was deleted. Audit history and ClamAV overrides were retained.';
@@ -27,7 +27,7 @@ final class MRSA_Diagnostics_Deletion_Service {
 				case 'diagnostics_delete_bikes':
 					MRSA_Admin::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( 'rider_bikes' ) ) );
 					MRSA_Admin::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( 'bikes' ) ) );
-					$message = 'All motorcycle catalog and rider-motorcycle data was deleted.';
+					$message = 'All motorcycle catalog and participant-motorcycle data was deleted.';
 					break;
 				case 'diagnostics_delete_roster':
 					$event_id = MRSA_Admin::integer( $input['event_id'] ?? '', 1 );
@@ -36,7 +36,7 @@ final class MRSA_Diagnostics_Deletion_Service {
 					$staged_submission_files = MRSA_Bonus::stage_submission_files( $submission_rows ?: array() );
 					MRSA_Admin::checked( $wpdb->delete( MRSA::table( 'bonus_submissions' ), array( 'event_id' => $event_id ) ) );
 					MRSA_Admin::checked( $wpdb->delete( MRSA::table( 'registrations' ), array( 'event_id' => $event_id ) ) );
-					$message = 'The selected event roster and its rider bonus submissions were deleted.';
+					$message = 'The selected event roster and its participant bonus submissions were deleted.';
 					break;
 				case 'diagnostics_delete_bonus_points':
 					$event_id = MRSA_Admin::integer( $input['event_id'] ?? '', 1 );
@@ -55,16 +55,17 @@ final class MRSA_Diagnostics_Deletion_Service {
 				case 'diagnostics_delete_rider':
 					$rider_id = MRSA_Admin::integer( $input['rider_id'] ?? '', 1 );
 					if ( ! MRSA::row( 'riders', $rider_id ) ) {
-						throw new RuntimeException( 'The selected rider no longer exists.' );
+						throw new RuntimeException( 'The selected participant no longer exists.' );
 					}
 					$submission_rows = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,image_file FROM ' . MRSA::table( 'bonus_submissions' ) . ' WHERE rider_id=%d', $rider_id ), ARRAY_A );
 					$staged_submission_files = MRSA_Bonus::stage_submission_files( $submission_rows ?: array() );
 					MRSA_Admin::checked( $wpdb->delete( MRSA::table( 'bonus_submissions' ), array( 'rider_id' => $rider_id ) ) );
 					MRSA_Admin::checked( $wpdb->delete( MRSA::table( 'registrations' ), array( 'rider_id' => $rider_id ) ) );
 					MRSA_Admin::checked( $wpdb->delete( MRSA::table( 'rider_bikes' ), array( 'rider_id' => $rider_id ) ) );
+					MRSA_Admin::checked( $wpdb->delete( MRSA::table( 'horses' ), array( 'rider_id' => $rider_id ) ) );
 					MRSA_Admin::checked( $wpdb->delete( MRSA::table( 'riders' ), array( 'id' => $rider_id ) ) );
-					$message = 'The selected rider and associated plugin data were deleted.';
-					$audit_detail = ' Rider ID: ' . $rider_id . '.';
+					$message = 'The selected participant and associated plugin data were deleted.';
+					$audit_detail = ' Participant ID: ' . $rider_id . '.';
 					break;
 				case 'diagnostics_delete_audit':
 					MRSA_Admin::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( 'import_audit' ) ) );

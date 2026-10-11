@@ -59,7 +59,7 @@ final class MRSA_Statuses {
 		try {
 			$ids = $wpdb->get_col( 'SELECT id FROM ' . MRSA::table( 'events' ) . ' ORDER BY id FOR UPDATE' );
 			if ( ! is_array( $ids ) || $wpdb->last_error ) {
-				throw new RuntimeException( 'Cancelled rider migration could not read the events.' );
+				throw new RuntimeException( 'Cancelled participant migration could not read the events.' );
 			}
 			foreach ( $ids as $id ) {
 				if ( ! in_array( 'DNS', array_column( self::options( (int) $id, 'event' ), 'label' ), true ) ) {
@@ -70,7 +70,7 @@ final class MRSA_Statuses {
 			MRSA::commit_transaction();
 		} catch ( RuntimeException $exception ) {
 			if ( ! MRSA::rollback_transaction() ) {
-				throw new RuntimeException( $exception->getMessage() . ' Cancelled rider migration rollback failed; inspect the database before retrying.' );
+				throw new RuntimeException( $exception->getMessage() . ' Cancelled participant migration rollback failed; inspect the database before retrying.' );
 			}
 			throw $exception;
 		}
@@ -101,7 +101,7 @@ final class MRSA_Statuses {
 	public static function initial_registration( $event_id ) {
 		$labels = self::enabled_labels( self::options( $event_id, 'registration' ) );
 		if ( ! $labels ) {
-			throw new RuntimeException( 'Enable a Registration Status before enrolling riders.' );
+			throw new RuntimeException( 'Enable a Registration Status before enrolling participants.' );
 		}
 		return in_array( 'Initial Registration', $labels, true ) ? 'Initial Registration' : $labels[0];
 	}

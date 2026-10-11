@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
 final class MRSA {
 	public static function table( $name ) {
 		global $wpdb;
-		$allowed = array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
+		$allowed = array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
 		if ( ! in_array( $name, $allowed, true ) ) {
 			throw new InvalidArgumentException( 'Unknown MRSA table.' );
 		}
@@ -112,10 +112,24 @@ final class MRSA {
 		if ( MRSA_DB_VERSION !== $previous_db_version ) {
 			$wpdb->query( 'UPDATE ' . self::table( 'rider_bikes' ) . ' rb JOIN ' . self::table( 'bikes' ) . ' b ON b.id=rb.bike_id SET rb.model_year=b.year WHERE rb.model_year=0 AND b.year BETWEEN 1000 AND 9999' );
 		}
+		$t = self::table( 'horses' );
+		dbDelta( "CREATE TABLE $t (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			rider_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			name varchar(100) NOT NULL,
+			breed varchar(80) NOT NULL DEFAULT '',
+			sex varchar(20) NOT NULL DEFAULT '',
+			age tinyint(3) unsigned DEFAULT NULL,
+			color varchar(60) NOT NULL DEFAULT '',
+			PRIMARY KEY  (id),
+			KEY rider_id (rider_id)
+		) ENGINE=InnoDB $c;" );
 		$t = self::table( 'events' );
 		dbDelta( "CREATE TABLE $t (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			name varchar(160) NOT NULL,
+			description text NOT NULL,
+			hunt_style varchar(20) NOT NULL DEFAULT 'motorcycle',
 			max_bib int(10) unsigned NOT NULL DEFAULT 100,
 			logo_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			event_date date NOT NULL,
@@ -327,6 +341,10 @@ final class MRSA {
 				$fields[] = array( 'name' => 'Motorcycle', 'value' => $bike['make'] . ' / ' . $bike['model'] . ' / ' . ( (int) $bike['model_year'] ? $bike['model_year'] : 'Unspecified year' ) );
 				$fields[] = array( 'name' => 'Fuel capacity', 'value' => $bike['fuel_capacity'] );
 			}
+			$horses = $wpdb->get_results( $wpdb->prepare( 'SELECT name,breed,sex,age,color FROM ' . self::table( 'horses' ) . ' WHERE rider_id=%d ORDER BY id', $rider['id'] ), ARRAY_A );
+			foreach ( $horses as $horse ) {
+				$fields[] = array( 'name' => 'Horse (name / breed / sex / age / color)', 'value' => implode( ' / ', array( $horse['name'], $horse['breed'], $horse['sex'], (string) $horse['age'], $horse['color'] ) ) );
+			}
 			$events = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,r.bib,r.pillion,r.registration_status,r.status,r.status_manual,r.score,r.placing,e.min_finisher_points FROM ' . self::table( 'registrations' ) . ' r JOIN ' . self::table( 'events' ) . ' e ON e.id=r.event_id WHERE r.rider_id=%d', $rider['id'] ), ARRAY_A );
 			foreach ( $events as $event ) {
 				$result_status = MRSA_Results::status( $event, $event['min_finisher_points'] );
@@ -374,8 +392,9 @@ final class MRSA {
 				$submission_files = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,image_file FROM ' . self::table( 'bonus_submissions' ) . ' WHERE rider_id=%d', $id ), ARRAY_A );
 				$staged_submission_files = MRSA_Bonus::stage_submission_files( $submission_files ?: array() );
 				self::begin_transaction();
-				$success = false !== $wpdb->update( self::table( 'riders' ), array( 'name' => 'Erased rider ' . $id, 'alias' => '', 'email' => 'erased-' . $id . '@example.invalid', 'phone' => '', 'emergency_name' => '', 'emergency_email' => '', 'emergency_phone' => '', 'insurance' => '', 'other' => '' ), array( 'id' => $id ) );
+				$success = false !== $wpdb->update( self::table( 'riders' ), array( 'name' => 'Erased participant ' . $id, 'alias' => '', 'email' => 'erased-' . $id . '@example.invalid', 'phone' => '', 'emergency_name' => '', 'emergency_email' => '', 'emergency_phone' => '', 'insurance' => '', 'other' => '' ), array( 'id' => $id ) );
 				$success = false !== $wpdb->delete( self::table( 'rider_bikes' ), array( 'rider_id' => $id ) ) && $success;
+				$success = false !== $wpdb->delete( self::table( 'horses' ), array( 'rider_id' => $id ) ) && $success;
 				$success = false !== $wpdb->update( self::table( 'registrations' ), array( 'pillion' => '' ), array( 'rider_id' => $id ) ) && $success;
 				$success = false !== $wpdb->update( self::table( 'bonus_submissions' ), array( 'sender_email' => 'erased-' . $id . '@example.invalid', 'submission_description' => '', 'image_file' => '' ), array( 'rider_id' => $id ) ) && $success;
 				if ( ! $success ) {
@@ -388,7 +407,7 @@ final class MRSA {
 					try {
 						MRSA_Bonus::restore_submission_files( $staged_submission_files );
 					} catch ( RuntimeException $restore_exception ) {
-						error_log( 'MRSA privacy erasure image restoration failed for rider #' . $id . ': ' . $restore_exception->getMessage() );
+						error_log( 'MRSA privacy erasure image restoration failed for participant #' . $id . ': ' . $restore_exception->getMessage() );
 					}
 				}
 				$success = false;
@@ -397,13 +416,13 @@ final class MRSA {
 				try {
 					MRSA_Bonus::finish_staged_submission_files( $staged_submission_files );
 				} catch ( RuntimeException $cleanup_exception ) {
-					error_log( 'MRSA privacy erasure staged image cleanup failed for rider #' . $id . ': ' . $cleanup_exception->getMessage() );
+					error_log( 'MRSA privacy erasure staged image cleanup failed for participant #' . $id . ': ' . $cleanup_exception->getMessage() );
 					$success = false;
 				}
 			}
 			$removed = $success;
 			$retained = true;
-			$messages[] = $success ? 'Rider personal information and submission photos/descriptions erased; event registration IDs, bibs, submission decisions, statuses, scores and placing retained for event integrity.' : 'Unable to erase rider information; please retry or contact the site administrator.';
+			$messages[] = $success ? 'Participant personal information and submission photos/descriptions erased; event registration IDs, bibs, submission decisions, statuses, scores and placing retained for event integrity.' : 'Unable to erase participant information; please retry or contact the site administrator.';
 		}
 		$user = get_user_by( 'email', $email );
 		if ( $user ) {

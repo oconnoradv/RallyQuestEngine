@@ -330,7 +330,7 @@ final class MRSA_Email_Submissions {
 			$sender
 		), ARRAY_A );
 		if ( ! $registration ) {
-			return self::invalid_message( $base, 'The sender email does not match a rider registered for this event.' );
+			return self::invalid_message( $base, 'The sender email does not match a participant registered for this event.' );
 		}
 		$bonus_id = self::subject_bonus_id( $event_id, $subject );
 		if ( ! $bonus_id ) {
@@ -371,7 +371,7 @@ final class MRSA_Email_Submissions {
 		$row = array_merge( $base, $registration, array( 'bonus_id' => $bonus_id, 'image_file' => $image_file, 'status' => 'pending', 'rejection_description' => '' ) );
 		if ( false === $wpdb->insert( MRSA::table( 'bonus_submissions' ), $row ) ) {
 			self::remove_submission_image( $event_id, $image_file );
-			throw new RuntimeException( 'The validated rider submission could not be recorded.' );
+			throw new RuntimeException( 'The validated participant submission could not be recorded.' );
 		}
 		return true;
 	}
@@ -438,14 +438,14 @@ final class MRSA_Email_Submissions {
 				}
 				$duplicate = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM " . MRSA::table( 'bonus_submissions' ) . " WHERE event_id=%d AND rider_id=%d AND bonus_id=%s AND status='accepted' AND id<>%d FOR UPDATE", $event_id, $submission['rider_id'], $submission['bonus_id'], $submission_id ) );
 				if ( $duplicate ) {
-					throw new RuntimeException( 'This rider already has an accepted submission for that bonus ID.' );
+					throw new RuntimeException( 'This participant already has an accepted submission for that bonus ID.' );
 				}
 				$points = $wpdb->get_var( $wpdb->prepare( 'SELECT points FROM ' . MRSA::table( 'bonus_points' ) . ' WHERE event_id=%d AND bonus_id=%s', $event_id, $submission['bonus_id'] ) );
 				if ( null === $points ) {
 					throw new RuntimeException( 'The matching Bonus Point Library entry no longer exists.' );
 				}
 				if ( false === $wpdb->query( $wpdb->prepare( 'UPDATE ' . MRSA::table( 'registrations' ) . ' SET score=score+%d WHERE id=%d', $points, $registration ) ) ) {
-					throw new RuntimeException( 'The rider score could not be updated.' );
+					throw new RuntimeException( 'The participant score could not be updated.' );
 				}
 			}
 			$result = $wpdb->update( MRSA::table( 'bonus_submissions' ), array(
@@ -464,7 +464,7 @@ final class MRSA_Email_Submissions {
 			MRSA::rollback_transaction();
 			throw $exception;
 		}
-		return 'accepted' === $decision ? 'Submission accepted and ' . (int) $points . ' points added to the rider total.' : 'Submission rejected and retained in review history.';
+		return 'accepted' === $decision ? 'Submission accepted and ' . (int) $points . ' points added to the participant total.' : 'Submission rejected and retained in review history.';
 	}
 
 	public static function image_url( $event_id, $image_file ) {

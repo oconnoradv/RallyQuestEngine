@@ -33,13 +33,15 @@ final class MRSA_Public_Results {
 
 	public static function shortcode( $attributes = array() ) {
 		$attributes = shortcode_atts( array( 'id' => '' ), $attributes, 'mrsa_results' );
-		$id = $attributes['id'];
-		if ( ( ! is_string( $id ) && ! is_int( $id ) ) || ! preg_match( '/^[1-9]\d{0,17}$/D', (string) $id ) || (float) $id > PHP_INT_MAX ) {
-			return '<p class="mrsa-public-results-message">' . esc_html( 'Results unavailable: specify a valid MRSA Event ID.' ) . '</p>';
+		// Accepts the style-qualified Event ID (for example MC-7) or the legacy numeric ID.
+		$parsed = MRSA_Styles::parse_event_code( $attributes['id'] );
+		if ( null === $parsed ) {
+			return '<p class="mrsa-public-results-message">' . esc_html( 'Results unavailable: specify a valid Event ID such as MC-7.' ) . '</p>';
 		}
+		$id = $parsed['id'];
 		global $wpdb;
 		try {
-			$results = ( new MRSA_Queries( $wpdb ) )->public_results( (int) $id );
+			$results = ( new MRSA_Queries( $wpdb ) )->public_results( $id, $parsed['style'] );
 		} catch ( RuntimeException $exception ) {
 			error_log( 'MRSA public results #' . (int) $id . ': ' . $exception->getMessage() );
 			return '<p class="mrsa-public-results-message">' . esc_html( 'Results are temporarily unavailable. Please try again later.' ) . '</p>';
@@ -48,11 +50,17 @@ final class MRSA_Public_Results {
 			return '<p class="mrsa-public-results-message">' . esc_html( 'Results are not available for this event.' ) . '</p>';
 		}
 		$html = '<section class="mrsa-public-results"><h2>' . esc_html( $results['name'] ) . '</h2>';
+		if ( $results['logo_id'] && wp_attachment_is_image( $results['logo_id'] ) ) {
+			$html .= '<figure class="mrsa-public-results-image">' . wp_get_attachment_image( $results['logo_id'], 'medium', false, array( 'alt' => $results['name'] ) ) . '</figure>';
+		}
+		if ( '' !== trim( (string) $results['description'] ) ) {
+			$html .= '<div class="mrsa-public-results-description">' . wpautop( esc_html( $results['description'] ) ) . '</div>';
+		}
 		if ( ! $results['rows'] ) {
-			return $html . '<p>' . esc_html( 'No rider results have been recorded for this event.' ) . '</p></section>';
+			return $html . '<p>' . esc_html( 'No participant results have been recorded for this event.' ) . '</p></section>';
 		}
 		$html .= '<p>' . esc_html( 'Equal scores share a place. Preliminary Finisher is provisional; final Event Status is assigned by an administrator.' ) . '</p><div class="mrsa-public-results-scroll" role="region" aria-label="' . esc_attr( 'Overall results: ' . $results['name'] ) . '" tabindex="0"><table><caption>' . esc_html( $results['name'] . ' - Overall Results' ) . '</caption><thead><tr>';
-		foreach ( array( 'Bib', 'Rider Name', 'Total Score', 'Accepted Bonuses', 'Rejected Bonuses', 'Event Status', 'Overall Placing' ) as $heading ) {
+		foreach ( array( 'Bib', 'Participant Name', 'Total Score', 'Accepted Bonuses', 'Rejected Bonuses', 'Event Status', 'Overall Placing' ) as $heading ) {
 			$html .= '<th scope="col">' . esc_html( $heading ) . '</th>';
 		}
 		$html .= '</tr></thead><tbody>';

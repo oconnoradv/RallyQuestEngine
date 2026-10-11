@@ -164,7 +164,7 @@ check( strpos( $html, 'id="mrsa-configuration"' ) < strpos( $html, '<h3>Database
 $operations = array( 'all', 'bikes', 'roster', 'bonus_points', 'rider', 'audit' );
 foreach ( $operations as $suffix ) {
 	$operation = 'diagnostics_delete_' . $suffix;
-	$wpdb->tables = array_fill_keys( array( 'registrations', 'status_options', 'rider_bikes', 'event_admins', 'event_scorers', 'event_email_settings', 'events', 'riders', 'bikes', 'bonus_points', 'bonus_submissions' ), array( array( 'id' => 9, 'event_id' => 7, 'rider_id' => 9, 'image_file' => '' ) ) );
+	$wpdb->tables = array_fill_keys( array( 'registrations', 'status_options', 'rider_bikes', 'horses', 'event_admins', 'event_scorers', 'event_email_settings', 'events', 'riders', 'bikes', 'bonus_points', 'bonus_submissions' ), array( array( 'id' => 9, 'event_id' => 7, 'rider_id' => 9, 'image_file' => '' ) ) );
 	$wpdb->tables['import_audit'] = array(
 		array( 'user_id' => 1, 'action' => 'bypass_enabled' ),
 		array( 'user_id' => 2, 'action' => 'bypass_enabled' ),
@@ -195,7 +195,7 @@ foreach ( $operations as $suffix ) {
 		check( count( $wpdb->tables['import_audit'] ) === 3 && MRSA_Bonus::bypass_enabled(), $suffix . ': ordinary deletions preserve previous audit and overrides' );
 	}
 	if ( 'rider' === $suffix ) {
-		check( strpos( $audit['detail'], 'Rider ID: 9' ) !== false, 'rider deletion retains deleted rider ID in audit details' );
+		check( strpos( $audit['detail'], 'Participant ID: 9' ) !== false, 'rider deletion retains deleted rider ID in audit details' );
 	}
 	$_POST['verification_code'] = 'WRONG';
 	try {

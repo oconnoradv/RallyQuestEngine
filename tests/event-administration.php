@@ -87,6 +87,12 @@ function wp_list_pluck( $rows, $key ) { return array_column( $rows, $key ); }
 function wp_timezone_string() { return 'UTC'; }
 function wp_timezone() { return new DateTimeZone( 'UTC' ); }
 function get_post_type( $id ) { return ''; }
+function checked( $a, $b = true, $echo = true ) { return (string) $a === (string) $b ? ' checked' : ''; }
+function update_option( $key, $value, $autoload = null ) { $GLOBALS['test_options'][ $key ] = $value; return true; }
+function sanitize_textarea_field( $value ) { return trim( strip_tags( (string) $value ) ); }
+function wpautop( $value ) { return '<p>' . $value . '</p>'; }
+function wp_attachment_is_image( $id ) { return 55 === (int) $id; }
+function wp_get_attachment_image( $id, $size = 'thumbnail', $icon = false, $attr = array() ) { return '<img src="fixture-' . (int) $id . '.jpg" alt="' . esc_attr( $attr['alt'] ?? '' ) . '">'; }
 function add_shortcode( $tag, $callback ) { $GLOBALS['shortcodes'][ $tag ] = $callback; }
 function add_action( $hook, $callback ) { $GLOBALS['hooks'][ $hook ] = $callback; }
 function wp_enqueue_style( $handle, $url, $dependencies, $version ) { $GLOBALS['styles'][ $handle ] = $url; }
@@ -106,6 +112,13 @@ require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-email-submissions.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-bonus.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-roster-import-service.php';
+if ( ! function_exists( 'get_option' ) ) {
+	function get_option( $key, $default = false ) {
+		return $GLOBALS['test_options'][ $key ] ?? $default;
+	}
+}
+require_once __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-styles.php';
+require_once __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-horses.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-views.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-public-results.php';
 
@@ -132,7 +145,8 @@ function render( $method, ...$args ) {
 
 $wpdb = new Event_Test_DB();
 foreach ( array(
-	'events' => "id INTEGER PRIMARY KEY,name TEXT,event_date TEXT,max_bib INTEGER,min_finisher_points INTEGER,logo_id INTEGER DEFAULT 0,public_results_enabled INTEGER NOT NULL DEFAULT 0,registration_open TEXT,registration_close TEXT,start_at TEXT,end_at TEXT,rider_price TEXT,pillion_price TEXT,location TEXT,latitude TEXT,longitude TEXT",
+	'events' => "id INTEGER PRIMARY KEY,name TEXT,description TEXT DEFAULT '',hunt_style TEXT DEFAULT 'motorcycle',event_date TEXT,max_bib INTEGER,min_finisher_points INTEGER,logo_id INTEGER DEFAULT 0,public_results_enabled INTEGER NOT NULL DEFAULT 0,registration_open TEXT,registration_close TEXT,start_at TEXT,end_at TEXT,rider_price TEXT,pillion_price TEXT,location TEXT,latitude TEXT,longitude TEXT",
+	'horses' => "id INTEGER PRIMARY KEY,rider_id INTEGER DEFAULT 0,name TEXT,breed TEXT DEFAULT '',sex TEXT DEFAULT '',age INTEGER,color TEXT DEFAULT ''",
 	'riders' => "id INTEGER PRIMARY KEY,name TEXT,email TEXT,alias TEXT DEFAULT '',phone TEXT DEFAULT ''",
 	'registrations' => "id INTEGER PRIMARY KEY,event_id INTEGER,rider_id INTEGER,bib INTEGER,pillion TEXT DEFAULT '',registration_status TEXT DEFAULT 'Initial Registration',status TEXT DEFAULT 'Registered',status_manual INTEGER DEFAULT 0,score INTEGER DEFAULT 0,placing INTEGER",
 	'status_options' => 'id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER,kind TEXT,label TEXT COLLATE NOCASE,enabled INTEGER,UNIQUE(event_id,kind,label)',
@@ -145,7 +159,7 @@ foreach ( array(
 	MRSA_Admin::checked( $wpdb->query( 'CREATE TABLE ' . MRSA::table( $table ) . ' (' . $schema . ')' ) );
 }
 foreach ( array( 7, 8 ) as $id ) {
-	$wpdb->insert( MRSA::table( 'events' ), array( 'id' => $id, 'name' => 'Event ' . $id, 'event_date' => '2026-10-10', 'max_bib' => 100, 'min_finisher_points' => 100 ) );
+	$wpdb->insert( MRSA::table( 'events' ), array( 'id' => $id, 'name' => 'Event ' . $id, 'hunt_style' => 7 === $id ? 'motorcycle' : 'horse', 'event_date' => '2026-10-10', 'max_bib' => 100, 'min_finisher_points' => 100 ) );
 }
 $wpdb->insert( MRSA::table( 'riders' ), array( 'id' => 10, 'name' => 'Rider One', 'email' => 'one@example.test' ) );
 $wpdb->insert( MRSA::table( 'riders' ), array( 'id' => 11, 'name' => 'Rider Two', 'email' => 'two@example.test' ) );
@@ -262,8 +276,8 @@ check( strpos( $html, 'page=mrsa-rider-score&amp;event_id=7&amp;rider_id=10&amp;
 check( strpos( $html, '<td>—</td><td>Unmatched message</td>' ) !== false && strpos( $html, 'rider_id=0&amp;from=reviewed' ) === false, 'unmatched reviewed messages have no broken score-sheet hyperlink' );
 request( array( 'page' => 'mrsa', 'tab' => 'riders' ) );
 $riders_html = '<div class="wrap mrsa">' . render( 'header' ) . render( 'rider_setup' ) . '</div>';
-check( strpos( $riders_html, 'Choose Event' ) !== false && strpos( $riders_html, 'value="7" selected="selected"' ) !== false, 'header reflects the remembered authorized event' );
-check( strpos( $riders_html, '>Add Rider</a>' ) < strpos( $riders_html, 'Search all records' ) && substr_count( $riders_html, 'Search all records' ) === 1 && strpos( $riders_html, 'mrsa-riders-toolbar' ) !== false, 'Riders toolbar places a single server search after Add Rider' );
+check( strpos( $riders_html, 'Choose Event' ) !== false && strpos( $riders_html, 'value="7" data-style="motorcycle" selected="selected"' ) !== false && strpos( $riders_html, 'data-style="horse">Event 8 (HB-8)' ) !== false && strpos( $riders_html, 'id="mrsa-header-style"' ) !== false, 'header reflects the remembered authorized event' );
+check( false !== strpos( $riders_html, '>Add Participant</a>' ) && strpos( $riders_html, '>Add Participant</a>' ) < strpos( $riders_html, 'Search all records' ) && substr_count( $riders_html, 'Search all records' ) === 1 && strpos( $riders_html, 'mrsa-riders-toolbar' ) !== false, 'Participants toolbar places a single server search after Add Participant' );
 $GLOBALS['actor'] = 3;
 request( array( 'page' => 'mrsa-rider-score', 'event_id' => '8', 'rider_id' => '10', 'from' => 'reviewed' ) );
 $html = render( 'render_rider_score' );
@@ -283,7 +297,7 @@ check( strpos( $html, 'name="status_kind" value="registration"' ) !== false && s
 $wpdb->update( MRSA::table( 'event_email_settings' ), array( 'last_test_error' => 'Fixture connection error' ), array( 'event_id' => 7 ) );
 $failed_html = render( 'render_event_edit' );
 check( strpos( $failed_html, 'mrsa-email-connection-failed" open' ) !== false && strpos( $failed_html, 'Fixture connection error' ) !== false, 'failed inbox test remains expanded and prominent' );
-check( strpos( $html, 'Public Results Embed' ) !== false && strpos( $html, '[mrsa_results id=&quot;7&quot;]' ) !== false && strpos( $html, 'name="mrsa_embed_event_id" value="7" readonly="readonly"' ) !== false, 'event edit provides an explicit read-only event ID and copyable shortcode' );
+check( strpos( $html, 'Public Results Embed' ) !== false && strpos( $html, '[mrsa_results id=&quot;MC-7&quot;]' ) !== false && strpos( $html, 'name="mrsa_embed_event_id" value="MC-7" readonly="readonly"' ) !== false, 'event edit provides an explicit read-only event ID and copyable shortcode' );
 check( strpos( $html, 'name="op" value="public_results"' ) !== false && strpos( $html, 'name="public_results_enabled" value="1" checked' ) === false && strpos( $html, 'purge WordPress/CDN' ) !== false, 'public results control is off by default with cache-purge guidance' );
 
 MRSA_Statuses::change_option( 7, 'registration', 'enable', 'Cancelled' );
@@ -339,11 +353,24 @@ check( $queries->rider_score( 8, 14 )['effective_status'] === 'DNS', 'new-rider 
 $wpdb->insert( MRSA::table( 'riders' ), array( 'id' => 15, 'name' => 'Rider Six', 'email' => 'six@example.test' ) );
 MRSA_Roster_Import_Service::import_rows( 8, array( 'Rider ID', 'Registration Status' ), array( array( '15', 'Cancelled' ) ) );
 check( $queries->rider_score( 8, 15 )['effective_status'] === 'DNS', 'roster imports set Cancelled riders to manual DNS' );
-$_POST = array( 'id' => '0', 'name' => 'New Event', 'max_bib' => '100', 'logo_id' => '0', 'min_finisher_points' => '100', 'registration_open' => '2026-10-01T00:00', 'registration_close' => '2026-10-02T00:00', 'start_at' => '2026-10-03T00:00', 'end_at' => '2026-10-04T00:00' );
+$event_post = array( 'id' => '0', 'name' => 'New Event', 'description' => 'A desert scavenger hunt.', 'hunt_style' => 'bicycle', 'max_bib' => '100', 'logo_id' => '0', 'min_finisher_points' => '100', 'rider_price' => '25.00', 'pillion_price' => '', 'registration_open' => '2026-10-01T00:00', 'registration_close' => '2026-10-02T00:00', 'start_at' => '2026-10-03T00:00', 'end_at' => '2026-10-04T00:00' );
 $create_event = new ReflectionMethod( 'MRSA_Admin', 'event' );
 if ( PHP_VERSION_ID < 80100 ) { $create_event->setAccessible( true ); }
+foreach ( array( 'description' => 'description is required', 'rider_price' => 'price is required', 'min_finisher_points' => 'Minimum Finisher Points is required' ) as $missing => $message ) {
+	$_POST = array_merge( $event_post, array( $missing => '' ) );
+	rejects( function () use ( $create_event ) { $create_event->invoke( null ); }, $message );
+}
+$_POST = array_merge( $event_post, array( 'hunt_style' => 'skateboard' ) );
+rejects( function () use ( $create_event ) { $create_event->invoke( null ); }, 'valid scavenger hunt style' );
+$_POST = $event_post;
 $new_event_id = $create_event->invoke( null );
-check( (int) MRSA::row( 'events', $new_event_id )['public_results_enabled'] === 0, 'new events keep public results disabled and receive seeded status choices' );
+$new_event = MRSA::row( 'events', $new_event_id );
+check( (int) $new_event['public_results_enabled'] === 0, 'new events keep public results disabled and receive seeded status choices' );
+check( 'bicycle' === $new_event['hunt_style'] && 'A desert scavenger hunt.' === $new_event['description'] && MRSA_Styles::event_code( $new_event ) === 'BC-' . $new_event_id && '0.00' === $new_event['pillion_price'], 'events save description, style-qualified ID and optional pillion price' );
+check( MRSA_Views::event_details_complete( $new_event ) && ! MRSA_Views::event_details_complete( array_merge( $new_event, array( 'description' => ' ' ) ) ), 'event details complete only when all required fields are stored' );
+$details_html = render( 'event_form', $new_event_id, $new_event );
+check( strpos( $details_html, 'mrsa-complete' ) !== false && strpos( $details_html, 'Event Details: BC-' . $new_event_id ) !== false && strpos( $details_html, '<textarea name="description" rows="4" maxlength="5000" required>' ) !== false, 'completed event details are green, collapsed and show the coded Event ID' );
+check( strpos( render( 'event_form', 0, array() ), ' open><summary><h2>Add Event' ) !== false, 'incomplete event details remain expanded' );
 $_POST = array();
 
 MRSA_Public_Results::init();
@@ -385,12 +412,18 @@ foreach ( array( 'one@example.test', 'Registration Status', 'name="op"', '<form'
 }
 $other_html = MRSA_Public_Results::shortcode( array( 'id' => '8' ) );
 check( strpos( $other_html, '<h2>Event 8</h2>' ) !== false && substr_count( $public_html . $other_html, '<section class="mrsa-public-results">' ) === 2 && strpos( $public_html . $other_html, ' id=') === false, 'multiple embeds isolate events without duplicate DOM IDs' );
-check( strpos( MRSA_Public_Results::shortcode( array( 'id' => (string) $new_event_id ) ), 'No rider results' ) !== false, 'enabled empty events show an explicit empty-results message' );
-foreach ( array( '', '0', '-7', '7 OR 1=1', '7.0', '9999999999999999999', array( '7' ), true ) as $id ) {
+check( strpos( MRSA_Public_Results::shortcode( array( 'id' => (string) $new_event_id ) ), 'No participant results' ) !== false, 'enabled empty events show an explicit empty-results message' );
+foreach ( array( '', '0', '-7', '7 OR 1=1', '7.0', '9999999999999999999', array( '7' ), true, 'XX-7', 'MC-', 'MC-0', 'MC 7' ) as $id ) {
 	$before_queries = count( $wpdb->sql );
-	check( strpos( MRSA_Public_Results::shortcode( array( 'id' => $id ) ), 'valid MRSA Event ID' ) !== false && count( $wpdb->sql ) === $before_queries, 'invalid shortcode IDs are rejected before querying' );
+	check( strpos( MRSA_Public_Results::shortcode( array( 'id' => $id ) ), 'valid Event ID' ) !== false && count( $wpdb->sql ) === $before_queries, 'invalid shortcode IDs are rejected before querying' );
 }
 check( strpos( MRSA_Public_Results::shortcode( array( 'id' => '999' ) ), 'Results are not available' ) !== false, 'missing and unpublished events have the same non-disclosing response' );
+check( strpos( MRSA_Public_Results::shortcode( array( 'id' => 'MC-7' ) ), 'Rider One' ) !== false && strpos( MRSA_Public_Results::shortcode( array( 'id' => 'mc-7' ) ), 'Rider One' ) !== false, 'style-qualified shortcode IDs render results' );
+check( strpos( MRSA_Public_Results::shortcode( array( 'id' => 'HB-7' ) ), 'Results are not available' ) !== false && strpos( MRSA_Public_Results::shortcode( array( 'id' => 'HB-8' ) ), '<h2>Event 8</h2>' ) !== false, 'shortcode style prefixes must match the event style' );
+$wpdb->update( MRSA::table( 'events' ), array( 'description' => "Ride <b>far</b>\nand <script>x</script>", 'logo_id' => 55 ), array( 'id' => 7 ) );
+$described = MRSA_Public_Results::shortcode( array( 'id' => 'MC-7' ) );
+check( strpos( $described, 'mrsa-public-results-description' ) !== false && strpos( $described, '&lt;b&gt;far&lt;/b&gt;' ) !== false && strpos( $described, '<script>' ) === false && strpos( $described, 'src="fixture-55.jpg"' ) !== false && strpos( $described, 'mrsa-public-results-image' ) < strpos( $described, '<table' ), 'public results include the escaped event description and image above the table' );
+$wpdb->update( MRSA::table( 'events' ), array( 'description' => '', 'logo_id' => 0 ), array( 'id' => 7 ) );
 $wpdb->update( MRSA::table( 'events' ), array( 'name' => '<script>alert("event")</script>' ), array( 'id' => 7 ) );
 $wpdb->update( MRSA::table( 'riders' ), array( 'name' => '<img src=x onerror=alert(1)>' ), array( 'id' => 10 ) );
 $escaped = MRSA_Public_Results::shortcode( array( 'id' => '7' ) );
@@ -414,6 +447,35 @@ MRSA_Public_Results::save_visibility( 7, 0 );
 check( MRSA_Public_Results::shortcode( array( 'id' => '7' ) ) === $off, 'disabling publication hides results on the next render, even from administrators' );
 $edit_off = render( 'public_results_embed', MRSA::row( 'events', 7 ) );
 check( strpos( $edit_off, 'value="1" checked' ) === false, 'disabled publication is reflected in the edit checkbox' );
+// Scavenger hunt styles, Welcome and horse conveyance.
+check( MRSA_Styles::parse_event_code( 'HB-12' ) === array( 'id' => 12, 'style' => 'horse' ) && MRSA_Styles::parse_event_code( 12 ) === array( 'id' => 12, 'style' => null ) && null === MRSA_Styles::parse_event_code( 'ZZ-12' ), 'event codes parse style prefixes and legacy numeric IDs' );
+check( '' === MRSA_Styles::saved_primary() && 'motorcycle' === MRSA_Styles::primary(), 'primary style defaults to Motorcycle until chosen' );
+$welcome = render( 'welcome' );
+check( strpos( $welcome, ' open><summary><h2>Welcome to Rally Quest Engine' ) !== false && strpos( $welcome, 'name="op" value="primary_style"' ) !== false && strpos( $welcome, 'value="geocache"' ) !== false, 'unsaved Welcome section is expanded with the primary style form' );
+rejects( function () { MRSA_Styles::save_primary( 'skateboard' ); }, 'primary scavenger hunt style' );
+MRSA_Styles::save_primary( 'horse' );
+$welcome = render( 'welcome' );
+check( strpos( $welcome, 'mrsa-complete"><summary>' ) !== false && strpos( $welcome, 'Primary style: Horseback' ) !== false, 'saved Welcome section is green and collapsed' );
+rejects( function () { MRSA_Horses::data( array( 'name' => '' ) ); }, 'required text field' );
+rejects( function () { MRSA_Horses::data( array( 'name' => 'Ace', 'sex' => 'Unicorn' ) ); }, 'horse sex' );
+rejects( function () { MRSA_Horses::data( array( 'name' => 'Ace', 'age' => '61' ) ); }, 'Invalid' );
+$horse_a = MRSA_Horses::save( 0, MRSA_Horses::data( array( 'name' => 'Ace', 'breed' => 'Arabian', 'sex' => 'Mare', 'age' => '9', 'color' => 'Bay', 'rider_id' => '10' ) ) );
+$horse_b = MRSA_Horses::save( 0, MRSA_Horses::data( array( 'name' => 'Blaze', 'age' => '' ) ) );
+$horse_c = MRSA_Horses::save( 0, MRSA_Horses::data( array( 'name' => 'Comet', 'rider_id' => '11' ) ) );
+check( null === MRSA::row( 'horses', $horse_b )['age'] && 'Arabian' === MRSA::row( 'horses', $horse_a )['breed'], 'horse records store optional details' );
+rejects( function () use ( $horse_c ) { MRSA_Horses::assign( 10, array( $horse_c ) ); }, 'another participant' );
+MRSA_Horses::assign( 10, array( $horse_b ) );
+check( 0 === (int) MRSA::row( 'horses', $horse_a )['rider_id'] && 10 === (int) MRSA::row( 'horses', $horse_b )['rider_id'] && 11 === (int) MRSA::row( 'horses', $horse_c )['rider_id'], 'horse assignment replaces only the participant selection' );
+$horse_form = render( 'rider_form', 10, MRSA::row( 'riders', 10 ) );
+check( strpos( $horse_form, 'name="horse_selection" value="1"' ) !== false && strpos( $horse_form, 'value="' . $horse_b . '" checked' ) !== false && strpos( $horse_form, 'Comet' ) === false && strpos( $horse_form, 'vehicle_selection' ) === false, 'Horseback participant form lists available horses and hides vehicles' );
+MRSA_Styles::save_primary( 'geocache' );
+$geo_form = render( 'rider_form', 10, MRSA::row( 'riders', 10 ) );
+check( strpos( $geo_form, 'horse_selection' ) === false && strpos( $geo_form, 'vehicle_selection' ) === false, 'GeoCache participant form has no conveyance section' );
+$bicycle_row = render( 'bike_row', array(), array( 'bike_id' => '', 'model_year' => '', 'fuel_capacity' => '5 gal' ), false );
+check( strpos( $bicycle_row, 'type="hidden" name="fuel[]" value="5 gal"' ) !== false && strpos( $bicycle_row, 'disabled="disabled"' ) !== false && strpos( $bicycle_row, 'Remove bicycle' ) !== false, 'Bicycle rows grey out fuel while preserving saved values' );
+MRSA_Horses::delete( $horse_a );
+check( null === MRSA::row( 'horses', $horse_a ), 'horses can be deleted' );
+unset( $GLOBALS['test_options']['mrsa_primary_style'] );
 if ( getenv( 'MRSA_PREVIEW_DIR' ) ) {
 	file_put_contents( getenv( 'MRSA_PREVIEW_DIR' ) . '/event.html', '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="admin.css">' . $html );
 	file_put_contents( getenv( 'MRSA_PREVIEW_DIR' ) . '/riders.html', '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="admin.css"><script defer src="admin.js"></script>' . $riders_html );

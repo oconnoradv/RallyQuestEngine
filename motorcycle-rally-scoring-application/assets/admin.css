@@ -199,3 +199,13 @@
 	.mrsa .mrsa-submission-comparison { grid-template-columns: 1fr; }
 	.mrsa .mrsa-email-setup-layout { grid-template-columns: 1fr; }
 }
+.mrsa .mrsa-section > summary { cursor: pointer; }
+.mrsa .mrsa-section > summary h2 { display: inline; margin: 0; }
+.mrsa .mrsa-complete { border-color: #008a20; border-left-width: 4px; background: #edfaef; }
+.mrsa .mrsa-complete > summary h2, .mrsa .mrsa-complete-label { color: #006b1b; }
+.mrsa .mrsa-welcome-steps { margin-left: 20px; }
+.mrsa .mrsa-style-form fieldset { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 8px 0 12px; }
+.mrsa .mrsa-style-form legend { font-weight: 600; margin-bottom: 6px; }
+.mrsa .mrsa-disabled-field, .mrsa input[disabled].mrsa-disabled-field { background: #f0f0f1; color: #8c8f94; cursor: not-allowed; }
+.mrsa .mrsa-horse-choices { margin: 0 0 12px; }
+.mrsa .mrsa-public-results-image img { max-width: 100%; height: auto; }

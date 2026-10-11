@@ -17,9 +17,11 @@
 defined( 'ABSPATH' ) || exit;
 
 define( 'MRSA_VERSION', '0.1.20' );
-define( 'MRSA_DB_VERSION', '11' );
+define( 'MRSA_DB_VERSION', '12' );
 define( 'MRSA_FILE', __FILE__ );
 require_once __DIR__ . '/includes/class-mrsa.php';
+require_once __DIR__ . '/includes/class-mrsa-styles.php';
+require_once __DIR__ . '/includes/class-mrsa-horses.php';
 require_once __DIR__ . '/includes/class-mrsa-importer.php';
 require_once __DIR__ . '/includes/class-mrsa-file-scan.php';
 require_once __DIR__ . '/includes/class-mrsa-spreadsheet-reader.php';
