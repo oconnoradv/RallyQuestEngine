@@ -124,7 +124,11 @@ final class RQE_Admin {
 		}
 		$current = (int) get_user_option( 'rqe_selected_event', get_current_user_id() );
 		if ( $current !== $id && ! update_user_option( get_current_user_id(), 'rqe_selected_event', $id, false ) ) {
-			throw new RuntimeException( 'The selected event could not be remembered.' );
+			// WordPress also returns false when the database already contains this value.
+			wp_cache_delete( get_current_user_id(), 'user_meta' );
+			if ( (int) get_user_option( 'rqe_selected_event', get_current_user_id() ) !== $id ) {
+				throw new RuntimeException( 'The selected event could not be remembered.' );
+			}
 		}
 		self::$selected_event = $id;
 	}
@@ -657,6 +661,30 @@ final class RQE_Admin {
 			throw new RuntimeException( 'Choose a valid scavenger hunt style.' );
 		}
 		$data = array( 'name' => self::text( self::posted( 'name' ), 160, true ), 'description' => $description, 'hunt_style' => $style, 'max_bib' => self::integer( self::posted( 'max_bib' ), 1, 10000 ), 'logo_id' => self::integer( self::posted( 'logo_id', '0' ) ), 'location' => self::text( self::posted( 'location' ), 200 ), 'min_finisher_points' => self::integer( self::posted( 'min_finisher_points' ), 0, 1000000000 ) );
+		$lower = $data['min_finisher_points'];
+		$lower_label = 'Minimum Finisher Points';
+		foreach ( RQE_Results::tiers() as $key => $status ) {
+			$label = str_replace( 'Preliminary ', '', $status ) . ' Points';
+			if ( isset( $_POST[ $key ] ) && ! is_scalar( $_POST[ $key ] ) ) {
+				throw new RuntimeException( $label . ' must be a whole number from 0 to 1000000000, or left blank (Not Used).' );
+			}
+			$value = self::posted( $key, '' );
+			if ( is_string( $value ) && '' === trim( $value ) ) {
+				$data[ $key ] = null;
+				continue;
+			}
+			try {
+				$value = self::integer( $value, 0, 1000000000 );
+			} catch ( RuntimeException $exception ) {
+				throw new RuntimeException( $label . ' must be a whole number from 0 to 1000000000, or left blank (Not Used).' );
+			}
+			if ( $value <= $lower ) {
+				throw new RuntimeException( $label . ' must be greater than ' . $lower_label . '.' );
+			}
+			$data[ $key ] = $value;
+			$lower = $value;
+			$lower_label = $label;
+		}
 		if ( $data['logo_id'] && ( 'attachment' !== get_post_type( $data['logo_id'] ) || ! wp_attachment_is_image( $data['logo_id'] ) ) ) {
 			throw new RuntimeException( 'Select an existing image from the WordPress media library.' );
 		}

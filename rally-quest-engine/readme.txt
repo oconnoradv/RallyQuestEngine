@@ -4,7 +4,7 @@ Tags: rally, scavenger hunt, motorcycle, bicycle, geocache
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.2.0
+Stable tag: 0.2.1
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -355,6 +355,14 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.2.1 =
+* Added optional Bronze, Silver and Gold Finisher Points after Minimum Finisher Points. Blank means Not Used; configured tiers must strictly increase, and intermediate tiers may be skipped.
+* Automatic Event Status uses the highest threshold strictly surpassed: Preliminary Finisher, Preliminary Bronze Finisher, Preliminary Silver Finisher or Preliminary Gold Finisher. Manual statuses, including cancellation DNS, remain authoritative.
+* Expanded Event Status labels to 64 bytes and upgraded schema to 13 with NULL thresholds for existing events and seeded tier status choices.
+* Defaulted Registration Status, Event Status, Diagnostics Export Data and Database Backup sections to minimized.
+* Fixed remembered-event errors following legacy migration by invalidating user metadata caches and checking unchanged saves.
+* Deprecated releases older than v0.2.0 while preserving historical artifacts.
 
 = 0.2.0 =
 * Renamed the plugin to Rally Quest Engine with RQE tables, options, hooks and gallery folder, plus a one-time transactional import of Motorcycle Rally Scoring Application data, gallery files and settings.

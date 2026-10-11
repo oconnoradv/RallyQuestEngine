@@ -652,6 +652,10 @@ final class RQE_Views {
 		self::field( 'Latitude', 'latitude', $event['latitude'] ?? '', 'number', false, array( 'min' => -90, 'max' => 90, 'step' => '0.0000001' ) );
 		self::field( 'Longitude', 'longitude', $event['longitude'] ?? '', 'number', false, array( 'min' => -180, 'max' => 180, 'step' => '0.0000001' ) );
 		self::field( 'Minimum Finisher Points (required)', 'min_finisher_points', $event['min_finisher_points'] ?? '', 'number', true, array( 'min' => 0, 'max' => 1000000000, 'step' => 1 ) );
+		foreach ( RQE_Results::tiers() as $key => $status ) {
+			self::field( str_replace( 'Preliminary ', '', $status ) . ' Points (optional)', $key, $event[ $key ] ?? '', 'number', false, array( 'min' => 0, 'max' => 1000000000, 'step' => 1, 'placeholder' => 'Not Used' ) );
+		}
+		echo '<p>Leave optional finisher thresholds blank for <strong>Not Used</strong>. Each configured tier must exceed the highest configured lower threshold. Scores must strictly exceed a threshold to qualify; manual Event Status assignments override automatic tiers.</p>';
 		echo '<div class="rqe-logo">';
 		self::field( 'Existing media image ID (0 = none)', 'logo_id', $event['logo_id'] ?? 0, 'number', false, array( 'min' => 0, 'step' => 1 ) );
 		echo '<button type="button" class="button rqe-media">Select logo in WordPress media library</button><button type="button" class="button rqe-clear-media">Clear logo</button><div class="rqe-logo-preview">';
@@ -742,16 +746,16 @@ final class RQE_Views {
 	}
 
 	private static function status_catalog( $event_id, $kind, $title ) {
-		echo '<section class="rqe-panel"><h2>' . esc_html( $title ) . '</h2><p>Manage this event&rsquo;s status choices (maximum 20 bytes). Disabled values remain on existing participants but cannot be newly assigned. In-use values cannot be deleted.</p>';
+		echo '<details class="rqe-panel rqe-status-catalog"><summary><h2>' . esc_html( $title ) . '</h2></summary><p>Manage this event&rsquo;s status choices (maximum ' . ( 'event' === $kind ? '64' : '20' ) . ' bytes). Disabled values remain on existing participants but cannot be newly assigned. In-use values cannot be deleted.</p>';
 		if ( 'event' === $kind ) {
-			echo '<p>Automatic is a calculation mode. It always uses Registered or Preliminary Finisher, even if those values are disabled for manual selection. These two values and DNS cannot be deleted. Changing Registration Status to Cancelled sets manual Event Status to DNS, including when DNS is disabled for manual selection. You may change Event Status afterward. At the end of the event, manually assign Finisher, DNF or DNS on Results.</p>';
+			echo '<p>Automatic is a calculation mode. It uses Registered or the highest Preliminary Finisher tier whose configured threshold is strictly surpassed: Minimum, Bronze, Silver or Gold. Unused tiers are skipped. These system statuses and DNS cannot be deleted; disabling them affects manual choices only. Changing Registration Status to Cancelled sets manual Event Status to DNS. Manual assignments remain authoritative until returned to Automatic. At the end of the event, manually assign Finisher, DNF or DNS on Results.</p>';
 		} else {
 			echo '<p>Keep at least one value enabled. New participants default to Initial Registration when enabled, otherwise the first enabled value. Changing Registration Status to Cancelled sets Event Status to DNS. Saving an unchanged Cancelled value or changing registration away from Cancelled does not overwrite a later manual Event Status.</p>';
 		}
 		echo '<ul class="rqe-status-options">';
 		foreach ( RQE_Statuses::options( $event_id, $kind ) as $option ) {
 			$used = RQE_Statuses::usage( $event_id, $kind, $option['label'] );
-			$protected = 'event' === $kind && in_array( $option['label'], array( 'Registered', 'Preliminary Finisher', 'DNS' ), true );
+			$protected = 'event' === $kind && in_array( $option['label'], RQE_Statuses::protected_labels(), true );
 			echo '<li><strong>' . esc_html( $option['label'] ) . '</strong> <span>' . esc_html( ( $option['enabled'] ? 'Enabled' : 'Disabled' ) . ' / ' . $used . ' participants' ) . '</span>';
 			self::form( 'status_option', array( 'event_id' => $event_id, 'status_kind' => $kind, 'status_label' => $option['label'] ), 'rqe-inline-form' );
 			echo '<button class="button" name="status_action" value="' . ( $option['enabled'] ? 'disable' : 'enable' ) . '">' . ( $option['enabled'] ? 'Disable' : 'Enable' ) . '</button>';
@@ -762,9 +766,9 @@ final class RQE_Views {
 		}
 		echo '</ul>';
 		self::form( 'status_option', array( 'event_id' => $event_id, 'status_kind' => $kind, 'status_action' => 'add' ), 'rqe-inline-form' );
-		self::field( 'New ' . $title, 'status_label', '', 'text', true, array( 'maxlength' => 20 ) );
+		self::field( 'New ' . $title, 'status_label', '', 'text', true, array( 'maxlength' => 'event' === $kind ? 64 : 20 ) );
 		self::button( 'Add Status' );
-		echo '</form></section>';
+		echo '</form></details>';
 	}
 
 	private static function rider_status_control( $event_id, array $row, $kind, array $options ) {
@@ -1403,7 +1407,7 @@ final class RQE_Views {
 		$event = RQE::row( 'events', $id );
 		$rows = self::queries()->results( $id, $event['min_finisher_points'] );
 		$options = RQE_Statuses::options( $id, 'event' );
-		echo '<h3>' . esc_html( $event['name'] ) . '</h3><p>Overall placing uses competition ranking by total score: equal scores share a place and the next place is skipped. Automatic Event Status becomes Preliminary Finisher only when total score is strictly greater than Minimum Finisher Points (' . esc_html( $event['min_finisher_points'] ) . '). At the end of the event, an administrator must manually assign Finisher, DNF or DNS. Manual assignments override automatic calculation. Accepted/Rejected Bonuses count submissions, not point totals; pending and invalid messages are excluded.</p>';
+		echo '<h3>' . esc_html( $event['name'] ) . '</h3><p>Overall placing uses competition ranking by total score: equal scores share a place and the next place is skipped. Automatic Event Status uses the highest configured threshold strictly surpassed: Preliminary Finisher above Minimum Finisher Points (' . esc_html( $event['min_finisher_points'] ) . '), then Preliminary Bronze, Silver or Gold Finisher. Unused tiers are skipped. At the end of the event, an administrator must manually assign Finisher, DNF or DNS. Manual assignments override automatic calculation. Accepted/Rejected Bonuses count submissions, not point totals; pending and invalid messages are excluded.</p>';
 		self::table( array( 'Participant #', 'Participant Name', 'Total Score', 'Accepted Bonuses', 'Rejected Bonuses', 'Event Status', 'Overall Placing' ) );
 		foreach ( $rows as $row ) {
 			$rank = $row['overall_placing'];
@@ -1460,7 +1464,7 @@ final class RQE_Views {
 		self::configuration_check();
 		echo '<div class="rqe-grid">';
 		foreach ( array( 'json' => array( 'Export Data', 'Download all plugin table data as JSON.' ), 'sql' => array( 'Database Backup', 'Download plugin table definitions and data as restorable SQL.' ) ) as $type => $details ) {
-			echo '<details class="rqe-panel rqe-diagnostics-section" open><summary><h3>' . esc_html( $details[0] ) . '</h3></summary><p>' . esc_html( $details[1] ) . '</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="rqe_diagnostics_download"><input type="hidden" name="download_type" value="' . esc_attr( $type ) . '">';
+			echo '<details class="rqe-panel rqe-diagnostics-section"><summary><h3>' . esc_html( $details[0] ) . '</h3></summary><p>' . esc_html( $details[1] ) . '</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="rqe_diagnostics_download"><input type="hidden" name="download_type" value="' . esc_attr( $type ) . '">';
 			wp_nonce_field( 'rqe_diagnostics_download' );
 			echo '<button class="button button-primary">Download ' . esc_html( strtoupper( $type ) ) . '</button></form></details>';
 		}

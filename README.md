@@ -4,7 +4,7 @@
 
 # Rally Quest Engine
 
-**Current release: [v0.2.0](https://github.com/oconnoradv/RallyQuestEngine/releases/tag/v0.2.0)**
+**Current release: [v0.2.1](https://github.com/oconnoradv/RallyQuestEngine/releases/tag/v0.2.1)**
 
 Rally Quest Engine (formerly Motorcycle Rally Scoring Application) is a WordPress plugin that helps organizers produce and manage a high-quality scavenger-hunt style rally for **Motorcyclists, Bicyclists, Geocachers, or Horseback participants**. Efficient setup guides each event through its required details, focused administration keeps participants, conveyances, rosters, and event roles in one place, and near-real-time results update as emailed bonus submissions are reviewed. Requires WordPress 6.2+, PHP 7.4+, MySQL 8.0+ or MariaDB 10.6+ with InnoDB, and the installed/active [Action Scheduler plugin](https://wordpress.org/plugins/action-scheduler/). Licensed under the GNU General Public License v3 or later (see [LICENSE](LICENSE)).
 
@@ -29,6 +29,8 @@ Version 0.2.0 renames the plugin, folder, database tables (`RQE_*`), options, an
 3. Deactivate **Motorcycle Rally Scoring Application**, then open any wp-admin page as a WordPress administrator. Rally Quest Engine imports events, participants, rosters, bonuses, submissions, role assignments, encrypted inbox settings, audit records, and the event gallery once, inside a single database transaction, and reports the outcome in an admin notice. The import is skipped if Rally Quest Engine already contains data; the legacy tables and gallery are left unchanged.
 4. Existing events presume the Motorcycle style, so event `7` becomes `MC-7`. Update embedded shortcodes to `[rqe_results id="MC-7"]`; existing `[mrsa_results id="7"]` embeds keep working while the former plugin is inactive.
 5. After verifying the imported data, delete the former plugin. Its tables are removed only if its own delete-on-uninstall option was enabled.
+
+Migrating remembered-event preferences clears the affected WordPress user metadata caches. Event selection also verifies the stored preference if WordPress reports an unchanged save, so an already-saved event is not mistaken for a database failure. This correction does not require re-importing existing event data.
 
 The plugin supports individual WordPress sites. On multisite, activate and manage it separately on each site; network activation is not supported.
 
@@ -66,6 +68,10 @@ The Welcome section's primary style sets the default style for new events and wh
 **Events > Configure** (`rqe-event-edit`) uses two columns that stack on narrow screens. The left column holds **Event Details**, the **Registration Status** catalog, and **Public Results Embed**; the right column holds **Email Bonus Submissions**, **Event Administrator and Scorer Assignments**, and the **Event Status** catalog at the bottom. Event Name, Event Description, Maximum Bib, Registration Opens/Closes, Event Starts/Ends, Participant Price, and Minimum Finisher Points are required to save. Event Details, Email Bonus Submissions, and the assignments section turn green and start minimized on later visits once they are complete (all required details saved, the inbox configured, or at least one Administrator or Scorer assigned).
 
 ### Header event context and statuses
+
+**v0.2.1 finisher tiers:** Event Details includes optional Bronze, Silver, and Gold Finisher Points immediately after Minimum Finisher Points. Blank means **Not Used** (stored as NULL). Each configured tier must strictly exceed the highest configured lower threshold; intermediate tiers may be omitted. Scores must strictly surpass a threshold, and the highest qualifying tier becomes **Preliminary Bronze Finisher**, **Preliminary Silver Finisher**, or **Preliminary Gold Finisher**. Equality retains the lower qualifying status. Automatic statuses recalculate as points or thresholds change; manual statuses, including Cancelled → DNS, remain authoritative until returned to Automatic. Final Finisher/DNF/DNS still require administrator assignment.
+
+Registration Status and Event Status catalogs default to minimized on Event Configuration. Diagnostics' Export Data and Database Backup panels also default to minimized. Event Status labels now allow 64 bytes; Registration Status remains limited to 20 bytes. Schema 13 adds optional thresholds without changing existing scores or manual statuses and seeds the new system labels. Releases older than v0.2.0 are marked deprecated; their artifacts remain available for migration/history.
 
 In the application header, choose a **scavenger hunt style** (defaulting to the primary style), then choose one of that style's events and press **Set Event**. The selection is remembered per WordPress user and site until changed; Rosters, Scoring, and Results use it automatically across navigation and reloads. Explicit event links also update the header context. Only authorized events are offered, and access is checked on every request. Changing events through the header clears participant filters and record-specific context, returning from sub-pages to the relevant main tab. Open forms retain their own event ID, so another tab's event change cannot redirect a save into a different event. Missing/revoked selections display a warning and require reselection. Participant-filtered links show a selection message if that participant is not enrolled in the header event.
 

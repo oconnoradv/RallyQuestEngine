@@ -19,6 +19,13 @@ check( $ranks === array( 100 => 1, 50 => 3, 0 => 4, -5 => 5 ), 'competition rank
 check( RQE_Results::rankings( array() ) === array(), 'empty roster has no rankings' );
 check( RQE_Results::status( array( 'score' => 100 ), 100 ) === 'Registered', 'minimum finisher threshold is strictly greater than' );
 check( RQE_Results::status( array( 'score' => 101 ), 100 ) === 'Preliminary Finisher', 'above-threshold automatic status is retained' );
+$tiers = array( 'bronze_finisher_points' => 200, 'silver_finisher_points' => 300, 'gold_finisher_points' => 400 );
+foreach ( array( 100 => 'Registered', 101 => 'Preliminary Finisher', 200 => 'Preliminary Finisher', 201 => 'Preliminary Bronze Finisher', 300 => 'Preliminary Bronze Finisher', 301 => 'Preliminary Silver Finisher', 400 => 'Preliminary Silver Finisher', 401 => 'Preliminary Gold Finisher' ) as $score => $expected ) {
+	check( RQE_Results::status( array_merge( $tiers, array( 'score' => $score ) ), 100 ) === $expected, 'highest strictly surpassed tier at score ' . $score );
+}
+check( RQE_Results::status( array( 'score' => 401, 'bronze_finisher_points' => null, 'silver_finisher_points' => null, 'gold_finisher_points' => 400 ), 100 ) === 'Preliminary Gold Finisher', 'unused intermediate tiers are skipped' );
+check( RQE_Results::status( array_merge( $tiers, array( 'score' => 500, 'status_manual' => 1, 'status' => 'DNS' ) ), 100 ) === 'DNS', 'manual DNS overrides every configured finisher tier' );
+check( RQE_Results::status( array_merge( $tiers, array( 'score' => 0 ) ), 100 ) === 'Registered', 'reduced scores recalculate the automatic tier downward' );
 check( RQE_Results::status( array( 'score' => 1000, 'status_manual' => 1, 'status' => 'DNF' ), 100 ) === 'DNF', 'manual historical status overrides automatic status' );
 foreach ( array( 'Finisher', 'DNF', 'DNS' ) as $manual ) {
 	check( RQE_Results::status( array( 'score' => 0, 'status_manual' => 1, 'status' => $manual ), 100 ) === $manual, 'manual ' . $manual . ' is preserved below threshold' );

@@ -4,7 +4,28 @@ defined( 'ABSPATH' ) || exit;
 
 final class RQE_Statuses {
 	public static function defaults( $kind ) {
-		return 'registration' === $kind ? array( 'Initial Registration', 'Paid', 'Fully Registered', 'Cancelled' ) : array( 'Registered', 'Preliminary Finisher', 'Finisher', 'DNF', 'DNS' );
+		return 'registration' === $kind ? array( 'Initial Registration', 'Paid', 'Fully Registered', 'Cancelled' ) : array_merge( array( 'Registered', 'Preliminary Finisher', 'Finisher', 'DNF', 'DNS' ), array_values( RQE_Results::tiers() ) );
+	}
+
+	public static function protected_labels() {
+		return array_merge( array( 'Registered', 'Preliminary Finisher', 'DNS' ), array_values( RQE_Results::tiers() ) );
+	}
+
+	/** Seed only the new tier statuses, preserving existing catalog choices. */
+	public static function migrate_tiers() {
+		global $wpdb;
+		$events = $wpdb->get_col( 'SELECT id FROM ' . RQE::table( 'events' ) );
+		if ( ! is_array( $events ) || $wpdb->last_error ) {
+			throw new RuntimeException( 'Finisher tier status migration could not read events.' );
+		}
+		foreach ( $events as $event_id ) {
+			$existing = array_column( self::options( $event_id, 'event' ), 'label' );
+			foreach ( RQE_Results::tiers() as $label ) {
+				if ( ! in_array( $label, $existing, true ) ) {
+					RQE_Admin::checked( $wpdb->insert( RQE::table( 'status_options' ), array( 'event_id' => $event_id, 'kind' => 'event', 'label' => $label, 'enabled' => 1 ) ) );
+				}
+			}
+		}
 	}
 
 	private static function kind( $kind ) {
@@ -117,7 +138,7 @@ final class RQE_Statuses {
 	public static function usage( $event_id, $kind, $label ) {
 		global $wpdb;
 		self::kind( $kind );
-		$condition = 'registration' === $kind ? 'r.registration_status=%s' : "(r.status_manual=1 AND r.status=%s) OR (r.status_manual=0 AND CASE WHEN r.score>e.min_finisher_points THEN 'Preliminary Finisher' ELSE 'Registered' END=%s)";
+		$condition = 'registration' === $kind ? 'r.registration_status=%s' : '(r.status_manual=1 AND r.status=%s) OR (r.status_manual=0 AND ' . RQE_Results::automatic_status_sql() . '=%s)';
 		$args = 'registration' === $kind ? array( $event_id, $label ) : array( $event_id, $label, $label );
 		$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . RQE::table( 'registrations' ) . ' r JOIN ' . RQE::table( 'events' ) . ' e ON e.id=r.event_id WHERE r.event_id=%d AND (' . $condition . ')', ...$args ) );
 		if ( null === $count || $wpdb->last_error ) {
@@ -130,7 +151,7 @@ final class RQE_Statuses {
 		global $wpdb;
 		RQE_Admin::require_event( $event_id );
 		self::kind( $kind );
-		$label = RQE_Admin::text( $label, 20, true );
+		$label = RQE_Admin::text( $label, 'event' === $kind ? 64 : 20, true );
 		if ( 0 === strcasecmp( 'Automatic', $label ) ) {
 			throw new RuntimeException( 'Automatic is a calculation mode, not a custom status.' );
 		}
@@ -156,7 +177,7 @@ final class RQE_Statuses {
 					if ( self::usage( $event_id, $kind, $row['label'] ) ) {
 						throw new RuntimeException( 'This status is in use. Disable it instead of deleting it.' );
 					}
-					if ( 'event' === $kind && in_array( $row['label'], array( 'Registered', 'Preliminary Finisher', 'DNS' ), true ) ) {
+					if ( 'event' === $kind && in_array( $row['label'], self::protected_labels(), true ) ) {
 						throw new RuntimeException( 'System statuses cannot be deleted. They can be disabled for manual selection.' );
 					}
 				}
@@ -179,7 +200,7 @@ final class RQE_Statuses {
 		global $wpdb;
 		RQE_Admin::require_event( $event_id );
 		self::kind( $kind );
-		$value = RQE_Admin::text( $value, 20, true );
+		$value = RQE_Admin::text( $value, 'event' === $kind ? 64 : 20, true );
 		RQE::begin_transaction();
 		try {
 			self::lock_event( $event_id );
