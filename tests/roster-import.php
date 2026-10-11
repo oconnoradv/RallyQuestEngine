@@ -2,6 +2,16 @@
 /** Standalone roster import regression tests: php tests/roster-import.php */
 define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
+function checked( $a, $b = true, $echo = true ) {
+	$html = (string) $a === (string) $b ? ' checked' : '';
+	if ( $echo ) { echo $html; }
+	return $html;
+}
+// Locking is covered by the SQL-backed event suite; this fixture isolates roster import.
+final class RQE_Event_State {
+	public static function writable( $id ) {}
+	public static function show_archived() { return false; }
+}
 define( 'RQE_VERSION', 'test' );
 define( 'RQE_FILE', __DIR__ . '/../rally-quest-engine/rally-quest-engine.php' );
 final class RQE {

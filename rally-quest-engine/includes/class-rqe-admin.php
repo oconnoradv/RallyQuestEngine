@@ -12,6 +12,7 @@ final class RQE_Admin {
 		add_action( 'admin_post_rqe_diagnostics_download', array( __CLASS__, 'diagnostics_download' ) );
 		add_action( 'admin_post_rqe_diagnostics_check', array( __CLASS__, 'diagnostics_check' ) );
 		add_action( 'admin_post_rqe_image_queue', array( __CLASS__, 'image_queue' ) );
+		RQE_Certificates::init();
 	}
 
 	public static function menu() {
@@ -155,7 +156,7 @@ final class RQE_Admin {
 		return $id;
 	}
 
-	private static function require_site_admin() {
+	public static function require_site_admin() {
 		if ( ! RQE::site_access() ) {
 			throw new RuntimeException( 'You must be a WordPress administrator to manage shared participants, motorcycles, events, diagnostics, or event administrator assignments.' );
 		}
@@ -218,6 +219,23 @@ final class RQE_Admin {
 				$bonus_step = 'listing' === self::posted( 'import_step' ) ? 'listing' : 'images';
 			}
 			switch ( $op ) {
+				case 'archive_visibility':
+					$tab = self::posted( 'context_tab', 'events' );
+					if ( ! in_array( $tab, array( 'riders', 'events', 'rosters', 'scoring', 'results', 'bikes', 'horses', 'diagnostics', 'about' ), true ) ) {
+						throw new RuntimeException( 'Select an application tab.' );
+					}
+					if ( ! RQE::site_access() && ! RQE::event_ids() && ! in_array( $tab, array( 'scoring', 'about' ), true ) ) {
+						$tab = 'scoring';
+					}
+					RQE_Event_State::save_visibility( '1' === self::posted( 'show_archived' ) );
+					$message = 'Archived-event visibility updated.';
+					break;
+				case 'event_state':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					RQE_Event_State::change( $extra['event_id'], self::posted( 'state_action' ) );
+					$tab = 'results';
+					$message = 'Event state updated.';
+					break;
 				case 'choose_event':
 					$return_url = '';
 					$tab = self::posted( 'context_tab', 'events' );
@@ -706,6 +724,7 @@ final class RQE_Admin {
 		RQE::begin_transaction();
 		try {
 			if ( $id ) {
+				RQE_Event_State::writable( $id );
 				// Serialize capacity changes with enrollment, not just duplicate bib assignment.
 				$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . RQE::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $id ) );
 				if ( ! $locked ) {
@@ -740,6 +759,7 @@ final class RQE_Admin {
 		$staged_submission_files = array( 'root' => '', 'files' => array() );
 		RQE::begin_transaction();
 		try {
+			RQE_Event_State::writable( $event_id );
 			$event = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $event_id ), ARRAY_A );
 			if ( ! $event ) {
 				throw new RuntimeException( 'Event no longer exists.' );
@@ -789,6 +809,7 @@ final class RQE_Admin {
 		global $wpdb;
 		RQE::begin_transaction();
 		try {
+			RQE_Event_State::writable( $event_id );
 			$event = $wpdb->get_row( $wpdb->prepare( 'SELECT id,max_bib FROM ' . RQE::table( 'events' ) . ' WHERE id=%d FOR UPDATE', $event_id ), ARRAY_A );
 			if ( ! $event ) {
 				throw new RuntimeException( 'The event no longer exists. The participant was saved but could not be enrolled.' );
@@ -922,7 +943,7 @@ final class RQE_Admin {
 			wp_die( esc_html( 'Unsupported diagnostics download.' ), '', array( 'response' => 400 ) );
 		}
 		global $wpdb;
-		$tables = array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
+		$tables = array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'certificate_mail', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
 		$stamp = gmdate( 'Ymd-His' );
 		nocache_headers();
 		if ( 'json' === $type ) {

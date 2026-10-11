@@ -13,13 +13,14 @@ final class RQE_Diagnostics_Deletion_Service {
 		$audit_detail = '';
 		RQE::begin_transaction();
 		try {
+			RQE_Event_State::protect_deletion( $operation, $input );
 			switch ( $operation ) {
 				case 'diagnostics_delete_all':
 					$staged_gallery = RQE_Bonus::stage_all_storage_removal();
 					$all_galleries = true;
 					RQE_Admin::checked( $wpdb->query( 'DELETE FROM ' . RQE::table( 'bonus_submissions' ) ) );
 					RQE_Admin::checked( $wpdb->query( 'DELETE FROM ' . RQE::table( 'bonus_points' ) ) );
-					foreach ( array( 'registrations', 'status_options', 'event_email_settings', 'event_scorers', 'rider_bikes', 'horses', 'event_admins', 'events', 'riders', 'bikes' ) as $table ) {
+					foreach ( array( 'certificate_mail', 'registrations', 'status_options', 'event_email_settings', 'event_scorers', 'rider_bikes', 'horses', 'event_admins', 'events', 'riders', 'bikes' ) as $table ) {
 						RQE_Admin::checked( $wpdb->query( 'DELETE FROM ' . RQE::table( $table ) ) );
 					}
 					$message = 'All application data was deleted. Audit history and ClamAV overrides were retained.';
@@ -36,6 +37,7 @@ final class RQE_Diagnostics_Deletion_Service {
 					$staged_submission_files = RQE_Bonus::stage_submission_files( $submission_rows ?: array() );
 					RQE_Admin::checked( $wpdb->delete( RQE::table( 'bonus_submissions' ), array( 'event_id' => $event_id ) ) );
 					RQE_Admin::checked( $wpdb->delete( RQE::table( 'registrations' ), array( 'event_id' => $event_id ) ) );
+					RQE_Admin::checked( $wpdb->delete( RQE::table( 'certificate_mail' ), array( 'event_id' => $event_id ) ) );
 					$message = 'The selected event roster and its participant bonus submissions were deleted.';
 					break;
 				case 'diagnostics_delete_bonus_points':
@@ -58,6 +60,7 @@ final class RQE_Diagnostics_Deletion_Service {
 						throw new RuntimeException( 'The selected participant no longer exists.' );
 					}
 					$submission_rows = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,image_file FROM ' . RQE::table( 'bonus_submissions' ) . ' WHERE rider_id=%d', $rider_id ), ARRAY_A );
+					RQE_Admin::checked( $wpdb->delete( RQE::table( 'certificate_mail' ), array( 'rider_id' => $rider_id ) ) );
 					$staged_submission_files = RQE_Bonus::stage_submission_files( $submission_rows ?: array() );
 					RQE_Admin::checked( $wpdb->delete( RQE::table( 'bonus_submissions' ), array( 'rider_id' => $rider_id ) ) );
 					RQE_Admin::checked( $wpdb->delete( RQE::table( 'registrations' ), array( 'rider_id' => $rider_id ) ) );

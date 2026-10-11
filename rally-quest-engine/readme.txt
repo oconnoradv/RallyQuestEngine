@@ -4,7 +4,7 @@ Tags: rally, scavenger hunt, motorcycle, bicycle, geocache
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.2.1
+Stable tag: 0.2.2
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -164,7 +164,7 @@ submission. Accepted library points update the rider total transactionally and
 exactly once. Rejections require a reason and remain in Reviewed and rider
 history. Results orders total scores using competition
 ranking and displays the automatically derived Preliminary Finisher status
-only when a score is strictly greater than Minimum Finisher Points.
+when a score is equal to or greater than Minimum Finisher Points.
 Administrators manually finalize Event Status as Finisher, DNF or DNS;
 manual assignments override later automatic calculations. Registration Status
 is separately editable on Rosters. New registrations use Initial Registration
@@ -296,6 +296,34 @@ unconfirmed, or non-motorcycle. Manual motorcycle entry remains available.
 
 == Privacy and retention ==
 
+Results provides administrator-reviewed finisher certificates. Manually assigned
+Finisher is eligible by default; custom final statuses can opt in. Preliminary
+statuses, Registered, DNF and DNS are excluded. Certificates include event/year,
+participant name and Bib, score, accepted/rejected bonus counts and Event Status.
+Print individually or all, save through the browser, or download individual PDFs.
+PDF attachments are generated locally using bundled Dompdf, with remote resources
+disabled and private staging outside the web root. Attachments are removed after
+each send; no external rendering service is used.
+
+Review recipients, previews, subject and message before explicit approval.
+Reviews expire after one hour; changed certificate data or recipients require
+another review. Email uses the site's wp_mail configuration, separately for each
+participant, in batches of ten with explicit continuation. Results links recent
+batches. Sent means accepted by the mail system, not confirmed delivery. Unchanged
+deliveries are skipped unless expressly approved for resend. Failed, stale or
+uncertain interrupted sends are never retried automatically. Pending approvals
+expire after one day; delivery details are cleaned after thirty days when a site
+administrator accesses wp-admin. Completed snapshots/messages are cleared.
+Delivery records are included in personal-data export/erasure and diagnostics
+backup/export. Review transients can remain for one hour; participant erasure
+invalidates their fingerprints so they cannot be sent.
+
+Lock Event prevents result mutations, imports, enrollment and submission review.
+Event Administrators may lock; only site administrators may unlock/archive.
+Archive also locks; unarchive keeps locked. Public embeds/certificates remain
+available. The per-user/site Show archived events header preference defaults off;
+a selected archived event remains visible with a read-only notice.
+
 Rider records may contain names, aliases, email addresses, phone numbers,
 motorcycles, fuel capacity, emergency contacts, insurance details, and other
 information. Event registrations link those records to events and bibs.
@@ -355,6 +383,15 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.2.2 =
+* Added Move Up / Move Down ordering for independent Registration and Event Status catalogs.
+* Preliminary Minimum/Bronze/Silver/Gold finisher thresholds now qualify at equality or above; manual finalization remains authoritative.
+* Aligned collapse markers beside status titles. Renamed the embed section to Embed this Event on a Post or Page and made it minimized by default.
+* Added separate event locking/archiving controls, mutation guards, and remembered archived-event chooser visibility.
+* Added printable and local Unicode PDF finisher certificates with event/year, participant name/Bib, score, bonus counts and final status.
+* Added explicit administrator review and approval for individual/all certificate PDF emails, bounded batches, duplicate protection, stale-data checks, delivery outcomes and private cleanup.
+* Added schema 14 migration, certificate lifecycle/privacy handling and bundled renderer dependencies. Back up before upgrading; equality cases now receive the higher preliminary tier.
 
 = 0.2.1 =
 * Added optional Bronze, Silver and Gold Finisher Points after Minimum Finisher Points. Blank means Not Used; configured tiers must strictly increase, and intermediate tiers may be skipped.

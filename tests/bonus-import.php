@@ -3,6 +3,8 @@
 define( 'ABSPATH', __DIR__ . '/' );
 define( 'ARRAY_A', 'ARRAY_A' );
 define( 'MINUTE_IN_SECONDS', 60 );
+// Locking is covered by the SQL-backed event suite; this fixture isolates import rollback.
+final class RQE_Event_State { public static function writable( $id ) {} }
 $check_control = tempnam( sys_get_temp_dir(), 'rqe-check-test' );
 $scanner = proc_open( array( PHP_BINARY, __DIR__ . '/clamav-fixture.php', $check_control ), array( 0 => array( 'pipe', 'r' ), 1 => array( 'pipe', 'w' ), 2 => array( 'pipe', 'w' ) ), $pipes );
 if ( ! is_resource( $scanner ) ) {

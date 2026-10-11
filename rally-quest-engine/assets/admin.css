@@ -201,6 +201,7 @@
 }
 .rqe .rqe-section > summary { cursor: pointer; }
 .rqe .rqe-section > summary h2 { display: inline; margin: 0; }
+.rqe .rqe-status-catalog > summary h2, .rqe .rqe-embed-panel > summary h2 { display: inline; margin: 0; vertical-align: baseline; }
 .rqe .rqe-complete { border-color: #008a20; border-left-width: 4px; background: #edfaef; }
 .rqe .rqe-complete > summary h2, .rqe .rqe-complete-label { color: #006b1b; }
 .rqe .rqe-welcome-steps { margin-left: 20px; }

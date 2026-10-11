@@ -62,6 +62,7 @@ $GLOBALS['preferences'] = array();
 function is_user_logged_in() { return $GLOBALS['actor'] > 0; }
 function current_user_can( $capability ) { return 1 === $GLOBALS['actor']; }
 function get_current_user_id() { return $GLOBALS['actor']; }
+function wp_get_current_user() { return (object) array( 'ID' => get_current_user_id(), 'user_login' => 'fixture-admin' ); }
 function get_user_option( $key, $id ) {
 	if ( isset( $GLOBALS['preference_cache'][ $GLOBALS['site'] ][ $id ][ $key ] ) ) {
 		return $GLOBALS['preference_cache'][ $GLOBALS['site'] ][ $id ][ $key ];
@@ -93,6 +94,7 @@ function esc_textarea( $value ) { return esc_html( $value ); }
 function admin_url( $path = '' ) { return 'https://example.test/wp-admin/' . $path; }
 function add_query_arg( $args, $url ) { return $url . '?' . http_build_query( $args ); }
 function wp_nonce_field( $action ) { echo '<input type="hidden" name="_wpnonce" value="fixture">'; }
+function wp_nonce_url( $url, $action ) { return $url . '&_wpnonce=fixture'; }
 function selected( $value, $current, $echo = true ) { $html = (string) $value === (string) $current ? ' selected="selected"' : ''; if ( $echo ) { echo $html; } return $html; }
 function wp_list_pluck( $rows, $key ) { return array_column( $rows, $key ); }
 function wp_timezone_string() { return 'UTC'; }
@@ -118,6 +120,9 @@ function wp_salt( $scheme ) { return 'fixture-salt'; }
 function wp_json_encode( $data ) { return json_encode( $data ); }
 function wp_die( $message, $title = '', $args = array() ) { throw new RuntimeException( ( $args['response'] ?? 500 ) . ': ' . $message ); }
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-event-state.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-certificates.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-import-audit.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-admin.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-statuses.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-email-submissions.php';
@@ -156,11 +161,13 @@ function render( $method, ...$args ) {
 
 $wpdb = new Event_Test_DB();
 foreach ( array(
-	'events' => "id INTEGER PRIMARY KEY,name TEXT,description TEXT DEFAULT '',hunt_style TEXT DEFAULT 'motorcycle',event_date TEXT,max_bib INTEGER,min_finisher_points INTEGER,bronze_finisher_points INTEGER DEFAULT NULL,silver_finisher_points INTEGER DEFAULT NULL,gold_finisher_points INTEGER DEFAULT NULL,logo_id INTEGER DEFAULT 0,public_results_enabled INTEGER NOT NULL DEFAULT 0,registration_open TEXT,registration_close TEXT,start_at TEXT,end_at TEXT,rider_price TEXT,pillion_price TEXT,location TEXT,latitude TEXT,longitude TEXT",
+	'events' => "id INTEGER PRIMARY KEY,name TEXT,description TEXT DEFAULT '',hunt_style TEXT DEFAULT 'motorcycle',event_date TEXT,max_bib INTEGER,min_finisher_points INTEGER,bronze_finisher_points INTEGER DEFAULT NULL,silver_finisher_points INTEGER DEFAULT NULL,gold_finisher_points INTEGER DEFAULT NULL,is_locked INTEGER DEFAULT 0,is_archived INTEGER DEFAULT 0,logo_id INTEGER DEFAULT 0,public_results_enabled INTEGER NOT NULL DEFAULT 0,registration_open TEXT,registration_close TEXT,start_at TEXT,end_at TEXT,rider_price TEXT,pillion_price TEXT,location TEXT,latitude TEXT,longitude TEXT",
 	'horses' => "id INTEGER PRIMARY KEY,rider_id INTEGER DEFAULT 0,name TEXT,breed TEXT DEFAULT '',sex TEXT DEFAULT '',age INTEGER,color TEXT DEFAULT ''",
 	'riders' => "id INTEGER PRIMARY KEY,name TEXT,email TEXT,alias TEXT DEFAULT '',phone TEXT DEFAULT ''",
 	'registrations' => "id INTEGER PRIMARY KEY,event_id INTEGER,rider_id INTEGER,bib INTEGER,pillion TEXT DEFAULT '',registration_status TEXT DEFAULT 'Initial Registration',status TEXT DEFAULT 'Registered',status_manual INTEGER DEFAULT 0,score INTEGER DEFAULT 0,placing INTEGER",
-	'status_options' => 'id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER,kind TEXT,label TEXT COLLATE NOCASE,enabled INTEGER,UNIQUE(event_id,kind,label)',
+	'status_options' => 'id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER,kind TEXT,label TEXT COLLATE NOCASE,enabled INTEGER,sort_order INTEGER DEFAULT 0,certificate_eligible INTEGER DEFAULT 0,UNIQUE(event_id,kind,label)',
+	'certificate_mail' => "id INTEGER PRIMARY KEY AUTOINCREMENT,batch TEXT,event_id INTEGER,rider_id INTEGER,user_id INTEGER,snapshot TEXT,fingerprint TEXT,subject TEXT,message TEXT,state TEXT,detail TEXT,created_at TEXT,updated_at TEXT,UNIQUE(batch,rider_id)",
+	'import_audit' => 'id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER,user_id INTEGER,username TEXT,occurred_at TEXT,action TEXT,detail TEXT',
 	'event_admins' => 'event_id INTEGER,user_id INTEGER',
 	'event_scorers' => 'event_id INTEGER,user_id INTEGER',
 	'event_email_settings' => "event_id INTEGER PRIMARY KEY,provider TEXT,enabled INTEGER,encrypted_settings TEXT,last_checked_at TEXT,last_error TEXT DEFAULT '',last_tested_at TEXT,last_test_error TEXT DEFAULT ''",
@@ -203,7 +210,7 @@ rejects( function () { RQE_Statuses::assign( 8, 1, 'event', 'DNS' ); }, 'Registr
 rejects( function () { RQE_Statuses::change_option( 7, 'event', 'delete', 'Preliminary Finisher' ); }, 'in use' );
 rejects( function () { RQE_Statuses::change_option( 8, 'event', 'delete', 'Preliminary Finisher' ); }, 'cannot be deleted' );
 RQE_Statuses::change_option( 7, 'registration', 'disable', 'Initial Registration' );
-check( RQE_Statuses::initial_registration( 7 ) === 'Fully Registered', 'disabled default falls back to the first enabled Registration Status' );
+check( RQE_Statuses::initial_registration( 7 ) === RQE_Statuses::enabled_labels( RQE_Statuses::options( 7, 'registration' ) )[0], 'disabled default falls back to the first enabled ordered Registration Status' );
 RQE_Statuses::change_option( 7, 'registration', 'disable', 'Fully Registered' );
 RQE_Statuses::change_option( 7, 'registration', 'disable', 'Cancelled' );
 rejects( function () { RQE_Statuses::change_option( 7, 'registration', 'disable', 'Legacy registration' ); }, 'at least one' );
@@ -213,7 +220,7 @@ $wpdb->fail_write = false;
 check( RQE::row( 'registrations', 1 )['status'] === 'Finisher', 'failed write rolls back status assignment' );
 RQE_Statuses::assign( 7, 1, 'event', 'Automatic' );
 $queries = new RQE_Queries( $wpdb );
-foreach ( array( 99 => 'Registered', 100 => 'Registered', 101 => 'Preliminary Finisher' ) as $score => $status ) {
+foreach ( array( 99 => 'Registered', 100 => 'Preliminary Finisher', 101 => 'Preliminary Finisher' ) as $score => $status ) {
 	$wpdb->update( RQE::table( 'registrations' ), array( 'score' => $score ), array( 'id' => 1 ) );
 	check( $queries->rider_score( 7, 10 )['effective_status'] === $status, 'automatic threshold at score ' . $score );
 }
@@ -314,7 +321,7 @@ check( strpos( $html, 'name="status_kind" value="registration"' ) !== false && s
 $wpdb->update( RQE::table( 'event_email_settings' ), array( 'last_test_error' => 'Fixture connection error' ), array( 'event_id' => 7 ) );
 $failed_html = render( 'render_event_edit' );
 check( strpos( $failed_html, 'rqe-email-connection-failed" open' ) !== false && strpos( $failed_html, 'Fixture connection error' ) !== false, 'failed inbox test remains expanded and prominent' );
-check( strpos( $html, 'Public Results Embed' ) !== false && strpos( $html, '[rqe_results id=&quot;MC-7&quot;]' ) !== false && strpos( $html, 'name="rqe_embed_event_id" value="MC-7" readonly="readonly"' ) !== false, 'event edit provides an explicit read-only event ID and copyable shortcode' );
+check( strpos( $html, '<summary><h2>Embed this Event on a Post or Page</h2></summary>' ) !== false && strpos( $html, '[rqe_results id=&quot;MC-7&quot;]' ) !== false && strpos( $html, 'name="rqe_embed_event_id" value="MC-7" readonly="readonly"' ) !== false, 'event edit provides a collapsed embed section, explicit read-only event ID and copyable shortcode' );
 check( strpos( $html, 'name="op" value="public_results"' ) !== false && strpos( $html, 'name="public_results_enabled" value="1" checked' ) === false && strpos( $html, 'purge WordPress/CDN' ) !== false, 'public results control is off by default with cache-purge guidance' );
 
 RQE_Statuses::change_option( 7, 'registration', 'enable', 'Cancelled' );
@@ -546,6 +553,49 @@ $wpdb->update( RQE::table( 'registrations' ), array( 'score' => 201 ), array( 'e
 check( 'Preliminary Bronze Finisher' === $queries->rider_score( 7, 10 )['effective_status'], 'returning to Automatic and reducing points recalculates the tier' );
 $wpdb->update( RQE::table( 'events' ), array( 'bronze_finisher_points' => null, 'silver_finisher_points' => null, 'gold_finisher_points' => null ), array( 'id' => 7 ) );
 check( 'Preliminary Finisher' === $queries->rider_score( 7, 10 )['effective_status'], 'removing tiers immediately restores the minimum-only calculation' );
+$GLOBALS['actor'] = 1;
+$ordered = array_column( RQE_Statuses::options( 7, 'event' ), 'label' );
+$moving = $ordered[1];
+RQE_Statuses::change_option( 7, 'event', 'up', $moving );
+check( $moving === RQE_Statuses::options( 7, 'event' )[0]['label'], 'Move Up changes the displayed catalog order' );
+RQE_Statuses::change_option( 7, 'event', 'down', $moving );
+check( $ordered === array_column( RQE_Statuses::options( 7, 'event' ), 'label' ), 'Move Down restores catalog ordering without changing assignments' );
+rejects( function () { RQE_Statuses::change_option( 7, 'event', 'certificate_on', 'dnf' ); }, 'Only final finisher' );
+rejects( function () { RQE_Statuses::change_option( 7, 'event', 'certificate_on', 'Preliminary Finisher' ); }, 'Only final finisher' );
+RQE_Event_State::change( 7, 'lock' );
+rejects( function () { RQE_Statuses::assign( 7, 1, 'event', 'Finisher' ); }, 'locked or archived' );
+rejects( function () use ( $moving ) { RQE_Statuses::change_option( 7, 'event', 'up', $moving ); }, 'locked or archived' );
+rejects( function () { RQE_Roster_Import_Service::import_rows( 7, array( 'Participant ID' ), array( array( '11' ) ) ); }, 'locked or archived' );
+$apply_bonus = new ReflectionMethod( 'RQE_Bonus', 'apply_import' );
+if ( PHP_VERSION_ID < 80100 ) { $apply_bonus->setAccessible( true ); }
+rejects( function () use ( $apply_bonus ) { $apply_bonus->invoke( null, 7, array(), array(), '', false ); }, 'locked or archived' );
+RQE::begin_transaction();
+rejects( function () { RQE_Event_State::protect_deletion( 'diagnostics_delete_all', array() ); }, 'locked or archived' );
+RQE::rollback_transaction();
+request( array( 'event_id' => '7' ) );
+check( strpos( render( 'overall_results' ), 'status changes are disabled' ) !== false, 'locked result status controls are read-only' );
+$GLOBALS['actor'] = 2;
+rejects( function () { RQE_Event_State::change( 7, 'unlock' ); }, 'WordPress administrator' );
+$GLOBALS['actor'] = 1;
+RQE_Event_State::change( 7, 'archive' );
+rejects( function () { RQE_Event_State::change( 7, 'unlock' ); }, 'Unarchive' );
+RQE_Event_State::change( 7, 'unarchive' );
+check( 1 === (int) RQE::row( 'events', 7 )['is_locked'], 'unarchiving preserves the lock' );
+RQE_Event_State::change( 7, 'unlock' );
+RQE_Event_State::change( 8, 'archive' );
+RQE_Admin::remember_event( 7 );
+request();
+check( strpos( render( 'header', 'Results' ), '<option value="8" data-style=' ) === false, 'archived events are hidden by default' );
+RQE_Event_State::save_visibility( true );
+check( strpos( render( 'header', 'Results' ), '<option value="8" data-style=' ) !== false, 'per-user archived visibility reveals archived events' );
+RQE_Event_State::save_visibility( false );
+RQE_Admin::remember_event( 8 );
+request();
+check( strpos( render( 'header', 'Results' ), '<option value="8" data-style=' ) !== false, 'selected archived context remains visible when archived lists are hidden' );
+RQE_Event_State::change( 8, 'unarchive' );
+RQE_Event_State::change( 8, 'unlock' );
+RQE_Admin::remember_event( 7 );
+request();
 if ( getenv( 'RQE_PREVIEW_DIR' ) ) {
 	file_put_contents( getenv( 'RQE_PREVIEW_DIR' ) . '/event.html', '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="admin.css">' . $html );
 	file_put_contents( getenv( 'RQE_PREVIEW_DIR' ) . '/riders.html', '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="admin.css"><script defer src="admin.js"></script>' . $riders_html );

@@ -11,26 +11,26 @@ final class RQE_Results {
 		);
 	}
 
-	/** Highest configured threshold strictly surpassed; manual statuses always take precedence. */
+	/** Highest configured threshold met; manual statuses always take precedence. */
 	public static function status( array $row, $minimum ) {
 		if ( ! empty( $row['status_manual'] ) ) {
 			return $row['status'];
 		}
 		foreach ( array_reverse( self::tiers(), true ) as $key => $label ) {
-			if ( isset( $row[ $key ] ) && (int) $row['score'] > (int) $row[ $key ] ) {
+			if ( isset( $row[ $key ] ) && (int) $row['score'] >= (int) $row[ $key ] ) {
 				return $label;
 			}
 		}
-		return (int) $row['score'] > (int) $minimum ? 'Preliminary Finisher' : 'Registered';
+		return (int) $row['score'] >= (int) $minimum ? 'Preliminary Finisher' : 'Registered';
 	}
 
 	/** Fixed table aliases match the status-catalog usage query. */
 	public static function automatic_status_sql() {
 		$sql = 'CASE';
 		foreach ( array_reverse( self::tiers(), true ) as $key => $label ) {
-			$sql .= " WHEN e.$key IS NOT NULL AND r.score>e.$key THEN '$label'";
+			$sql .= " WHEN e.$key IS NOT NULL AND r.score>=e.$key THEN '$label'";
 		}
-		return $sql . " WHEN r.score>e.min_finisher_points THEN 'Preliminary Finisher' ELSE 'Registered' END";
+		return $sql . " WHEN r.score>=e.min_finisher_points THEN 'Preliminary Finisher' ELSE 'Registered' END";
 	}
 
 	/** Competition ranking, independent of input ordering; ties consume their positions. */

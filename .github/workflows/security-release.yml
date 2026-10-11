@@ -48,9 +48,16 @@ jobs:
           php tests/raster-policy.php
           php tests/read-models.php
           php tests/event-administration.php
+          php tests/certificates.php
           php tests/diagnostic-contracts.php
           php tests/email-submissions.php
           php tests/legacy-import.php
+
+      - name: Audit bundled PDF dependencies
+        shell: bash
+        run: |
+          composer --working-dir=rally-quest-engine validate --strict
+          composer --working-dir=rally-quest-engine audit --locked --no-interaction
 
       - name: Install static security scanner
         shell: bash
