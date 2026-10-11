@@ -55,7 +55,27 @@ final class MRSA_Views {
 	}
 
 	private static function header() {
-		echo '<div class="mrsa-header"><span class="dashicons dashicons-location-alt" aria-hidden="true"></span><div><h1>Motorcycle Rally Scoring Application</h1><p>an O&rsquo;ConnorADV project <span>v' . esc_html( MRSA_VERSION ) . '</span></p></div></div><hr class="wp-header-end">';
+		$id = MRSA_Admin::selected_event();
+		$events = self::scoring_events();
+		echo '<div class="mrsa-header"><span class="dashicons dashicons-location-alt" aria-hidden="true"></span><div><h1>Motorcycle Rally Scoring Application</h1><p>an O&rsquo;ConnorADV project <span>v' . esc_html( MRSA_VERSION ) . '</span></p></div>';
+		if ( $events ) {
+			$tab = MRSA_Admin::query( 'tab', 'events' );
+			$page = MRSA_Admin::query( 'page' );
+			if ( in_array( $page, array( 'mrsa-rider-score', 'mrsa-scoring', 'mrsa-bonus-edit' ), true ) ) {
+				$tab = 'scoring';
+			} elseif ( in_array( $page, array( 'mrsa-event-roster', 'mrsa-event-enroll', 'mrsa-roster-import' ), true ) ) {
+				$tab = 'rosters';
+			}
+			self::form( 'choose_event', array( 'context_tab' => $tab, 'return_url' => '', 'enroll_event_id' => '' ), 'mrsa-header-event' );
+			echo '<label for="mrsa-header-event"><span>Choose Event</span><select id="mrsa-header-event" name="event_id" required><option value="">Choose an event</option>';
+			foreach ( $events as $event ) {
+				echo '<option value="' . esc_attr( $event['id'] ) . '"' . selected( $id, $event['id'], false ) . '>' . esc_html( $event['name'] . ' (#' . $event['id'] . ')' ) . '</option>';
+			}
+			echo '</select></label>';
+			self::button( 'Set Event' );
+			echo '</form>';
+		}
+		echo '</div><hr class="wp-header-end">';
 	}
 
 	private static function field( $label, $name, $value = '', $type = 'text', $required = false, $attrs = array() ) {
@@ -166,11 +186,17 @@ final class MRSA_Views {
 		echo '</div>';
 	}
 
-	private static function list_page( $tab, array $data ) {
+	private static function server_search( $tab ) {
+		echo '<form method="get" class="mrsa-server-search"><input type="hidden" name="page" value="mrsa"><input type="hidden" name="tab" value="' . esc_attr( $tab ) . '"><label>Search all records <input type="search" name="q" value="' . esc_attr( MRSA_Admin::query( 'q' ) ) . '" maxlength="100"></label> <button class="button">Search</button></form>';
+	}
+
+	private static function list_page( $tab, array $data, $search = true ) {
 		$page = $data['page'];
 		$count = $data['count'];
 		$rows = $data['rows'];
-		echo '<form method="get" class="mrsa-server-search"><input type="hidden" name="page" value="mrsa"><input type="hidden" name="tab" value="' . esc_attr( $tab ) . '"><label>Search all records <input type="search" name="q" value="' . esc_attr( MRSA_Admin::query( 'q' ) ) . '" maxlength="100"></label> <button class="button">Search</button></form>';
+		if ( $search ) {
+			self::server_search( $tab );
+		}
 		echo '<p>' . esc_html( $count . ' matching records; server page ' . $page . ' of ' . max( 1, (int) ceil( $count / 100 ) ) ) . '. Local filters and sorting apply to this page (up to 100 records). ';
 		if ( $page > 1 ) {
 			self::link( 'Previous page', $tab, array( 'q' => MRSA_Admin::query( 'q' ), 'list_page' => $page - 1 ) );
@@ -238,9 +264,13 @@ final class MRSA_Views {
 		if ( $id && ! $rider ) {
 			wp_die( esc_html( 'Rider not found.' ), '', array( 'response' => 404 ) );
 		}
+		echo '<div class="mrsa-riders-toolbar">';
 		if ( $site_admin ) {
 			echo '<p><a class="button button-primary" href="' . esc_url( MRSA_Admin::url( 'rider-edit' ) ) . '">Add Rider</a></p>';
-		} elseif ( $id ) {
+		}
+		self::server_search( 'riders' );
+		echo '</div>';
+		if ( ! $site_admin && $id ) {
 			self::table( array( 'Rider ID', 'Name', 'Alias', 'Email', 'Phone' ) );
 			echo '<tr>';
 			foreach ( array( 'id', 'name', 'alias', 'email', 'phone' ) as $key ) {
@@ -254,7 +284,7 @@ final class MRSA_Views {
 		if ( $id && ! $site_admin ) {
 			self::rider_events( $id );
 		}
-		$rows = self::list_page( 'riders', self::queries()->rider_page( MRSA_Admin::query( 'q' ), MRSA_Admin::query( 'list_page', '1' ), $site_admin, get_current_user_id() ) );
+		$rows = self::list_page( 'riders', self::queries()->rider_page( MRSA_Admin::query( 'q' ), MRSA_Admin::query( 'list_page', '1' ), $site_admin, get_current_user_id() ), false );
 		self::table( array( 'Rider ID', 'Name', 'Alias', 'Email', 'Phone', 'Actions' ) );
 		foreach ( $rows as $row ) {
 			echo '<tr>';
@@ -356,9 +386,9 @@ final class MRSA_Views {
 	}
 
 	private static function rider_events( $id ) {
-		echo '<h3>Registered events (read-only)</h3><p>Result status is automatic unless a manual status was previously recorded. Status is read-only on Results.</p>';
+		echo '<h3>Registered events (read-only)</h3><p>Event Status is calculated automatically unless an administrator assigns a manual status on Results.</p>';
 		$rows = self::queries()->rider_events( $id, MRSA::site_access(), get_current_user_id() );
-		self::table( array( 'Event ID', 'Event', 'Bib / scoring context', 'Pillion', 'Status', 'Score', 'Overall Placing' ), array( 4 ) );
+		self::table( array( 'Event ID', 'Event', 'Bib / scoring context', 'Pillion', 'Event Status', 'Score', 'Overall Placing' ), array( 4 ) );
 		foreach ( $rows as $row ) {
 			echo '<tr><td>';
 			self::h( $row['event_id'] );
@@ -472,7 +502,7 @@ final class MRSA_Views {
 		self::field( 'Location', 'location', $event['location'] ?? '', 'text', false, array( 'maxlength' => 200 ) );
 		self::field( 'Latitude', 'latitude', $event['latitude'] ?? '', 'number', false, array( 'min' => -90, 'max' => 90, 'step' => '0.0000001' ) );
 		self::field( 'Longitude', 'longitude', $event['longitude'] ?? '', 'number', false, array( 'min' => -180, 'max' => 180, 'step' => '0.0000001' ) );
-		self::field( 'Minimum finisher points (configuration only)', 'min_finisher_points', $event['min_finisher_points'] ?? 0, 'number', true, array( 'min' => 0, 'max' => 1000000000, 'step' => 1 ) );
+		self::field( 'Minimum Finisher Points', 'min_finisher_points', $event['min_finisher_points'] ?? 0, 'number', true, array( 'min' => 0, 'max' => 1000000000, 'step' => 1 ) );
 		echo '<div class="mrsa-logo">';
 		self::field( 'Existing media image ID (0 = none)', 'logo_id', $event['logo_id'] ?? 0, 'number', false, array( 'min' => 0, 'step' => 1 ) );
 		echo '<button type="button" class="button mrsa-media">Select logo in WordPress media library</button><button type="button" class="button mrsa-clear-media">Clear logo</button><div class="mrsa-logo-preview">';
@@ -503,11 +533,18 @@ final class MRSA_Views {
 		self::header();
 		echo '<h2>' . esc_html( $id ? 'Edit Event' : 'Add Event' ) . '</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'events' ) ) . '">Back to Events</a></p>';
 		self::notice();
+		echo '<div class="mrsa-event-columns"><div>';
 		self::event_form( $id, $event );
 		if ( $id ) {
+			self::status_catalog( $id, 'registration', 'Registration Status' );
+			self::status_catalog( $id, 'event', 'Event Status' );
+		}
+		echo '</div><div>';
+		if ( $id ) {
 			$email_status = MRSA_Email_Submissions::configuration_status( $id );
-			$panel_class = $email_status['connected'] ? ' mrsa-email-connected' : ( $email_status['last_test_error'] ? ' mrsa-email-connection-failed' : '' );
-			echo '<section class="mrsa-panel' . esc_attr( $panel_class ) . '"><h2>Email Bonus Submissions</h2><p>Configure the event inbox used for rider bonus submissions.</p><div class="mrsa-email-actions"><a class="button button-primary" href="' . esc_url( MRSA_Admin::url( 'event-email', array( 'event_id' => $id ) ) ) . '">Configure Submission Inbox</a>';
+			$ready = $email_status['configured'] && ! $email_status['last_test_error'];
+			$panel_class = $ready ? ' mrsa-email-connected' : ( $email_status['last_test_error'] ? ' mrsa-email-connection-failed' : '' );
+			echo '<details class="mrsa-panel mrsa-email-panel' . esc_attr( $panel_class ) . '"' . ( $ready ? '' : ' open' ) . '><summary><h2>Email Bonus Submissions</h2>' . ( $ready ? ' <strong>Configured</strong>' : '' ) . '</summary><p>Configure the event inbox used for rider bonus submissions.</p><div class="mrsa-email-actions"><a class="button button-primary" href="' . esc_url( MRSA_Admin::url( 'event-email', array( 'event_id' => $id ) ) ) . '">Configure Submission Inbox</a>';
 			if ( $email_status['configured'] ) {
 				echo '<span class="mrsa-email-summary"><strong>' . esc_html( $email_status['mailbox'] ) . '</strong><span>' . esc_html( $email_status['provider_label'] ) . '</span></span>';
 				self::form( 'event_email_test', array( 'event_id' => $id ), 'mrsa-inline-form' );
@@ -522,13 +559,61 @@ final class MRSA_Views {
 			} elseif ( $email_status['configured'] ) {
 				echo '<p class="mrsa-email-status">Configuration saved. Test the inbox connection to verify the credentials and mailbox access.</p>';
 			}
-			echo '</section>';
+			echo '</details>';
 		}
 		if ( $id && MRSA::site_access() ) {
 			self::event_administrators( $event );
 			self::event_scorers( $event );
 		}
-		echo '</div>';
+		echo '</div></div></div>';
+	}
+
+	private static function status_catalog( $event_id, $kind, $title ) {
+		echo '<section class="mrsa-panel"><h2>' . esc_html( $title ) . '</h2><p>Manage this event&rsquo;s status choices (maximum 20 bytes). Disabled values remain on existing riders but cannot be newly assigned. In-use values cannot be deleted.</p>';
+		if ( 'event' === $kind ) {
+			echo '<p>Automatic is a calculation mode. It always uses Registered or Preliminary Finisher, even if those values are disabled for manual selection; these two system values cannot be deleted. At the end of the event, manually assign Finisher, DNF or DNS on Results.</p>';
+		} else {
+			echo '<p>Keep at least one value enabled. New riders default to Initial Registration when enabled, otherwise the first enabled value.</p>';
+		}
+		echo '<ul class="mrsa-status-options">';
+		foreach ( MRSA_Statuses::options( $event_id, $kind ) as $option ) {
+			$used = MRSA_Statuses::usage( $event_id, $kind, $option['label'] );
+			$protected = 'event' === $kind && in_array( $option['label'], array( 'Registered', 'Preliminary Finisher' ), true );
+			echo '<li><strong>' . esc_html( $option['label'] ) . '</strong> <span>' . esc_html( ( $option['enabled'] ? 'Enabled' : 'Disabled' ) . ' / ' . $used . ' riders' ) . '</span>';
+			self::form( 'status_option', array( 'event_id' => $event_id, 'status_kind' => $kind, 'status_label' => $option['label'] ), 'mrsa-inline-form' );
+			echo '<button class="button" name="status_action" value="' . ( $option['enabled'] ? 'disable' : 'enable' ) . '">' . ( $option['enabled'] ? 'Disable' : 'Enable' ) . '</button>';
+			if ( ! $used && ! $protected ) {
+				echo ' <button class="button" name="status_action" value="delete" data-confirm="Delete this unused status?">Delete</button>';
+			}
+			echo '</form></li>';
+		}
+		echo '</ul>';
+		self::form( 'status_option', array( 'event_id' => $event_id, 'status_kind' => $kind, 'status_action' => 'add' ), 'mrsa-inline-form' );
+		self::field( 'New ' . $title, 'status_label', '', 'text', true, array( 'maxlength' => 20 ) );
+		self::button( 'Add Status' );
+		echo '</form></section>';
+	}
+
+	private static function rider_status_control( $event_id, array $row, $kind, array $options ) {
+		$registration = 'registration' === $kind;
+		$name = $registration ? 'registration_status' : 'status';
+		$current = $registration ? $row['registration_status'] : ( $row['status_manual'] ? $row['status'] : 'Automatic' );
+		$labels = MRSA_Statuses::enabled_labels( $options );
+		if ( ! $registration ) {
+			array_unshift( $labels, 'Automatic' );
+		}
+		if ( ! in_array( $current, $labels, true ) ) {
+			array_unshift( $labels, $current );
+		}
+		self::form( $registration ? 'registration_lifecycle' : 'registration_status', array( 'event_id' => $event_id, 'id' => $row['id'] ), 'mrsa-status-form' );
+		echo '<label><span class="screen-reader-text">' . esc_html( ( $registration ? 'Registration Status' : 'Event Status' ) . ' for bib ' . $row['bib'] ) . '</span><select name="' . esc_attr( $name ) . '">';
+		foreach ( $labels as $label ) {
+			$enabled = 'Automatic' === $label || in_array( $label, MRSA_Statuses::enabled_labels( $options ), true );
+			echo '<option value="' . esc_attr( $label ) . '"' . selected( $current, $label, false ) . '>' . esc_html( $label . ( $enabled ? '' : ' (disabled; retained)' ) ) . '</option>';
+		}
+		echo '</select></label>';
+		self::button( 'Save' );
+		echo '</form>';
 	}
 
 	public static function render_event_email() {
@@ -604,21 +689,16 @@ final class MRSA_Views {
 	private static function event_rosters() {
 		$rider_id = absint( MRSA_Admin::query( 'rider_id', '0' ) );
 		$events = self::events( $rider_id );
-		$id = absint( MRSA_Admin::query( 'event_id', '0' ) );
+		$id = MRSA_Admin::selected_event();
 		$allowed_ids = array_map( 'intval', wp_list_pluck( $events, 'id' ) );
-		if ( $id && ( ! MRSA::event_access( $id ) || ! in_array( $id, $allowed_ids, true ) ) ) {
+		if ( ( $id && ! MRSA::event_access( $id ) ) || ( $rider_id && ! $events ) ) {
 			wp_die( esc_html( 'Event not found or not assigned to you.' ), '', array( 'response' => 403 ) );
 		}
-		echo '<div class="mrsa-roster-toolbar"><div class="mrsa-roster-toolbar__event">';
-		if ( $events ) {
-			echo '<form method="get" action="' . esc_url( admin_url( 'admin.php' ) ) . '" class="mrsa-roster-event-select"><input type="hidden" name="page" value="mrsa"><input type="hidden" name="tab" value="rosters">';
-			if ( $rider_id ) {
-				echo '<input type="hidden" name="rider_id" value="' . esc_attr( $rider_id ) . '">';
-			}
-			self::event_select( $events, $id );
-			echo '<button class="button">Choose event</button></form>';
+		if ( $id && $rider_id && ! in_array( $id, $allowed_ids, true ) ) {
+			echo '<p>The selected rider is not registered in the header event. Choose one of their events in the header.</p>';
+			return;
 		}
-		echo '</div><div class="mrsa-roster-toolbar__actions"><h2>Event Roster</h2>';
+		echo '<div class="mrsa-roster-toolbar"><h2>Event Roster</h2><div class="mrsa-roster-toolbar__actions">';
 		if ( $id && MRSA::site_access() ) {
 			echo '<a class="button button-primary" href="' . esc_url( MRSA_Admin::url( 'event-enroll', array( 'event_id' => $id ) ) ) . '">Add Rider</a>';
 			echo '<a class="button" href="' . esc_url( MRSA_Admin::url( 'roster-import', array( 'event_id' => $id ) ) ) . '">Import Riders</a>';
@@ -632,7 +712,7 @@ final class MRSA_Views {
 		if ( $event ) {
 			self::registrations( $event );
 		} else {
-			echo '<p>' . esc_html( $events ? 'Choose an event to display its registered riders.' : 'Create or be assigned to an event before viewing a roster.' ) . '</p>';
+			echo '<p>' . esc_html( $events ? 'Choose an event in the header to display its registered riders.' : 'Create or be assigned to an event before viewing a roster.' ) . '</p>';
 		}
 	}
 
@@ -649,7 +729,7 @@ final class MRSA_Views {
 		echo '<h2>Import Riders — ' . esc_html( $event['name'] ) . '</h2><p><a class="button" href="' . esc_url( MRSA_Admin::url( 'rosters', array( 'event_id' => $id ) ) ) . '">Back to Rosters</a></p>';
 		self::notice();
 		self::form( 'roster_import', array( 'event_id' => $id ), 'mrsa-panel mrsa-edit-form', '', 'multipart/form-data' );
-		echo '<h3>Import Event Roster (CSV or XLSX)</h3><p>Enroll existing riders only. Supply Rider ID or Email; if both are supplied they must match. Optional columns: Bib ID, Status, Pillion. Blank bibs receive the next available number; blank status defaults to Initial Registration. Existing enrollments, duplicate riders or bibs, and invalid rows reject the entire batch.</p><p><a href="' . esc_url( plugins_url( 'samples/event-roster.csv', MRSA_FILE ) ) . '" download>Download sample roster CSV</a> (replace example identifiers with existing riders). Use the same column headings on the first worksheet of an XLSX file.</p><label class="mrsa-field"><span>Roster file (CSV or XLSX, maximum 10 MB / 5,000 rows)</span><input type="file" name="roster_file" accept=".csv,.xlsx" required></label><p>ClamAV must be available for roster imports. Files are scanned and checked for unsafe content; bonus-import scanning overrides do not apply.</p>';
+		echo '<h3>Import Event Roster (CSV or XLSX)</h3><p>Enroll existing riders only. Supply Rider ID or Email; if both are supplied they must match. Optional columns: Bib ID, Registration Status (legacy Status also supported), Pillion. Use an enabled Registration Status for this event. Blank bibs receive the next available number; blank status defaults to Initial Registration when enabled, otherwise the first enabled value. Existing enrollments, duplicate riders or bibs, and invalid rows reject the entire batch.</p><p><a href="' . esc_url( plugins_url( 'samples/event-roster.csv', MRSA_FILE ) ) . '" download>Download sample roster CSV</a> (replace example identifiers with existing riders). Use the same column headings on the first worksheet of an XLSX file.</p><label class="mrsa-field"><span>Roster file (CSV or XLSX, maximum 10 MB / 5,000 rows)</span><input type="file" name="roster_file" accept=".csv,.xlsx" required></label><p>ClamAV must be available for roster imports. Files are scanned and checked for unsafe content; bonus-import scanning overrides do not apply.</p>';
 		self::button( 'Import Event Roster' );
 		echo '</form></div>';
 	}
@@ -658,15 +738,16 @@ final class MRSA_Views {
 		$id = (int) $event['id'];
 		echo '<p><strong>Event:</strong> ' . esc_html( $event['name'] ) . '. Administrative enrollment is available regardless of the configured registration window. Bibs are unique within this event.</p>';
 		$rows = self::queries()->roster( $id );
-		self::table( array( 'Rider ID', 'Bib ID', 'Status', 'Name', 'Email', 'Score', 'Overall Placing' ) );
+		$options = MRSA_Statuses::options( $id, 'registration' );
+		self::table( array( 'Rider ID', 'Bib ID', 'Registration Status', 'Name', 'Email', 'Score', 'Overall Placing' ) );
 		$roster_url = MRSA_Admin::url( 'rosters', array( 'event_id' => $id ) );
 		foreach ( $rows as $row ) {
 			echo '<tr><td>';
 			self::link( $row['rider_id'], 'rider-edit', array( 'rider_id' => $row['rider_id'], 'return_url' => $roster_url ) );
 			echo '</td><td>';
 			self::link( $row['bib'], 'scoring', array( 'event_id' => $id, 'score_rider' => $row['rider_id'], 'score_tab' => 'pending' ) );
-			echo '</td><td>';
-			self::h( $row['registration_status'] );
+			echo '</td><td data-value="' . esc_attr( $row['registration_status'] ) . '">';
+			self::rider_status_control( $id, $row, 'registration', $options );
 			echo '</td><td>';
 			self::h( $row['name'] );
 			echo '</td><td>';
@@ -745,16 +826,11 @@ final class MRSA_Views {
 
 	private static function scoring_setup() {
 		$events = self::scoring_events();
-		$id = absint( MRSA_Admin::query( 'event_id', '0' ) );
+		$id = MRSA_Admin::selected_event();
 		if ( $id && ! MRSA::scoring_access( $id ) ) {
 			wp_die( esc_html( 'Event not found or not assigned to you.' ), '', array( 'response' => 403 ) );
 		}
 		echo '<h2>Scoring</h2>';
-		if ( $events ) {
-			echo '<form method="get" action="' . esc_url( admin_url( 'admin.php' ) ) . '" class="mrsa-panel"><input type="hidden" name="page" value="mrsa"><input type="hidden" name="tab" value="scoring">';
-			self::event_select( $events, $id );
-			echo '<button class="button">Choose event</button></form>';
-		}
 		$event = $id ? MRSA::row( 'events', $id ) : null;
 		if ( $event ) {
 			if ( MRSA::event_access( $id ) ) {
@@ -762,7 +838,7 @@ final class MRSA_Views {
 			}
 			self::scoring( $event );
 		} else {
-			echo '<p>' . esc_html( $events ? 'Choose an event to display its scoring tabs.' : 'Create or be assigned to an event before opening scoring.' ) . '</p>';
+			echo '<p>' . esc_html( $events ? 'Choose an event in the header to display its scoring tabs.' : 'Create or be assigned to an event before opening scoring.' ) . '</p>';
 		}
 	}
 
@@ -787,7 +863,7 @@ final class MRSA_Views {
 			if ( ! $row ) {
 				wp_die( esc_html( 'The selected rider is not registered in this event.' ), '', array( 'response' => 404 ) );
 			}
-			echo '<p class="mrsa-note">Filtered context: event ' . esc_html( $event['name'] ) . ' (#' . esc_html( $event['id'] ) . '), rider ' . esc_html( $row['name'] ) . ' (#' . esc_html( $row['id'] ) . '), bib ' . esc_html( $row['bib'] ) . ', status ' . esc_html( $row['status'] ) . '.</p>';
+			echo '<p class="mrsa-note">Filtered context: event ' . esc_html( $event['name'] ) . ' (#' . esc_html( $event['id'] ) . '), rider ' . esc_html( $row['name'] ) . ' (#' . esc_html( $row['id'] ) . '), bib ' . esc_html( $row['bib'] ) . ', Event Status ' . esc_html( $row['effective_status'] ) . '.</p>';
 			echo '<p>';
 			self::link( 'Clear rider filter', 'scoring', array( 'event_id' => $event['id'], 'score_tab' => $tab ) );
 			echo '</p>';
@@ -813,7 +889,7 @@ final class MRSA_Views {
 			return;
 		}
 		$rows = self::queries()->scoring( $event['id'], $event['min_finisher_points'] );
-		self::table( array( 'Bib', 'Rider ID', 'Rider', 'Status', 'Score', 'Placing' ), array( 3 ) );
+		self::table( array( 'Bib', 'Rider ID', 'Rider', 'Event Status', 'Score', 'Placing' ), array( 3 ) );
 		foreach ( $rows as $row ) {
 			echo '<tr>';
 			foreach ( array( 'bib', 'id', 'name' ) as $key ) {
@@ -881,7 +957,13 @@ final class MRSA_Views {
 		self::table( array( 'Submission', 'Received', 'Bib', 'Rider', 'Bonus ID', 'Decision', 'Points', 'Reason', 'Reviewer', 'Reviewed', 'Photo' ), array( 5 ) );
 		foreach ( $rows as $row ) {
 			$reviewer = $row['reviewed_by'] ? get_user_by( 'id', $row['reviewed_by'] ) : null;
-			echo '<tr><td>' . esc_html( $row['id'] ) . '</td><td>' . esc_html( $row['submitted_at'] ) . '</td><td>' . esc_html( $row['bib'] ?: '—' ) . '</td><td>' . esc_html( $row['rider_name'] ?: 'Unmatched message' ) . '</td><td>' . esc_html( $row['bonus_id'] ?: '—' ) . '</td><td>' . esc_html( ucfirst( $row['status'] ) ) . '</td><td>' . esc_html( $row['points_awarded'] ) . '</td><td>' . esc_html( $row['rejection_description'] ?: str_replace( '_', ' ', $row['rejection_code'] ) ) . '</td><td>' . esc_html( $reviewer ? $reviewer->user_login : ( $row['reviewed_by'] ? 'Deleted user #' . $row['reviewed_by'] : 'Automated intake' ) ) . '</td><td>' . esc_html( $row['reviewed_at'] ?: '—' ) . '</td><td>';
+			echo '<tr><td>' . esc_html( $row['id'] ) . '</td><td>' . esc_html( $row['submitted_at'] ) . '</td><td>';
+			if ( $row['bib'] && $row['rider_id'] ) {
+				self::link( $row['bib'], 'rider-score', array( 'event_id' => $event['id'], 'rider_id' => $row['rider_id'], 'from' => 'reviewed' ) );
+			} else {
+				self::h( $row['bib'] ?: '—' );
+			}
+			echo '</td><td>' . esc_html( $row['rider_name'] ?: 'Unmatched message' ) . '</td><td>' . esc_html( $row['bonus_id'] ?: '—' ) . '</td><td>' . esc_html( ucfirst( $row['status'] ) ) . '</td><td>' . esc_html( $row['points_awarded'] ) . '</td><td>' . esc_html( $row['rejection_description'] ?: str_replace( '_', ' ', $row['rejection_code'] ) ) . '</td><td>' . esc_html( $reviewer ? $reviewer->user_login : ( $row['reviewed_by'] ? 'Deleted user #' . $row['reviewed_by'] : 'Automated intake' ) ) . '</td><td>' . esc_html( $row['reviewed_at'] ?: '—' ) . '</td><td>';
 			$image_url = MRSA_Email_Submissions::image_url( $event['id'], $row['image_file'] );
 			if ( $image_url ) {
 				echo '<a href="' . esc_url( $image_url ) . '" target="_blank" rel="noopener noreferrer">View photo</a>';
@@ -1127,37 +1209,36 @@ final class MRSA_Views {
 	private static function overall_results() {
 		$rider_id = absint( MRSA_Admin::query( 'rider_id', '0' ) );
 		$events = self::events( $rider_id );
-		$id = absint( MRSA_Admin::query( 'event_id', '0' ) );
+		$id = MRSA_Admin::selected_event();
 		$allowed_ids = array_map( 'intval', wp_list_pluck( $events, 'id' ) );
-		if ( $id && ! in_array( $id, $allowed_ids, true ) ) {
+		if ( ( $id && ! MRSA::event_access( $id ) ) || ( $rider_id && ! $events ) ) {
 			wp_die( esc_html( 'Event not found, not assigned to you, or does not contain the selected rider.' ), '', array( 'response' => 403 ) );
+		}
+		if ( $id && $rider_id && ! in_array( $id, $allowed_ids, true ) ) {
+			echo '<p>The selected rider is not registered in the header event. Choose one of their events in the header.</p>';
+			return;
 		}
 		echo '<h2>Results</h2>';
 		if ( $rider_id ) {
 			$rider = MRSA::row( 'riders', $rider_id );
 			echo '<p>Showing only accessible events containing <strong>' . esc_html( $rider ? $rider['name'] : 'the selected rider' ) . '</strong>.</p>';
 		}
-		if ( $events ) {
-			echo '<form method="get" action="' . esc_url( admin_url( 'admin.php' ) ) . '" class="mrsa-panel"><input type="hidden" name="page" value="mrsa"><input type="hidden" name="tab" value="results">';
-			if ( $rider_id ) {
-				echo '<input type="hidden" name="rider_id" value="' . esc_attr( $rider_id ) . '">';
-			}
-			self::event_select( $events, $id );
-			echo '<button class="button">Choose event</button></form>';
-		}
 		if ( ! $id ) {
-			echo '<p>' . esc_html( $events ? 'Choose an event to display its overall results.' : 'No matching accessible events were found.' ) . '</p>';
+			echo '<p>' . esc_html( $events ? 'Choose an event in the header to display its overall results.' : 'No matching accessible events were found.' ) . '</p>';
 			return;
 		}
 		$event = MRSA::row( 'events', $id );
 		$rows = self::queries()->results( $id, $event['min_finisher_points'] );
-		echo '<h3>' . esc_html( $event['name'] ) . '</h3><p>Overall placing uses competition ranking by total score: equal scores share a place and the next place is skipped. Automatic status becomes Preliminary Finisher only when total score is greater than the event minimum finish score of ' . esc_html( $event['min_finisher_points'] ) . '.</p>';
-		self::table( array( 'Rider #', 'Rider Name', 'Total Score', 'Status', 'Overall Placing' ) );
+		$options = MRSA_Statuses::options( $id, 'event' );
+		echo '<h3>' . esc_html( $event['name'] ) . '</h3><p>Overall placing uses competition ranking by total score: equal scores share a place and the next place is skipped. Automatic Event Status becomes Preliminary Finisher only when total score is strictly greater than Minimum Finisher Points (' . esc_html( $event['min_finisher_points'] ) . '). At the end of the event, an administrator must manually assign Finisher, DNF or DNS. Manual assignments override automatic calculation. Accepted/Rejected Bonuses count submissions, not point totals; pending and invalid messages are excluded.</p>';
+		self::table( array( 'Rider #', 'Rider Name', 'Total Score', 'Accepted Bonuses', 'Rejected Bonuses', 'Event Status', 'Overall Placing' ) );
 		foreach ( $rows as $row ) {
 			$rank = $row['overall_placing'];
 			$effective_status = $row['effective_status'];
 			$score_url = admin_url( 'admin.php?page=mrsa-rider-score&event_id=' . $id . '&rider_id=' . (int) $row['rider_id'] );
-			echo '<tr><td><a href="' . esc_url( $score_url ) . '">' . esc_html( $row['bib'] ) . '</a></td><td>' . esc_html( $row['name'] ) . '</td><td>' . esc_html( $row['score'] ) . '</td><td>' . esc_html( $effective_status ) . '</td><td>' . esc_html( $rank ) . '</td></tr>';
+			echo '<tr><td><a href="' . esc_url( $score_url ) . '">' . esc_html( $row['bib'] ) . '</a></td><td>' . esc_html( $row['name'] ) . '</td><td>' . esc_html( $row['score'] ) . '</td><td>' . esc_html( $row['accepted_bonuses'] ) . '</td><td>' . esc_html( $row['rejected_bonuses'] ) . '</td><td data-value="' . esc_attr( $effective_status ) . '">' . esc_html( $effective_status ) . '<details><summary>Change Event Status</summary>';
+			self::rider_status_control( $id, $row, 'event', $options );
+			echo '</details></td><td>' . esc_html( $rank ) . '</td></tr>';
 		}
 		self::end_table();
 	}
@@ -1165,7 +1246,7 @@ final class MRSA_Views {
 	public static function render_rider_score() {
 		$event_id = absint( MRSA_Admin::query( 'event_id', '0' ) );
 		$rider_id = absint( MRSA_Admin::query( 'rider_id', '0' ) );
-		if ( ! MRSA::event_access( $event_id ) ) {
+		if ( ! MRSA::scoring_access( $event_id ) ) {
 			wp_die( esc_html( 'Event not found or not assigned to you.' ), '', array( 'response' => 403 ) );
 		}
 		$row = self::queries()->rider_score( $event_id, $rider_id );
@@ -1176,9 +1257,9 @@ final class MRSA_Views {
 		$placing = $row['overall_placing'];
 		echo '<div class="wrap mrsa">';
 		self::header();
-		$back_url = MRSA::event_access( $event_id ) ? MRSA_Admin::url( 'results', array( 'event_id' => $event_id ) ) : MRSA_Admin::url( 'scoring', array( 'event_id' => $event_id, 'score_tab' => 'reviewed' ) );
+		$back_url = MRSA::event_access( $event_id ) && 'reviewed' !== MRSA_Admin::query( 'from' ) ? MRSA_Admin::url( 'results', array( 'event_id' => $event_id ) ) : MRSA_Admin::url( 'scoring', array( 'event_id' => $event_id, 'score_tab' => 'reviewed', 'score_rider' => $rider_id ) );
 		echo '<h2>Rider Overall Event Score Sheet</h2><p><a class="button" href="' . esc_url( $back_url ) . '">Back</a></p>';
-		echo '<div class="mrsa-panel"><p><strong>Event:</strong> ' . esc_html( $row['event_name'] ) . '</p><p><strong>Rider:</strong> ' . esc_html( $row['name'] ) . ' (bib ' . esc_html( $row['bib'] ) . ')</p><p><strong>Total score:</strong> ' . esc_html( $row['score'] ) . '</p><p><strong>Status:</strong> ' . esc_html( $status ) . '</p><p><strong>Overall placing:</strong> ' . esc_html( $placing ) . '</p></div>';
+		echo '<div class="mrsa-panel"><p><strong>Event:</strong> ' . esc_html( $row['event_name'] ) . '</p><p><strong>Rider:</strong> ' . esc_html( $row['name'] ) . ' (bib ' . esc_html( $row['bib'] ) . ')</p><p><strong>Total score:</strong> ' . esc_html( $row['score'] ) . '</p><p><strong>Event Status:</strong> ' . esc_html( $status ) . '</p><p><strong>Overall placing:</strong> ' . esc_html( $placing ) . '</p></div>';
 		echo '<h3>Bonus Submission History</h3>';
 		$submissions = self::queries()->rider_submission_history( $event_id, $rider_id );
 		if ( ! $submissions ) {

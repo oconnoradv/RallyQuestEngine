@@ -439,7 +439,8 @@
 		let sortIndex = -1;
 		let ascending = true;
 		function cellText(row, index) {
-			return row.cells[index] ? row.cells[index].textContent.trim() : '';
+			const cell = row.cells[index];
+			return cell ? (cell.dataset.value !== undefined ? cell.dataset.value : cell.textContent.trim()) : '';
 		}
 		headers.forEach((header, index) => {
 			const label = header.textContent;
@@ -471,7 +472,7 @@
 		});
 		function render() {
 			const query = search.value.trim().toLocaleLowerCase();
-			let visible = rows.filter(row => row.textContent.toLocaleLowerCase().includes(query) &&
+			let visible = rows.filter(row => Array.from(row.cells).map((cell, index) => cellText(row, index)).join(' ').toLocaleLowerCase().includes(query) &&
 				filters.every(filter => !filter.select.value || cellText(row, filter.index) === filter.select.value));
 			if (sortIndex >= 0) visible.sort((a, b) => cellText(a, sortIndex).localeCompare(cellText(b, sortIndex), undefined, {numeric: true, sensitivity: 'base'}) * (ascending ? 1 : -1));
 			const perPage = Number(size.value);

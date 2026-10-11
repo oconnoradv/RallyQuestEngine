@@ -12,13 +12,14 @@ $cleanup = static function () use ( $wpdb ) {
 	if ( ! get_option( 'mrsa_delete_on_uninstall', false ) ) {
 		return;
 	}
-	foreach ( array( 'event_admins', 'event_scorers', 'event_email_settings', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit', 'global_admins' ) as $name ) {
+	foreach ( array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit', 'global_admins' ) as $name ) {
 		$table = $wpdb->prefix . 'MRSA_' . $name;
 		$wpdb->query( "DROP TABLE IF EXISTS `$table`" );
 	}
 	MRSA_Bonus::remove_all_storage();
 	delete_option( 'mrsa_db_version' );
 	delete_option( 'mrsa_delete_on_uninstall' );
+	delete_metadata( 'user', 0, $wpdb->prefix . 'mrsa_selected_event', '', true );
 };
 if ( is_multisite() ) {
 	$offset = 0;

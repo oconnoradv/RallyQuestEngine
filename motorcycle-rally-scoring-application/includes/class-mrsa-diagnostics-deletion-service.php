@@ -19,7 +19,7 @@ final class MRSA_Diagnostics_Deletion_Service {
 					$all_galleries = true;
 					MRSA_Admin::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( 'bonus_submissions' ) ) );
 					MRSA_Admin::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( 'bonus_points' ) ) );
-					foreach ( array( 'registrations', 'event_email_settings', 'event_scorers', 'rider_bikes', 'event_admins', 'events', 'riders', 'bikes' ) as $table ) {
+					foreach ( array( 'registrations', 'status_options', 'event_email_settings', 'event_scorers', 'rider_bikes', 'event_admins', 'events', 'riders', 'bikes' ) as $table ) {
 						MRSA_Admin::checked( $wpdb->query( 'DELETE FROM ' . MRSA::table( $table ) ) );
 					}
 					$message = 'All application data was deleted. Audit history and ClamAV overrides were retained.';

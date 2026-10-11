@@ -4,7 +4,7 @@ Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.1.18
+Stable tag: 0.1.19
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -39,11 +39,11 @@ Motorcycle Rally Scoring Application provides administrative tabs for:
 
 * Riders: rider details, make/model-filtered motorcycles with optional manually entered four-digit years, emergency contacts, insurance information, and registered events.
 * Events: event configuration, separate per-event Administrator and Scorer assignments, encrypted event inbox configuration, and Roster links.
-* Rosters: event selection and a read-only roster table with rider ID, bib ID, registration status, name, email, score, and overall placing. Rider IDs open rider details/editing, bibs open event scoring, and enrollment remains a separate screen.
+* Rosters: persistent header event context and a roster table with rider ID, bib ID, editable Registration Status, name, email, score, and overall placing. Rider IDs open rider details/editing, bibs open event scoring, and enrollment remains a separate screen.
 * Scoring: event-specific Bonus Point Library, CSV/XLSX listing import, local-folder and public-URL image import, email submission review, required rejection reasons, and transactional point awards.
-* Results: score ordering, computed overall placing, read-only result status, and rider score sheets with submission history.
+* Results: score ordering, computed overall placing, accepted/rejected submission counts, editable independent Event Status, and rider score sheets with submission history.
 * Bikes: side-by-side manual entry and motorcycle make/model import on wide screens, stacked on narrow screens, plus transactional bulk deletion of unassigned catalog rows.
-* Rosters: Import Riders beside Add Rider opens a separate selected-event CSV/XLSX import screen for existing riders by Rider ID or Email, with a downloadable sample CSV and a Back to Rosters link. Optional Bib ID, Status and Pillion columns; blank bibs receive the next available number. WordPress administrators only, maximum 10 MB / 5,000 rows. ClamAV is required; invalid or conflicting rows reject the whole batch.
+* Rosters: Import Riders beside Add Rider opens a separate selected-event CSV/XLSX import screen for existing riders by Rider ID or Email, with a downloadable sample CSV and a Back to Rosters link. Optional Bib ID, Registration Status (legacy Status accepted) and Pillion columns; statuses must be enabled for the event and blank bibs receive the next available number. WordPress administrators only, maximum 10 MB / 5,000 rows. ClamAV is required; invalid or conflicting rows reject the whole batch.
 * Diagnostics: on-demand required-plugin/environment checks with native WordPress install/activate controls for required Action Scheduler; Gallery for SpotWalla remains optional. PHP, database/InnoDB/schema, ClamAV, private staging/storage and upload capacity are checked against current MRSA limits (10 MB spreadsheets/images, 50 MB ZIP/download, 100 MB / 200 images per batch). Unverifiable hosting and scanner policies are labeled Manual review. JSON export, restorable SQL backup, and verification-string-protected scoped deletion are also available. Gallery image files are stored separately and are not included in database exports or backups.
 * About: version, licensing, attribution, scope, and an optional Gallery for SpotWalla recommendation with documentation and download links.
 
@@ -148,9 +148,12 @@ submission. Accepted library points update the rider total transactionally and
 exactly once. Rejections require a reason and remain in Reviewed and rider
 history. Results orders total scores using competition
 ranking and displays the automatically derived Preliminary Finisher status
-when a score is greater than the event minimum. Status is read-only on that
-page. New registrations have lifecycle status Initial Registration, result
-status Registered, score 0, and unset stored placing. Gallery files live in
+only when a score is strictly greater than Minimum Finisher Points.
+Administrators manually finalize Event Status as Finisher, DNF or DNS;
+manual assignments override later automatic calculations. Registration Status
+is separately editable on Rosters. New registrations use Initial Registration
+when enabled (otherwise the first enabled choice), automatic Event Status,
+score 0, and unset stored placing. Gallery files live in
 the dedicated uploads/mrsa-event-gallery directory and must be backed up
 separately from the JSON and SQL database exports.
 Diagnostics can delete all bonus listings, submissions, scoring images, and
@@ -197,8 +200,22 @@ the destination page's back link. Successful forms return to their originating
 form or tab. If Rosters has
 no unenrolled rider to select, Add Rider to Event can open the Add Rider form,
 automatically enroll the new rider with the lowest available bib, and return
-to the selected roster. Roster registration status is displayed read-only and
-remains independent of scoring-result status.
+to the selected roster. Registration Status is editable by authorized
+administrators and remains independent of Event Status on Results.
+
+Choose Event in the header and press Set Event; this event persists per user
+and site across Rosters, Scoring and Results until changed. Changing the
+header event clears record filters; already-open forms keep their own event.
+Two-column event configuration places separate status catalogs on the left
+and email settings plus role assignments on the right, stacking on small
+screens. Complete inbox configuration is green and minimized; expand it to
+test connectivity. Configured does not imply Connection verified, and failed
+tests remain expanded.
+Event-local statuses can be added, disabled/re-enabled, and deleted only
+when unused. Disabled assigned values are retained, but cannot be newly
+assigned. Keep one registration value enabled for enrollment; automatic
+Registered/Preliminary Finisher values cannot be deleted and disabling them
+only affects manual selection.
 
 Use MySQL 8.0+ or MariaDB 10.6+ with InnoDB tables. Atomic rider updates,
 catalog deletion, and event-capacity changes rely on transaction and row-lock
@@ -287,6 +304,17 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.1.19 =
+* Added persistent per-user/site Choose Event header context shared by Rosters, Scoring and Results.
+* Aligned Riders Search all records to the right of Add Rider with responsive layout.
+* Added independent event-specific Registration Status and Event Status catalogs, with add, disable/re-enable and unused-value deletion controls.
+* Added authorized administrator status editing on Rosters and Results. Automatic remains Registered at/below Minimum Finisher Points and Preliminary Finisher strictly above; administrators manually finalize Finisher, DNF or DNS.
+* Added accepted/rejected submission counts to Results without changing point totals or competition rankings.
+* Linked Reviewed bibs to read-only rider score sheets, including assigned Event Scorer access and return navigation.
+* Arranged event configuration in two columns, with a collapsible configured-email section and role assignments on the right.
+* Upgraded database schema to 10, retaining historical labels, assignments and scores and including status catalogs in backups and diagnostics.
+* Kept Action Scheduler required and the Contested tab/placeholder unchanged.
 
 = 0.1.18 =
 * Added Gmail API setup guidance in a provider-specific Help? hover/focus panel on the event inbox configuration page.

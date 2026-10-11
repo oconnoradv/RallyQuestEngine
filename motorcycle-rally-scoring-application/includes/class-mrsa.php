@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
 final class MRSA {
 	public static function table( $name ) {
 		global $wpdb;
-		$allowed = array( 'event_admins', 'event_scorers', 'event_email_settings', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
+		$allowed = array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
 		if ( ! in_array( $name, $allowed, true ) ) {
 			throw new InvalidArgumentException( 'Unknown MRSA table.' );
 		}
@@ -202,6 +202,19 @@ final class MRSA {
 			KEY user_action (user_id,action,id),
 			KEY event_id (event_id)
 		) ENGINE=InnoDB $c;" );
+		$t = self::table( 'status_options' );
+		dbDelta( "CREATE TABLE $t (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			event_id bigint(20) unsigned NOT NULL,
+			kind varchar(20) NOT NULL,
+			label varchar(20) NOT NULL,
+			enabled tinyint(1) unsigned NOT NULL DEFAULT 1,
+			PRIMARY KEY  (id),
+			UNIQUE KEY event_kind_label (event_id,kind,label)
+		) ENGINE=InnoDB $c;" );
+		if ( (int) $previous_db_version < 10 ) {
+			MRSA_Statuses::migrate();
+		}
 		update_option( 'mrsa_db_version', MRSA_DB_VERSION, false );
 	}
 
@@ -307,8 +320,8 @@ final class MRSA {
 			}
 			$events = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,r.bib,r.pillion,r.registration_status,r.status,r.status_manual,r.score,r.placing,e.min_finisher_points FROM ' . self::table( 'registrations' ) . ' r JOIN ' . self::table( 'events' ) . ' e ON e.id=r.event_id WHERE r.rider_id=%d', $rider['id'] ), ARRAY_A );
 			foreach ( $events as $event ) {
-				$result_status = $event['status_manual'] ? $event['status'] : ( (int) $event['score'] > (int) $event['min_finisher_points'] ? 'Preliminary Finisher' : 'Registered' );
-				$fields[] = array( 'name' => 'Event / bib / pillion / registration status / result status / score / placing', 'value' => implode( ' / ', array( $event['name'], $event['bib'], $event['pillion'], $event['registration_status'], $result_status, $event['score'], $event['placing'] ) ) );
+				$result_status = MRSA_Results::status( $event, $event['min_finisher_points'] );
+				$fields[] = array( 'name' => 'Event / bib / pillion / registration status / event status / score / placing', 'value' => implode( ' / ', array( $event['name'], $event['bib'], $event['pillion'], $event['registration_status'], $result_status, $event['score'], $event['placing'] ) ) );
 			}
 			$submissions = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,s.bib,s.bonus_id,s.email_subject,s.submission_description,s.submitted_at,s.status,s.points_awarded,s.rejection_code,s.rejection_description FROM ' . self::table( 'bonus_submissions' ) . ' s JOIN ' . self::table( 'events' ) . ' e ON e.id=s.event_id WHERE s.rider_id=%d ORDER BY s.submitted_at', $rider['id'] ), ARRAY_A );
 			foreach ( $submissions as $submission ) {

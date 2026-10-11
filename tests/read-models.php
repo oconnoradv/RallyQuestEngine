@@ -20,6 +20,10 @@ check( MRSA_Results::rankings( array() ) === array(), 'empty roster has no ranki
 check( MRSA_Results::status( array( 'score' => 100 ), 100 ) === 'Registered', 'minimum finisher threshold is strictly greater than' );
 check( MRSA_Results::status( array( 'score' => 101 ), 100 ) === 'Preliminary Finisher', 'above-threshold automatic status is retained' );
 check( MRSA_Results::status( array( 'score' => 1000, 'status_manual' => 1, 'status' => 'DNF' ), 100 ) === 'DNF', 'manual historical status overrides automatic status' );
+foreach ( array( 'Finisher', 'DNF', 'DNS' ) as $manual ) {
+	check( MRSA_Results::status( array( 'score' => 0, 'status_manual' => 1, 'status' => $manual ), 100 ) === $manual, 'manual ' . $manual . ' is preserved below threshold' );
+	check( MRSA_Results::status( array( 'score' => 1000, 'status_manual' => 1, 'status' => $manual ), 100 ) === $manual, 'manual ' . $manual . ' is preserved above threshold' );
+}
 
 $row = array( 'name' => 'Check', 'status' => 'passed', 'detail' => 'Result', 'remedy' => 'Action' );
 check( MRSA_Diagnostic_Report::state( array( $row ) ) === 'passed', 'all-passed report has passed aggregate state' );
@@ -59,6 +63,7 @@ $roster = $queries->roster( 7 );
 check( array_column( $roster, 'overall_placing' ) === array( 1, 3, 1 ) && $wpdb->query[1] === array( 7 ), 'roster read model computes ranks without changing bib order or event scope' );
 $results = $queries->results( 7, 50 );
 check( $results[1]['effective_status'] === 'Registered' && $results[0]['overall_placing'] === 1, 'result read model supplies shared status and rankings' );
+check( $wpdb->query[1] === array( 7, 7 ) && strpos( $wpdb->query[0], "status IN ('accepted','rejected')" ) !== false && strpos( $wpdb->query[0], 's.event_id=reg.event_id AND s.rider_id=reg.rider_id' ) !== false, 'results aggregate only accepted and rejected submissions in the same rider/event scope' );
 $wpdb->data = array( array( 'score' => 50, 'min_finisher_points' => 50 ) );
 $wpdb->count = 2;
 $score = $queries->rider_score( 7, 4 );

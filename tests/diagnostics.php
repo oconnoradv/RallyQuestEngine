@@ -2,7 +2,7 @@
 /** Standalone diagnostics regression tests: php tests/diagnostics.php */
 define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
-define( 'MRSA_DB_VERSION', '9' );
+define( 'MRSA_DB_VERSION', '10' );
 define( 'MINUTE_IN_SECONDS', 60 );
 final class MRSA {
 	public static function table( $name ) { return $name; }
@@ -105,7 +105,7 @@ function wp_convert_hr_to_bytes( $value ) {
 	return (int) ( $number * ( 'g' === $unit ? 1073741824 : ( 'm' === $unit ? 1048576 : ( 'k' === $unit ? 1024 : 1 ) ) ) );
 }
 function size_format( $bytes ) { return ( $bytes / 1048576 ) . ' MB'; }
-function get_option( $key, $default = '' ) { return $GLOBALS['schema_version'] ?? '9'; }
+function get_option( $key, $default = '' ) { return $GLOBALS['schema_version'] ?? '10'; }
 function wp_max_upload_size() { return $GLOBALS['upload_limit'] ?? 10485760; }
 function get_temp_dir() { return sys_get_temp_dir(); }
 function wp_normalize_path( $value ) { return str_replace( '\\', '/', $value ); }
@@ -164,7 +164,7 @@ check( strpos( $html, 'id="mrsa-configuration"' ) < strpos( $html, '<h3>Database
 $operations = array( 'all', 'bikes', 'roster', 'bonus_points', 'rider', 'audit' );
 foreach ( $operations as $suffix ) {
 	$operation = 'diagnostics_delete_' . $suffix;
-	$wpdb->tables = array_fill_keys( array( 'registrations', 'rider_bikes', 'event_admins', 'event_scorers', 'event_email_settings', 'events', 'riders', 'bikes', 'bonus_points', 'bonus_submissions' ), array( array( 'id' => 9, 'event_id' => 7, 'rider_id' => 9, 'image_file' => '' ) ) );
+	$wpdb->tables = array_fill_keys( array( 'registrations', 'status_options', 'rider_bikes', 'event_admins', 'event_scorers', 'event_email_settings', 'events', 'riders', 'bikes', 'bonus_points', 'bonus_submissions' ), array( array( 'id' => 9, 'event_id' => 7, 'rider_id' => 9, 'image_file' => '' ) ) );
 	$wpdb->tables['import_audit'] = array(
 		array( 'user_id' => 1, 'action' => 'bypass_enabled' ),
 		array( 'user_id' => 2, 'action' => 'bypass_enabled' ),

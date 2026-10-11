@@ -39,7 +39,7 @@ final class MRSA_Queries {
 	}
 
 	public function roster( $event_id ) {
-		$rows = $this->rows( 'SELECT reg.rider_id,reg.bib,reg.registration_status,reg.score,r.name,r.email FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=reg.rider_id WHERE reg.event_id=%d ORDER BY reg.bib', array( $event_id ) );
+		$rows = $this->rows( 'SELECT reg.id,reg.rider_id,reg.bib,reg.registration_status,reg.score,r.name,r.email FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=reg.rider_id WHERE reg.event_id=%d ORDER BY reg.bib', array( $event_id ) );
 		return $this->ranked( $rows );
 	}
 
@@ -50,7 +50,10 @@ final class MRSA_Queries {
 	}
 
 	public function scoring_rider( $event_id, $rider_id ) {
-		$rows = $this->rows( 'SELECT reg.bib,reg.status,r.name,r.id FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=reg.rider_id WHERE reg.event_id=%d AND reg.rider_id=%d', array( $event_id, $rider_id ) );
+		$rows = $this->rows( 'SELECT reg.bib,reg.status,reg.status_manual,reg.score,e.min_finisher_points,r.name,r.id FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=reg.rider_id JOIN ' . MRSA::table( 'events' ) . ' e ON e.id=reg.event_id WHERE reg.event_id=%d AND reg.rider_id=%d', array( $event_id, $rider_id ) );
+		if ( $rows ) {
+			$rows[0]['effective_status'] = MRSA_Results::status( $rows[0], $rows[0]['min_finisher_points'] );
+		}
 		return $rows ? $rows[0] : null;
 	}
 
@@ -79,7 +82,10 @@ final class MRSA_Queries {
 	}
 
 	public function results( $event_id, $minimum ) {
-		return $this->ranked( $this->rows( 'SELECT reg.*,r.name FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=reg.rider_id WHERE reg.event_id=%d ORDER BY reg.score DESC,reg.bib ASC', array( $event_id ) ), $minimum );
+		return $this->ranked( $this->rows(
+			'SELECT reg.*,r.name,COALESCE(s.accepted,0) accepted_bonuses,COALESCE(s.rejected,0) rejected_bonuses FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . " r ON r.id=reg.rider_id LEFT JOIN (SELECT event_id,rider_id,SUM(CASE WHEN status='accepted' THEN 1 ELSE 0 END) accepted,SUM(CASE WHEN status='rejected' THEN 1 ELSE 0 END) rejected FROM " . MRSA::table( 'bonus_submissions' ) . " WHERE event_id=%d AND status IN ('accepted','rejected') GROUP BY event_id,rider_id) s ON s.event_id=reg.event_id AND s.rider_id=reg.rider_id WHERE reg.event_id=%d ORDER BY reg.score DESC,reg.bib ASC",
+			array( $event_id, $event_id )
+		), $minimum );
 	}
 
 	private function ranked( array $rows, $minimum = null ) {

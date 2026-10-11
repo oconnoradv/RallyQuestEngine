@@ -5,6 +5,31 @@
 .mrsa .mrsa-header h1 { margin: 0 0 4px; padding: 0; font-size: 30px; line-height: 1.2; }
 .mrsa .mrsa-header p { margin: 0; color: #50575e; font-size: 16px; }
 .mrsa .mrsa-header p span { margin-left: 8px; font-size: 13px; }
+.mrsa .mrsa-header .dashicons { flex-shrink: 0; }
+.mrsa .mrsa-header-event { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-left: auto; min-width: 220px; }
+.mrsa .mrsa-header-event label { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+.mrsa .mrsa-header-event select { width: 100%; max-width: 340px; }
+.mrsa .mrsa-riders-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 12px 0; }
+.mrsa .mrsa-riders-toolbar p { margin: 0; }
+.mrsa .mrsa-riders-toolbar .mrsa-server-search { margin-left: auto; text-align: right; }
+.mrsa .mrsa-event-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.mrsa .mrsa-event-columns > div { min-width: 0; }
+.mrsa .mrsa-event-columns .mrsa-edit-form { max-width: none; }
+.mrsa .mrsa-email-panel > summary { cursor: pointer; }
+.mrsa .mrsa-email-panel > summary h2 { display: inline; }
+.mrsa .mrsa-status-options li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #c3c4c7; }
+.mrsa .mrsa-status-options form { margin-left: auto; }
+.mrsa .mrsa-status-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+.mrsa .mrsa-status-form select { max-width: 220px; }
+@media (max-width: 1000px) {
+	.mrsa .mrsa-header { flex-wrap: wrap; }
+	.mrsa .mrsa-header-event { flex-basis: 100%; margin-left: 0; }
+	.mrsa .mrsa-event-columns { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+	.mrsa .mrsa-riders-toolbar { align-items: stretch; flex-direction: column; }
+	.mrsa .mrsa-riders-toolbar .mrsa-server-search { margin-left: 0; text-align: left; }
+}
 .mrsa .mrsa-panel { background: #fff; border: 1px solid #c3c4c7; padding: 18px; margin: 16px 0; }
 .mrsa .mrsa-check-passed { color: #006b1b; }
 .mrsa .mrsa-check-failed { color: #b32d2e; }

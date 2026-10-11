@@ -22,8 +22,11 @@ final class MRSA_Roster_Import_Service {
 		$allowed = array( 'rider id', 'email', 'bib id', 'status', 'pillion' );
 		foreach ( $header as $index => $value ) {
 			$name = strtolower( trim( preg_replace( '/^\xEF\xBB\xBF/', '', (string) $value ) ) );
+			if ( 'registration status' === $name ) {
+				$name = 'status';
+			}
 			if ( ! in_array( $name, $allowed, true ) || isset( $columns[ $name ] ) ) {
-				throw new RuntimeException( 'Use the sample columns only, without duplicate headers: Rider ID, Email, Bib ID, Status, Pillion.' );
+				throw new RuntimeException( 'Use the sample columns only, without duplicate headers: Rider ID, Email, Bib ID, Registration Status (or Status), Pillion.' );
 			}
 			$columns[ $name ] = $index;
 		}
@@ -46,6 +49,8 @@ final class MRSA_Roster_Import_Service {
 			$used = array_fill_keys( array_column( $existing, 'bib' ), true );
 			$enrolled = array_fill_keys( array_column( $existing, 'rider_id' ), true );
 			$records = array();
+			$statuses = MRSA_Statuses::enabled_labels( MRSA_Statuses::options( $event_id, 'registration' ) );
+			$default_status = MRSA_Statuses::initial_registration( $event_id );
 			foreach ( $rows as $line => $row ) {
 				if ( ! array_filter( $row, function ( $value ) { return '' !== trim( (string) $value ); } ) ) {
 					continue;
@@ -83,9 +88,9 @@ final class MRSA_Roster_Import_Service {
 						if ( isset( $used[ $bib ] ) ) { throw new RuntimeException( 'Bib ID is already assigned or repeated in this file.' ); }
 						$used[ $bib ] = true;
 					}
-					$status = $get( 'status' ) ?: 'Initial Registration';
-					if ( ! in_array( $status, array( 'Initial Registration', 'Paid', 'Fully Registered', 'Cancelled' ), true ) ) {
-						throw new RuntimeException( 'Unsupported registration Status.' );
+					$status = $get( 'status' ) ?: $default_status;
+					if ( ! in_array( $status, $statuses, true ) ) {
+						throw new RuntimeException( 'Select an enabled Registration Status for this event.' );
 					}
 					$records[] = array( 'event_id' => $event_id, 'rider_id' => (int) $rider['id'], 'bib' => $bib, 'registration_status' => $status, 'pillion' => MRSA_Admin::text( $get( 'pillion' ), 160 ) );
 				} catch ( RuntimeException $exception ) {
