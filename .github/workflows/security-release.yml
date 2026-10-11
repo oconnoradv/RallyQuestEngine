@@ -47,6 +47,7 @@ jobs:
           php tests/jpeg-policy.php
           php tests/raster-policy.php
           php tests/read-models.php
+          php tests/event-administration.php
           php tests/diagnostic-contracts.php
           php tests/email-submissions.php
 

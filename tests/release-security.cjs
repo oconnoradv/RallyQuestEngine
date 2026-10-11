@@ -7,7 +7,7 @@ const { spawnSync } = require('node:child_process');
 const { checkDependabot, checkCodeQL } = require('../.github/scripts/release-security.cjs');
 
 (async () => {
-	const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/security-release.yml'), 'utf8');
+	const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/security-release.yml'), 'utf8').replace(/\r\n/g, '\n');
 	const policy = workflow.match(/- name: Report CodeQL visibility policy[\s\S]*?        run: \|\n((?:          .*\n)+)/);
 	assert.ok(policy, 'Visibility policy must be present in the workflow.');
 	const script = policy[1].replace(/^          /gm, '');

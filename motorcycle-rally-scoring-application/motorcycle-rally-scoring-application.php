@@ -3,7 +3,7 @@
  * Plugin Name: Motorcycle Rally Scoring Application
  * Plugin URI: https://github.com/oconnoradv/MotorcycleRallyScoringApp
  * Description: Event-scoped rally administration, rider registration and email bonus scoring.
- * Version: 0.1.18
+ * Version: 0.1.19
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Requires Plugins: action-scheduler
@@ -16,8 +16,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'MRSA_VERSION', '0.1.18' );
-define( 'MRSA_DB_VERSION', '9' );
+define( 'MRSA_VERSION', '0.1.19' );
+define( 'MRSA_DB_VERSION', '10' );
 define( 'MRSA_FILE', __FILE__ );
 require_once __DIR__ . '/includes/class-mrsa.php';
 require_once __DIR__ . '/includes/class-mrsa-importer.php';
@@ -32,6 +32,7 @@ require_once __DIR__ . '/includes/class-mrsa-email-submissions.php';
 require_once __DIR__ . '/includes/class-mrsa-roster-import-service.php';
 require_once __DIR__ . '/includes/class-mrsa-diagnostics-deletion-service.php';
 require_once __DIR__ . '/includes/class-mrsa-admin.php';
+require_once __DIR__ . '/includes/class-mrsa-statuses.php';
 require_once __DIR__ . '/includes/class-mrsa-results.php';
 require_once __DIR__ . '/includes/class-mrsa-queries.php';
 require_once __DIR__ . '/includes/class-mrsa-views.php';

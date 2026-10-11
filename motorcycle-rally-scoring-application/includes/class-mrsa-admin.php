@@ -3,6 +3,8 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MRSA_Admin {
+	private static $selected_event = null;
+
 	public static function init() {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'assets' ) );
@@ -116,6 +118,39 @@ final class MRSA_Admin {
 		return add_query_arg( array_merge( array( 'page' => 'mrsa', 'tab' => $tab ), $extra ), admin_url( 'admin.php' ) );
 	}
 
+	public static function remember_event( $id ) {
+		if ( ! MRSA::scoring_access( $id ) || ! MRSA::row( 'events', $id ) ) {
+			throw new RuntimeException( 'Event not found or you are not assigned to it.' );
+		}
+		$current = (int) get_user_option( 'mrsa_selected_event', get_current_user_id() );
+		if ( $current !== $id && ! update_user_option( get_current_user_id(), 'mrsa_selected_event', $id, false ) ) {
+			throw new RuntimeException( 'The selected event could not be remembered.' );
+		}
+		self::$selected_event = $id;
+	}
+
+	public static function selected_event() {
+		if ( null !== self::$selected_event ) {
+			return self::$selected_event;
+		}
+		$explicit = self::query( 'event_id' );
+		if ( '' !== $explicit ) {
+			try {
+				self::remember_event( self::integer( $explicit, 1 ) );
+			} catch ( RuntimeException $exception ) {
+				wp_die( esc_html( $exception->getMessage() ), '', array( 'response' => 403 ) );
+			}
+			return self::$selected_event;
+		}
+		$id = (int) get_user_option( 'mrsa_selected_event', get_current_user_id() );
+		if ( $id && ( ! MRSA::scoring_access( $id ) || ! MRSA::row( 'events', $id ) ) ) {
+			echo '<div class="notice notice-warning"><p>Your selected event no longer exists or is no longer accessible. Choose an event in the header.</p></div>';
+			$id = 0;
+		}
+		self::$selected_event = $id;
+		return $id;
+	}
+
 	private static function require_site_admin() {
 		if ( ! MRSA::site_access() ) {
 			throw new RuntimeException( 'You must be a WordPress administrator to manage shared riders, motorcycles, events, diagnostics, or event administrator assignments.' );
@@ -179,6 +214,27 @@ final class MRSA_Admin {
 				$bonus_step = 'listing' === self::posted( 'import_step' ) ? 'listing' : 'images';
 			}
 			switch ( $op ) {
+				case 'choose_event':
+					$return_url = '';
+					$tab = self::posted( 'context_tab', 'events' );
+					if ( ! in_array( $tab, array( 'riders', 'events', 'rosters', 'scoring', 'results', 'bikes', 'diagnostics', 'about' ), true ) ) {
+						throw new RuntimeException( 'Select an application tab.' );
+					}
+					if ( ! MRSA::site_access() && ! MRSA::event_ids() && ! in_array( $tab, array( 'scoring', 'about' ), true ) ) {
+						$tab = 'scoring';
+					}
+					self::remember_event( self::integer( self::posted( 'event_id' ), 1 ) );
+					if ( in_array( $tab, array( 'rosters', 'results' ), true ) && ! MRSA::event_access( self::$selected_event ) ) {
+						$tab = 'scoring';
+					}
+					$message = 'Selected event updated.';
+					break;
+				case 'status_option':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					self::require_event( $extra['event_id'] );
+					MRSA_Statuses::change_option( $extra['event_id'], self::posted( 'status_kind' ), self::posted( 'status_action' ), self::posted( 'status_label' ) );
+					$tab = 'event-edit';
+					break;
 				case 'event_admin':
 				case 'remove_event_admin':
 					self::require_site_admin();
@@ -589,7 +645,11 @@ final class MRSA_Admin {
 				}
 			}
 			self::checked( $id ? $wpdb->update( MRSA::table( 'events' ), $data, array( 'id' => $id ) ) : $wpdb->insert( MRSA::table( 'events' ), $data ) );
+			$is_new = ! $id;
 			$id = $id ?: (int) $wpdb->insert_id;
+			if ( $is_new ) {
+				MRSA_Statuses::seed( $id );
+			}
 			MRSA::commit_transaction();
 		} catch ( RuntimeException $e ) {
 			MRSA::rollback_transaction();
@@ -631,6 +691,7 @@ final class MRSA_Admin {
 					}
 					$data['rider_id'] = $rider_id;
 					$data['event_id'] = $event_id;
+					$data['registration_status'] = MRSA_Statuses::initial_registration( $event_id );
 					self::checked( $wpdb->insert( MRSA::table( 'registrations' ), $data ) );
 				} else {
 					self::checked( $wpdb->update( MRSA::table( 'registrations' ), $data, array( 'id' => $id, 'event_id' => $event_id ) ) );
@@ -672,7 +733,7 @@ final class MRSA_Admin {
 			if ( ! $bib ) {
 				throw new RuntimeException( 'The rider was saved, but every event bib is assigned. Increase the maximum bib before enrolling the rider.' );
 			}
-			self::checked( $wpdb->insert( MRSA::table( 'registrations' ), array( 'event_id' => $event_id, 'rider_id' => $rider_id, 'bib' => $bib, 'pillion' => '' ) ) );
+			self::checked( $wpdb->insert( MRSA::table( 'registrations' ), array( 'event_id' => $event_id, 'rider_id' => $rider_id, 'bib' => $bib, 'pillion' => '', 'registration_status' => MRSA_Statuses::initial_registration( $event_id ) ) ) );
 			MRSA::commit_transaction();
 		} catch ( RuntimeException $e ) {
 			MRSA::rollback_transaction();
@@ -681,33 +742,11 @@ final class MRSA_Admin {
 	}
 
 	private static function registration_status( $event_id ) {
-		global $wpdb;
-		$id = self::integer( self::posted( 'id' ), 1 );
-		$row = MRSA::row( 'registrations', $id );
-		if ( ! $row || (int) $row['event_id'] !== $event_id ) {
-			throw new RuntimeException( 'Registration not found in the selected event.' );
-		}
-		$status = self::text( self::posted( 'status' ), 20, true );
-		$allowed = array( 'Automatic', 'Registered', 'Preliminary Finisher', 'Finisher', 'DNF', 'DNS' );
-		if ( ! in_array( $status, $allowed, true ) ) {
-			throw new RuntimeException( 'Select a supported rider status.' );
-		}
-		$data = 'Automatic' === $status ? array( 'status' => 'Registered', 'status_manual' => 0 ) : array( 'status' => $status, 'status_manual' => 1 );
-		self::checked( $wpdb->update( MRSA::table( 'registrations' ), $data, array( 'id' => $id, 'event_id' => $event_id ) ) );
+		MRSA_Statuses::assign( $event_id, self::integer( self::posted( 'id' ), 1 ), 'event', self::posted( 'status' ) );
 	}
 
 	private static function registration_lifecycle( $event_id ) {
-		global $wpdb;
-		$id = self::integer( self::posted( 'id' ), 1 );
-		$row = MRSA::row( 'registrations', $id );
-		if ( ! $row || (int) $row['event_id'] !== $event_id ) {
-			throw new RuntimeException( 'Registration not found in the selected event.' );
-		}
-		$status = self::text( self::posted( 'registration_status' ), 20, true );
-		if ( ! in_array( $status, array( 'Initial Registration', 'Paid', 'Fully Registered', 'Cancelled' ), true ) ) {
-			throw new RuntimeException( 'Select a supported registration status.' );
-		}
-		self::checked( $wpdb->update( MRSA::table( 'registrations' ), array( 'registration_status' => $status ), array( 'id' => $id, 'event_id' => $event_id ) ) );
+		MRSA_Statuses::assign( $event_id, self::integer( self::posted( 'id' ), 1 ), 'registration', self::posted( 'registration_status' ) );
 	}
 
 	public static function image_queue() {
@@ -808,7 +847,7 @@ final class MRSA_Admin {
 			wp_die( esc_html( 'Unsupported diagnostics download.' ), '', array( 'response' => 400 ) );
 		}
 		global $wpdb;
-		$tables = array( 'event_admins', 'event_scorers', 'event_email_settings', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
+		$tables = array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'bikes', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
 		$stamp = gmdate( 'Ymd-His' );
 		nocache_headers();
 		if ( 'json' === $type ) {

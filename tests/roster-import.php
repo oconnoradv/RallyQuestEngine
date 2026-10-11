@@ -8,6 +8,7 @@ final class MRSA {
 	public static $site_admin = true;
 	public static function site_access() { return self::$site_admin; }
 	public static function event_access( $id ) { return 7 === $id; }
+	public static function scoring_access( $id ) { return self::event_access( $id ); }
 	public static function row( $table, $id ) { return 7 === $id ? array( 'id' => 7, 'name' => 'Test Rally' ) : null; }
 	public static function table( $name ) { return $name; }
 	public static function begin_transaction() { $GLOBALS['wpdb']->snapshot = $GLOBALS['wpdb']->registrations; }
@@ -34,6 +35,10 @@ final class Roster_Test_DB {
 		return null;
 	}
 	public function get_results( $query, $format ) {
+		$sql = is_array( $query ) ? $query[0] : $query;
+		if ( strpos( $sql, 'FROM status_options' ) !== false ) {
+			return array_map( function ( $label ) { return array( 'label' => $label, 'enabled' => 1 ); }, MRSA_Statuses::defaults( $query[1][1] ) );
+		}
 		if ( $this->view_mode ) {
 			$sql = is_array( $query ) ? $query[0] : $query;
 			return strpos( $sql, 'SELECT e.*' ) === 0 ? array( MRSA::row( 'events', 7 ) ) : array();
@@ -62,8 +67,11 @@ function wp_nonce_field( $action ) { echo '<input name="_wpnonce" value="test">'
 function wp_list_pluck( $rows, $key ) { return array_column( $rows, $key ); }
 function selected( $first, $second ) { if ( (string) $first === (string) $second ) { echo ' selected'; } }
 function get_current_user_id() { return 1; }
+function get_user_option( $key, $user_id ) { return $GLOBALS['selected_event'] ?? 0; }
+function update_user_option( $user_id, $key, $value, $global = false ) { $GLOBALS['selected_event'] = $value; return true; }
 function wp_die( $message, $title = '', $args = array() ) { throw new RuntimeException( $args['response'] . ': ' . $message ); }
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-admin.php';
+require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-statuses.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-file-scan.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-spreadsheet-reader.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-roster-import-service.php';
@@ -124,7 +132,7 @@ import_rows( array( array( 'rider1@example.com' ) ), array( 'Email' ) );
 check( end( $wpdb->registrations )['bib'] === 1, 'email-only roster assigns next free bib' );
 $sample = __DIR__ . '/../motorcycle-rally-scoring-application/samples/event-roster.csv';
 list( $header, $rows ) = MRSA_Bonus::read_spreadsheet( $sample, 'csv' );
-check( $header === array( 'Rider ID', 'Email', 'Bib ID', 'Status', 'Pillion' ) && count( $rows ) === 2, 'downloadable sample CSV parses with documented columns' );
+check( $header === array( 'Rider ID', 'Email', 'Bib ID', 'Registration Status', 'Pillion' ) && count( $rows ) === 2, 'downloadable sample CSV parses with documented columns' );
 // Archive fixture supplies components; the production parser still validates the XML.
 define( 'PCLZIP_OPT_BY_NAME', 1 );
 define( 'PCLZIP_OPT_EXTRACT_AS_STRING', 2 );
