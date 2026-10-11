@@ -96,10 +96,15 @@ final class RQE_Legacy_Import {
 				}
 				$rows += (int) $copied;
 			}
+			$user_ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s", $wpdb->prefix . 'mrsa_selected_event' ) );
+			if ( ! is_array( $user_ids ) || $wpdb->last_error ) {
+				throw new RuntimeException( 'Unable to read legacy selected events. No legacy data was imported.' );
+			}
 			$meta = $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->usermeta} (user_id, meta_key, meta_value) SELECT user_id, %s, meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s", $wpdb->prefix . 'rqe_selected_event', $wpdb->prefix . 'mrsa_selected_event' ) );
 			if ( false === $meta ) {
 				throw new RuntimeException( 'Unable to import legacy selected events. No legacy data was imported.' );
 			}
+			RQE_Statuses::migrate_tiers();
 			RQE::commit_transaction();
 		} catch ( Throwable $exception ) {
 			RQE::rollback_transaction();
@@ -107,6 +112,9 @@ final class RQE_Legacy_Import {
 				self::remove_directory( self::gallery_path( 'rqe' ) );
 			}
 			throw $exception;
+		}
+		foreach ( $user_ids as $user_id ) {
+			wp_cache_delete( (int) $user_id, 'user_meta' );
 		}
 		if ( get_option( 'mrsa_delete_on_uninstall', false ) ) {
 			update_option( 'rqe_delete_on_uninstall', 1, false );

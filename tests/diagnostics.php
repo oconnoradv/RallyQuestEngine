@@ -149,6 +149,9 @@ if ( in_array( '--preview', $argv ?? array(), true ) ) {
 check( strpos( $html, 'rqe-destructive-grid' ) !== false && substr_count( $html, 'rqe-destructive-action' ) === 6, 'six destructive actions share a compact grid' );
 check( substr_count( $html, 'rqe-diagnostics-section' ) === 10, 'configuration, exports, destructive group and individual actions can all collapse' );
 check( strpos( $html, '<details class="rqe-diagnostics-section"><summary><h3>Destructive operations</h3></summary>' ) !== false, 'Destructive operations defaults to collapsed' );
+foreach ( array( 'Export Data', 'Database Backup' ) as $heading ) {
+	check( strpos( $html, '<details class="rqe-panel rqe-diagnostics-section"><summary><h3>' . $heading ) !== false, $heading . ' defaults to collapsed' );
+}
 foreach ( array( 'Required Plugins and Configuration', 'Export Data', 'Database Backup', 'Destructive operations' ) as $heading ) {
 	check( strpos( $html, '<summary><h3>' . $heading . '</h3>' ) !== false, 'native collapse control wraps ' . $heading );
 }

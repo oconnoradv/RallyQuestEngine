@@ -149,6 +149,9 @@ final class RQE {
 			latitude decimal(10,7) DEFAULT NULL,
 			longitude decimal(10,7) DEFAULT NULL,
 			min_finisher_points bigint(20) unsigned NOT NULL DEFAULT 0,
+			bronze_finisher_points bigint(20) unsigned DEFAULT NULL,
+			silver_finisher_points bigint(20) unsigned DEFAULT NULL,
+			gold_finisher_points bigint(20) unsigned DEFAULT NULL,
 			public_results_enabled tinyint(1) unsigned NOT NULL DEFAULT 0,
 			PRIMARY KEY  (id)
 		) ENGINE=InnoDB $c;" );
@@ -160,7 +163,7 @@ final class RQE {
 			bib int(10) unsigned NOT NULL,
 			pillion varchar(160) NOT NULL DEFAULT '',
 			registration_status varchar(20) NOT NULL DEFAULT 'Initial Registration',
-			status varchar(20) NOT NULL DEFAULT 'Registered',
+			status varchar(64) NOT NULL DEFAULT 'Registered',
 			status_manual tinyint(1) unsigned NOT NULL DEFAULT 0,
 			score bigint(20) NOT NULL DEFAULT 0,
 			placing int(10) unsigned DEFAULT NULL,
@@ -229,7 +232,7 @@ final class RQE {
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			event_id bigint(20) unsigned NOT NULL,
 			kind varchar(20) NOT NULL,
-			label varchar(20) NOT NULL,
+			label varchar(64) NOT NULL,
 			enabled tinyint(1) unsigned NOT NULL DEFAULT 1,
 			PRIMARY KEY  (id),
 			UNIQUE KEY event_kind_label (event_id,kind,label)
@@ -243,6 +246,9 @@ final class RQE {
 				throw new RuntimeException( 'Public results schema upgrade failed. Check database permissions and retry the upgrade.' );
 			}
 			RQE_Statuses::migrate_cancelled();
+		}
+		if ( (int) $previous_db_version < 13 ) {
+			RQE_Statuses::migrate_tiers();
 		}
 		update_option( 'rqe_db_version', RQE_DB_VERSION, false );
 	}
@@ -358,7 +364,7 @@ final class RQE {
 			foreach ( $horses as $horse ) {
 				$fields[] = array( 'name' => 'Horse (name / breed / sex / age / color)', 'value' => implode( ' / ', array( $horse['name'], $horse['breed'], $horse['sex'], (string) $horse['age'], $horse['color'] ) ) );
 			}
-			$events = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,r.bib,r.pillion,r.registration_status,r.status,r.status_manual,r.score,r.placing,e.min_finisher_points FROM ' . self::table( 'registrations' ) . ' r JOIN ' . self::table( 'events' ) . ' e ON e.id=r.event_id WHERE r.rider_id=%d', $rider['id'] ), ARRAY_A );
+			$events = $wpdb->get_results( $wpdb->prepare( 'SELECT e.name,r.bib,r.pillion,r.registration_status,r.status,r.status_manual,r.score,r.placing,e.min_finisher_points,e.bronze_finisher_points,e.silver_finisher_points,e.gold_finisher_points FROM ' . self::table( 'registrations' ) . ' r JOIN ' . self::table( 'events' ) . ' e ON e.id=r.event_id WHERE r.rider_id=%d', $rider['id'] ), ARRAY_A );
 			foreach ( $events as $event ) {
 				$result_status = RQE_Results::status( $event, $event['min_finisher_points'] );
 				$fields[] = array( 'name' => 'Event / bib / pillion / registration status / event status / score / placing', 'value' => implode( ' / ', array( $event['name'], $event['bib'], $event['pillion'], $event['registration_status'], $result_status, $event['score'], $event['placing'] ) ) );

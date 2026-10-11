@@ -50,7 +50,7 @@ final class RQE_Queries {
 	}
 
 	public function scoring_rider( $event_id, $rider_id ) {
-		$rows = $this->rows( 'SELECT reg.bib,reg.status,reg.status_manual,reg.score,e.min_finisher_points,r.name,r.id FROM ' . RQE::table( 'registrations' ) . ' reg JOIN ' . RQE::table( 'riders' ) . ' r ON r.id=reg.rider_id JOIN ' . RQE::table( 'events' ) . ' e ON e.id=reg.event_id WHERE reg.event_id=%d AND reg.rider_id=%d', array( $event_id, $rider_id ) );
+		$rows = $this->rows( 'SELECT reg.bib,reg.status,reg.status_manual,reg.score,e.min_finisher_points,e.bronze_finisher_points,e.silver_finisher_points,e.gold_finisher_points,r.name,r.id FROM ' . RQE::table( 'registrations' ) . ' reg JOIN ' . RQE::table( 'riders' ) . ' r ON r.id=reg.rider_id JOIN ' . RQE::table( 'events' ) . ' e ON e.id=reg.event_id WHERE reg.event_id=%d AND reg.rider_id=%d', array( $event_id, $rider_id ) );
 		if ( $rows ) {
 			$rows[0]['effective_status'] = RQE_Results::status( $rows[0], $rows[0]['min_finisher_points'] );
 		}
@@ -58,7 +58,7 @@ final class RQE_Queries {
 	}
 
 	public function scoring( $event_id, $minimum ) {
-		$rows = $this->rows( 'SELECT reg.bib,reg.status,reg.status_manual,reg.score,reg.placing,r.id,r.name FROM ' . RQE::table( 'registrations' ) . ' reg JOIN ' . RQE::table( 'riders' ) . ' r ON r.id=reg.rider_id WHERE reg.event_id=%d ORDER BY reg.bib', array( $event_id ) );
+		$rows = $this->rows( 'SELECT reg.bib,reg.status,reg.status_manual,reg.score,reg.placing,e.bronze_finisher_points,e.silver_finisher_points,e.gold_finisher_points,r.id,r.name FROM ' . RQE::table( 'registrations' ) . ' reg JOIN ' . RQE::table( 'riders' ) . ' r ON r.id=reg.rider_id JOIN ' . RQE::table( 'events' ) . ' e ON e.id=reg.event_id WHERE reg.event_id=%d ORDER BY reg.bib', array( $event_id ) );
 		foreach ( $rows as &$row ) {
 			$row['effective_status'] = RQE_Results::status( $row, $minimum );
 		}
@@ -67,7 +67,7 @@ final class RQE_Queries {
 	}
 
 	public function rider_events( $rider_id, $site_access, $user_id ) {
-		$sql = 'SELECT reg.*,e.name,e.min_finisher_points FROM ' . RQE::table( 'registrations' ) . ' reg JOIN ' . RQE::table( 'events' ) . ' e ON e.id=reg.event_id WHERE reg.rider_id=%d';
+		$sql = 'SELECT reg.*,e.name,e.min_finisher_points,e.bronze_finisher_points,e.silver_finisher_points,e.gold_finisher_points FROM ' . RQE::table( 'registrations' ) . ' reg JOIN ' . RQE::table( 'events' ) . ' e ON e.id=reg.event_id WHERE reg.rider_id=%d';
 		$args = array( $rider_id );
 		if ( ! $site_access ) {
 			$sql .= ' AND EXISTS (SELECT 1 FROM ' . RQE::table( 'event_admins' ) . ' a WHERE a.event_id=e.id AND a.user_id=%d)';
@@ -87,8 +87,8 @@ final class RQE_Queries {
 	}
 
 	private function result_rows( $event_id, $public ) {
-		$columns = $public ? 'reg.bib,reg.score,reg.status,reg.status_manual,r.name' : 'reg.*,r.name';
-		$publication = $public ? ' JOIN ' . RQE::table( 'events' ) . ' e ON e.id=reg.event_id AND e.public_results_enabled=1' : '';
+		$columns = ( $public ? 'reg.bib,reg.score,reg.status,reg.status_manual,r.name' : 'reg.*,r.name' ) . ',e.bronze_finisher_points,e.silver_finisher_points,e.gold_finisher_points';
+		$publication = ' JOIN ' . RQE::table( 'events' ) . ' e ON e.id=reg.event_id' . ( $public ? ' AND e.public_results_enabled=1' : '' );
 		return $this->rows(
 			'SELECT ' . $columns . ',COALESCE(s.accepted,0) accepted_bonuses,COALESCE(s.rejected,0) rejected_bonuses FROM ' . RQE::table( 'registrations' ) . ' reg JOIN ' . RQE::table( 'riders' ) . ' r ON r.id=reg.rider_id' . $publication . " LEFT JOIN (SELECT event_id,rider_id,SUM(CASE WHEN status='accepted' THEN 1 ELSE 0 END) accepted,SUM(CASE WHEN status='rejected' THEN 1 ELSE 0 END) rejected FROM " . RQE::table( 'bonus_submissions' ) . " WHERE event_id=%d AND status IN ('accepted','rejected') GROUP BY event_id,rider_id) s ON s.event_id=reg.event_id AND s.rider_id=reg.rider_id WHERE reg.event_id=%d ORDER BY reg.score DESC,reg.bib ASC",
 			array( $event_id, $event_id )
@@ -103,7 +103,7 @@ final class RQE_Queries {
 		}
 		$rows = $this->ranked( $this->result_rows( $event_id, true ), $events[0]['min_finisher_points'] );
 		foreach ( $rows as &$row ) {
-			unset( $row['status'], $row['status_manual'] );
+			unset( $row['status'], $row['status_manual'], $row['bronze_finisher_points'], $row['silver_finisher_points'], $row['gold_finisher_points'] );
 		}
 		unset( $row );
 		return array( 'name' => $events[0]['name'], 'description' => $events[0]['description'], 'logo_id' => (int) $events[0]['logo_id'], 'rows' => $rows );
@@ -122,7 +122,7 @@ final class RQE_Queries {
 	}
 
 	public function rider_score( $event_id, $rider_id ) {
-		$rows = $this->rows( 'SELECT reg.*,r.name,e.name event_name,e.min_finisher_points FROM ' . RQE::table( 'registrations' ) . ' reg JOIN ' . RQE::table( 'riders' ) . ' r ON r.id=reg.rider_id JOIN ' . RQE::table( 'events' ) . ' e ON e.id=reg.event_id WHERE reg.event_id=%d AND reg.rider_id=%d', array( $event_id, $rider_id ) );
+		$rows = $this->rows( 'SELECT reg.*,r.name,e.name event_name,e.min_finisher_points,e.bronze_finisher_points,e.silver_finisher_points,e.gold_finisher_points FROM ' . RQE::table( 'registrations' ) . ' reg JOIN ' . RQE::table( 'riders' ) . ' r ON r.id=reg.rider_id JOIN ' . RQE::table( 'events' ) . ' e ON e.id=reg.event_id WHERE reg.event_id=%d AND reg.rider_id=%d', array( $event_id, $rider_id ) );
 		if ( ! $rows ) {
 			return null;
 		}

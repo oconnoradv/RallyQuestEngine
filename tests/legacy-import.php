@@ -24,6 +24,10 @@ function set_transient( $key, $value ) { $GLOBALS['test_transients'][ $key ] = $
 function get_transient( $key ) { return isset( $GLOBALS['test_transients'][ $key ] ) ? $GLOBALS['test_transients'][ $key ] : false; }
 function delete_transient( $key ) { unset( $GLOBALS['test_transients'][ $key ] ); return true; }
 function add_action() {}
+function wp_cache_delete( $id, $group ) {
+	$GLOBALS['cache_deletions'][] = array( $id, $group );
+	return true;
+}
 function wp_upload_dir() { return array( 'basedir' => $GLOBALS['uploads'] ); }
 function trailingslashit( $path ) { return rtrim( $path, '/\\' ) . '/'; }
 function wp_mkdir_p( $path ) { return is_dir( $path ) || mkdir( $path, 0777, true ); }
@@ -35,6 +39,7 @@ final class Legacy_Test_DB {
 	public $usermeta = 'wp_usermeta';
 	public $pdo;
 	public $fail_table = '';
+	public $last_error = '';
 	public function __construct() {
 		$this->pdo = new PDO( 'sqlite::memory:' );
 		$this->pdo->setAttribute( PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION );
@@ -56,6 +61,9 @@ final class Legacy_Test_DB {
 		return false === $value ? null : $value;
 	}
 	public function get_col( $sql ) {
+		if ( 0 === strpos( $sql, 'SELECT DISTINCT user_id' ) ) {
+			return $this->pdo->query( $sql )->fetchAll( PDO::FETCH_COLUMN );
+		}
 		preg_match( '/^SHOW COLUMNS FROM `(.+)`$/', $sql, $match );
 		return array_column( $this->pdo->query( 'PRAGMA table_info(`' . $match[1] . '`)' )->fetchAll( PDO::FETCH_ASSOC ), 'name' );
 	}
@@ -78,6 +86,9 @@ final class RQE {
 	public static function commit_transaction() { $GLOBALS['wpdb']->pdo->commit(); }
 	public static function rollback_transaction() { $GLOBALS['wpdb']->pdo->rollBack(); return true; }
 }
+final class RQE_Statuses {
+	public static function migrate_tiers() { $GLOBALS['tier_migrations']++; }
+}
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-legacy-import.php';
 
 function fresh_db() {
@@ -96,6 +107,8 @@ function fresh_db() {
 	$wpdb->pdo->exec( "INSERT INTO wp_usermeta (user_id, meta_key, meta_value) VALUES (1, 'wp_mrsa_selected_event', '7')" );
 	$GLOBALS['test_options'] = array( 'mrsa_db_version' => '11', 'mrsa_delete_on_uninstall' => 1 );
 	$GLOBALS['test_transients'] = array();
+	$GLOBALS['cache_deletions'] = array();
+	$GLOBALS['tier_migrations'] = 0;
 }
 
 fresh_db();
@@ -115,6 +128,7 @@ fresh_db();
 $wpdb->fail_table = 'registrations';
 RQE_Legacy_Import::maybe_run();
 check( false === get_option( RQE_Legacy_Import::OPTION ) && array() === $wpdb->rows( 'wp_RQE_riders' ) && array() === $wpdb->rows( 'wp_RQE_events' ) && ! is_dir( $GLOBALS['uploads'] . '/rqe-event-gallery' ), 'failed table copy rolls back rows and the copied gallery so the import can retry' );
+check( array() === $GLOBALS['cache_deletions'], 'rolled-back imports do not invalidate user metadata caches' );
 $wpdb->fail_table = '';
 ob_start();
 RQE_Legacy_Import::notices();
@@ -129,6 +143,8 @@ check( array( array( 'id' => 7, 'name' => 'Spring Rally', 'description' => '', '
 check( array( array( 'id' => 1, 'event_id' => 7, 'label' => 'riders' ) ) == $riders, 'only intersecting columns are copied' );
 check( 'submission' === file_get_contents( $GLOBALS['uploads'] . '/rqe-event-gallery/7/submissions/s.jpg' ) && is_file( $GLOBALS['uploads'] . '/mrsa-event-gallery/7/bonus.jpg' ), 'gallery copy is complete and the legacy gallery is preserved' );
 check( '7' === $wpdb->get_var( "SELECT meta_value FROM wp_usermeta WHERE meta_key = 'wp_rqe_selected_event'" ) && 1 === get_option( 'rqe_delete_on_uninstall' ), 'selected event and uninstall preference carry over' );
+check( array( array( 1, 'user_meta' ) ) === $GLOBALS['cache_deletions'], 'committed legacy selections invalidate the affected WordPress user metadata cache' );
+check( 1 === $GLOBALS['tier_migrations'], 'legacy imports seed new tier statuses after copying historical catalogs' );
 check( 1 === count( $wpdb->rows( 'wp_MRSA_riders' ) ), 'legacy tables are left intact' );
 ob_start();
 RQE_Legacy_Import::notices();

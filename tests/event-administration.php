@@ -62,10 +62,21 @@ $GLOBALS['preferences'] = array();
 function is_user_logged_in() { return $GLOBALS['actor'] > 0; }
 function current_user_can( $capability ) { return 1 === $GLOBALS['actor']; }
 function get_current_user_id() { return $GLOBALS['actor']; }
-function get_user_option( $key, $id ) { return $GLOBALS['preferences'][ $GLOBALS['site'] ][ $id ][ $key ] ?? 0; }
+function get_user_option( $key, $id ) {
+	if ( isset( $GLOBALS['preference_cache'][ $GLOBALS['site'] ][ $id ][ $key ] ) ) {
+		return $GLOBALS['preference_cache'][ $GLOBALS['site'] ][ $id ][ $key ];
+	}
+	return $GLOBALS['preferences'][ $GLOBALS['site'] ][ $id ][ $key ] ?? 0;
+}
+function wp_cache_delete( $id, $group ) {
+	if ( 'user_meta' !== $group ) { throw new LogicException( 'Expected user metadata cache invalidation.' ); }
+	unset( $GLOBALS['preference_cache'][ $GLOBALS['site'] ][ $id ] );
+	return true;
+}
 function update_user_option( $id, $key, $value, $global = false ) {
 	if ( $global ) { throw new LogicException( 'Event preference must be site-scoped.' ); }
 	if ( ! empty( $GLOBALS['fail_preference'] ) ) { return false; }
+	if ( (string) ( $GLOBALS['preferences'][ $GLOBALS['site'] ][ $id ][ $key ] ?? '' ) === (string) $value ) { return false; }
 	$GLOBALS['preferences'][ $GLOBALS['site'] ][ $id ][ $key ] = $value;
 	return true;
 }
@@ -145,7 +156,7 @@ function render( $method, ...$args ) {
 
 $wpdb = new Event_Test_DB();
 foreach ( array(
-	'events' => "id INTEGER PRIMARY KEY,name TEXT,description TEXT DEFAULT '',hunt_style TEXT DEFAULT 'motorcycle',event_date TEXT,max_bib INTEGER,min_finisher_points INTEGER,logo_id INTEGER DEFAULT 0,public_results_enabled INTEGER NOT NULL DEFAULT 0,registration_open TEXT,registration_close TEXT,start_at TEXT,end_at TEXT,rider_price TEXT,pillion_price TEXT,location TEXT,latitude TEXT,longitude TEXT",
+	'events' => "id INTEGER PRIMARY KEY,name TEXT,description TEXT DEFAULT '',hunt_style TEXT DEFAULT 'motorcycle',event_date TEXT,max_bib INTEGER,min_finisher_points INTEGER,bronze_finisher_points INTEGER DEFAULT NULL,silver_finisher_points INTEGER DEFAULT NULL,gold_finisher_points INTEGER DEFAULT NULL,logo_id INTEGER DEFAULT 0,public_results_enabled INTEGER NOT NULL DEFAULT 0,registration_open TEXT,registration_close TEXT,start_at TEXT,end_at TEXT,rider_price TEXT,pillion_price TEXT,location TEXT,latitude TEXT,longitude TEXT",
 	'horses' => "id INTEGER PRIMARY KEY,rider_id INTEGER DEFAULT 0,name TEXT,breed TEXT DEFAULT '',sex TEXT DEFAULT '',age INTEGER,color TEXT DEFAULT ''",
 	'riders' => "id INTEGER PRIMARY KEY,name TEXT,email TEXT,alias TEXT DEFAULT '',phone TEXT DEFAULT ''",
 	'registrations' => "id INTEGER PRIMARY KEY,event_id INTEGER,rider_id INTEGER,bib INTEGER,pillion TEXT DEFAULT '',registration_status TEXT DEFAULT 'Initial Registration',status TEXT DEFAULT 'Registered',status_manual INTEGER DEFAULT 0,score INTEGER DEFAULT 0,placing INTEGER",
@@ -245,6 +256,12 @@ request( array( 'event_id' => '7' ) );
 check( RQE_Admin::selected_event() === 7, 'explicit event links set header context' );
 request( array( 'tab' => 'results' ) );
 check( RQE_Admin::selected_event() === 7, 'header event survives navigation without event parameters' );
+$GLOBALS['preferences'][1][1]['rqe_selected_event'] = '8';
+$GLOBALS['preference_cache'][1][1]['rqe_selected_event'] = 7;
+request( array( 'event_id' => '8' ) );
+check( RQE_Admin::selected_event() === 8 && get_user_option( 'rqe_selected_event', 1 ) === '8', 'migrated selection survives a stale user cache and an unchanged WordPress update' );
+request( array( 'event_id' => '7' ) );
+check( RQE_Admin::selected_event() === 7, 'a migrated selection can still be changed to a different event' );
 $GLOBALS['site'] = 2;
 request();
 check( RQE_Admin::selected_event() === 0, 'header selection is independent between sites' );
@@ -371,6 +388,31 @@ check( RQE_Views::event_details_complete( $new_event ) && ! RQE_Views::event_det
 $details_html = render( 'event_form', $new_event_id, $new_event );
 check( strpos( $details_html, 'rqe-complete' ) !== false && strpos( $details_html, 'Event Details: BC-' . $new_event_id ) !== false && strpos( $details_html, '<textarea name="description" rows="4" maxlength="5000" required>' ) !== false, 'completed event details are green, collapsed and show the coded Event ID' );
 check( strpos( render( 'event_form', 0, array() ), ' open><summary><h2>Add Event' ) !== false, 'incomplete event details remain expanded' );
+check( null === $new_event['bronze_finisher_points'] && null === $new_event['silver_finisher_points'] && null === $new_event['gold_finisher_points'], 'optional thresholds default to NULL, not zero' );
+check( substr_count( $details_html, 'placeholder="Not Used"' ) === 3 && strpos( $details_html, 'name="min_finisher_points"' ) < strpos( $details_html, 'name="bronze_finisher_points"' ) && strpos( $details_html, 'name="bronze_finisher_points"' ) < strpos( $details_html, 'name="silver_finisher_points"' ) && strpos( $details_html, 'name="silver_finisher_points"' ) < strpos( $details_html, 'name="gold_finisher_points"' ), 'optional thresholds appear in order after Minimum Finisher Points with Not Used placeholders' );
+foreach ( array( 'registration' => 'Registration Status', 'event' => 'Event Status' ) as $kind => $title ) {
+	check( strpos( render( 'status_catalog', 7, $kind, $title ), '<details class="rqe-panel rqe-status-catalog"><summary><h2>' . $title ) !== false, $title . ' defaults to minimized' );
+}
+foreach ( array(
+	array( 'bronze_finisher_points' => '100' ),
+	array( 'bronze_finisher_points' => '200', 'silver_finisher_points' => '200' ),
+	array( 'bronze_finisher_points' => '200', 'gold_finisher_points' => '150' ),
+	array( 'silver_finisher_points' => '300', 'gold_finisher_points' => '300' ),
+	array( 'gold_finisher_points' => '100' ),
+) as $invalid ) {
+	$_POST = array_merge( $event_post, $invalid );
+	rejects( function () use ( $create_event ) { $create_event->invoke( null ); }, 'must be greater than' );
+}
+foreach ( array( '-1', '1.5', '1000000001', array( '500' ) ) as $invalid ) {
+	$_POST = array_merge( $event_post, array( 'gold_finisher_points' => $invalid ) );
+	rejects( function () use ( $create_event ) { $create_event->invoke( null ); }, 'Gold Finisher Points must be a whole number' );
+}
+$_POST = array_merge( $event_post, array( 'id' => (string) $new_event_id, 'gold_finisher_points' => '400' ) );
+$create_event->invoke( null );
+check( (int) RQE::row( 'events', $new_event_id )['gold_finisher_points'] === 400 && null === RQE::row( 'events', $new_event_id )['silver_finisher_points'], 'Gold can be configured without intermediate tiers' );
+$_POST = array_merge( $event_post, array( 'id' => (string) $new_event_id ) );
+$create_event->invoke( null );
+check( null === RQE::row( 'events', $new_event_id )['gold_finisher_points'], 'clearing a saved optional threshold restores Not Used' );
 $_POST = array();
 
 RQE_Public_Results::init();
@@ -476,6 +518,34 @@ check( strpos( $bicycle_row, 'type="hidden" name="fuel[]" value="5 gal"' ) !== f
 RQE_Horses::delete( $horse_a );
 check( null === RQE::row( 'horses', $horse_a ), 'horses can be deleted' );
 unset( $GLOBALS['test_options']['rqe_primary_style'] );
+$GLOBALS['actor'] = 1;
+$wpdb->update( RQE::table( 'events' ), array( 'bronze_finisher_points' => 200, 'silver_finisher_points' => 300, 'gold_finisher_points' => 400 ), array( 'id' => 7 ) );
+$wpdb->update( RQE::table( 'registrations' ), array( 'score' => 401, 'status_manual' => 0 ), array( 'event_id' => 7, 'rider_id' => 10 ) );
+foreach ( array(
+	$queries->scoring_rider( 7, 10 ),
+	$queries->rider_score( 7, 10 ),
+	array_values( array_filter( $queries->rider_events( 10, true, 1 ), function ( $row ) { return 7 === (int) $row['event_id']; } ) )[0],
+	array_values( array_filter( $queries->scoring( 7, 100 ), function ( $row ) { return 10 === (int) $row['id']; } ) )[0],
+	array_values( array_filter( $queries->results( 7, 100 ), function ( $row ) { return 10 === (int) $row['rider_id']; } ) )[0],
+) as $row ) {
+	check( 'Preliminary Gold Finisher' === $row['effective_status'], 'every administrative score surface uses the configured highest tier' );
+}
+RQE_Public_Results::save_visibility( 7, 1 );
+check( strpos( RQE_Public_Results::shortcode( array( 'id' => 'MC-7' ) ), 'Preliminary Gold Finisher' ) !== false, 'public results use the same automatic tier as administration' );
+check( 1 === RQE_Statuses::usage( 7, 'event', 'Preliminary Gold Finisher' ), 'catalog usage counts automatic tier assignments' );
+RQE_Statuses::migrate_tiers();
+$options_before = count( RQE_Statuses::options( 7, 'event' ) );
+RQE_Statuses::migrate_tiers();
+check( $options_before === count( RQE_Statuses::options( 7, 'event' ) ), 'tier migration is idempotent and preserves historical choices' );
+rejects( function () { RQE_Statuses::change_option( 7, 'event', 'delete', 'Preliminary Silver Finisher' ); }, 'System statuses cannot be deleted' );
+RQE_Statuses::change_option( 7, 'event', 'enable', 'DNS' );
+RQE_Statuses::assign( 7, 1, 'event', 'DNS' );
+check( 'DNS' === $queries->rider_score( 7, 10 )['effective_status'], 'manual DNS remains authoritative above Gold' );
+RQE_Statuses::assign( 7, 1, 'event', 'Automatic' );
+$wpdb->update( RQE::table( 'registrations' ), array( 'score' => 201 ), array( 'event_id' => 7, 'rider_id' => 10 ) );
+check( 'Preliminary Bronze Finisher' === $queries->rider_score( 7, 10 )['effective_status'], 'returning to Automatic and reducing points recalculates the tier' );
+$wpdb->update( RQE::table( 'events' ), array( 'bronze_finisher_points' => null, 'silver_finisher_points' => null, 'gold_finisher_points' => null ), array( 'id' => 7 ) );
+check( 'Preliminary Finisher' === $queries->rider_score( 7, 10 )['effective_status'], 'removing tiers immediately restores the minimum-only calculation' );
 if ( getenv( 'RQE_PREVIEW_DIR' ) ) {
 	file_put_contents( getenv( 'RQE_PREVIEW_DIR' ) . '/event.html', '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="admin.css">' . $html );
 	file_put_contents( getenv( 'RQE_PREVIEW_DIR' ) . '/riders.html', '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="admin.css"><script defer src="admin.js"></script>' . $riders_html );
