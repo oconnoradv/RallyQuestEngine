@@ -34,6 +34,7 @@ final class MRSA_Statuses {
 			if ( ! is_array( $ids ) || $wpdb->last_error ) {
 				throw new RuntimeException( 'Event status migration could not read the events.' );
 			}
+
 			foreach ( $ids as $id ) {
 				self::seed( (int) $id );
 			}
@@ -50,6 +51,38 @@ final class MRSA_Statuses {
 			}
 			throw $exception;
 		}
+	}
+
+	public static function migrate_cancelled() {
+		global $wpdb;
+		MRSA::begin_transaction();
+		try {
+			$ids = $wpdb->get_col( 'SELECT id FROM ' . MRSA::table( 'events' ) . ' ORDER BY id FOR UPDATE' );
+			if ( ! is_array( $ids ) || $wpdb->last_error ) {
+				throw new RuntimeException( 'Cancelled rider migration could not read the events.' );
+			}
+			foreach ( $ids as $id ) {
+				if ( ! in_array( 'DNS', array_column( self::options( (int) $id, 'event' ), 'label' ), true ) ) {
+					MRSA_Admin::checked( $wpdb->insert( MRSA::table( 'status_options' ), array( 'event_id' => (int) $id, 'kind' => 'event', 'label' => 'DNS', 'enabled' => 1 ) ) );
+				}
+			}
+			MRSA_Admin::checked( $wpdb->query( 'UPDATE ' . MRSA::table( 'registrations' ) . " SET status='DNS',status_manual=1 WHERE registration_status='Cancelled'" ) );
+			MRSA::commit_transaction();
+		} catch ( RuntimeException $exception ) {
+			if ( ! MRSA::rollback_transaction() ) {
+				throw new RuntimeException( $exception->getMessage() . ' Cancelled rider migration rollback failed; inspect the database before retrying.' );
+			}
+			throw $exception;
+		}
+	}
+
+	public static function registration_data( $value, $previous = null ) {
+		$data = array( 'registration_status' => $value );
+		if ( 'Cancelled' === $value && 'Cancelled' !== $previous ) {
+			$data['status'] = 'DNS';
+			$data['status_manual'] = 1;
+		}
+		return $data;
 	}
 
 	public static function options( $event_id, $kind ) {
@@ -123,8 +156,8 @@ final class MRSA_Statuses {
 					if ( self::usage( $event_id, $kind, $row['label'] ) ) {
 						throw new RuntimeException( 'This status is in use. Disable it instead of deleting it.' );
 					}
-					if ( 'event' === $kind && in_array( $row['label'], array( 'Registered', 'Preliminary Finisher' ), true ) ) {
-						throw new RuntimeException( 'Automatic calculation statuses cannot be deleted. They can be disabled for manual selection.' );
+					if ( 'event' === $kind && in_array( $row['label'], array( 'Registered', 'Preliminary Finisher', 'DNS' ), true ) ) {
+						throw new RuntimeException( 'System statuses cannot be deleted. They can be disabled for manual selection.' );
 					}
 				}
 				if ( 'registration' === $kind && ! empty( $row['enabled'] ) && in_array( $action, array( 'disable', 'delete' ), true ) && count( self::enabled_labels( $options ) ) < 2 ) {
@@ -159,7 +192,7 @@ final class MRSA_Statuses {
 			if ( ! $automatic && $value !== $current && ! in_array( $value, self::enabled_labels( self::options( $event_id, $kind ) ), true ) ) {
 				throw new RuntimeException( 'Select an enabled status for this event.' );
 			}
-			$data = 'registration' === $kind ? array( 'registration_status' => $value ) : array( 'status' => $automatic ? 'Registered' : $value, 'status_manual' => $automatic ? 0 : 1 );
+			$data = 'registration' === $kind ? self::registration_data( $value, $row['registration_status'] ) : array( 'status' => $automatic ? 'Registered' : $value, 'status_manual' => $automatic ? 0 : 1 );
 			MRSA_Admin::checked( $wpdb->update( MRSA::table( 'registrations' ), $data, array( 'event_id' => $event_id, 'id' => $registration_id ) ) );
 			MRSA::commit_transaction();
 		} catch ( RuntimeException $exception ) {

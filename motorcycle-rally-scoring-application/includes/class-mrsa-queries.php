@@ -82,10 +82,29 @@ final class MRSA_Queries {
 	}
 
 	public function results( $event_id, $minimum ) {
-		return $this->ranked( $this->rows(
-			'SELECT reg.*,r.name,COALESCE(s.accepted,0) accepted_bonuses,COALESCE(s.rejected,0) rejected_bonuses FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . " r ON r.id=reg.rider_id LEFT JOIN (SELECT event_id,rider_id,SUM(CASE WHEN status='accepted' THEN 1 ELSE 0 END) accepted,SUM(CASE WHEN status='rejected' THEN 1 ELSE 0 END) rejected FROM " . MRSA::table( 'bonus_submissions' ) . " WHERE event_id=%d AND status IN ('accepted','rejected') GROUP BY event_id,rider_id) s ON s.event_id=reg.event_id AND s.rider_id=reg.rider_id WHERE reg.event_id=%d ORDER BY reg.score DESC,reg.bib ASC",
+		return $this->ranked( $this->result_rows( $event_id, false ), $minimum );
+	}
+
+	private function result_rows( $event_id, $public ) {
+		$columns = $public ? 'reg.bib,reg.score,reg.status,reg.status_manual,r.name' : 'reg.*,r.name';
+		$publication = $public ? ' JOIN ' . MRSA::table( 'events' ) . ' e ON e.id=reg.event_id AND e.public_results_enabled=1' : '';
+		return $this->rows(
+			'SELECT ' . $columns . ',COALESCE(s.accepted,0) accepted_bonuses,COALESCE(s.rejected,0) rejected_bonuses FROM ' . MRSA::table( 'registrations' ) . ' reg JOIN ' . MRSA::table( 'riders' ) . ' r ON r.id=reg.rider_id' . $publication . " LEFT JOIN (SELECT event_id,rider_id,SUM(CASE WHEN status='accepted' THEN 1 ELSE 0 END) accepted,SUM(CASE WHEN status='rejected' THEN 1 ELSE 0 END) rejected FROM " . MRSA::table( 'bonus_submissions' ) . " WHERE event_id=%d AND status IN ('accepted','rejected') GROUP BY event_id,rider_id) s ON s.event_id=reg.event_id AND s.rider_id=reg.rider_id WHERE reg.event_id=%d ORDER BY reg.score DESC,reg.bib ASC",
 			array( $event_id, $event_id )
-		), $minimum );
+		);
+	}
+
+	public function public_results( $event_id ) {
+		$events = $this->rows( 'SELECT name,min_finisher_points FROM ' . MRSA::table( 'events' ) . ' WHERE id=%d AND public_results_enabled=1', array( $event_id ) );
+		if ( ! $events ) {
+			return null;
+		}
+		$rows = $this->ranked( $this->result_rows( $event_id, true ), $events[0]['min_finisher_points'] );
+		foreach ( $rows as &$row ) {
+			unset( $row['status'], $row['status_manual'] );
+		}
+		unset( $row );
+		return array( 'name' => $events[0]['name'], 'rows' => $rows );
 	}
 
 	private function ranked( array $rows, $minimum = null ) {

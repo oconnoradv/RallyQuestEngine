@@ -538,6 +538,7 @@ final class MRSA_Views {
 		if ( $id ) {
 			self::status_catalog( $id, 'registration', 'Registration Status' );
 			self::status_catalog( $id, 'event', 'Event Status' );
+			self::public_results_embed( $event );
 		}
 		echo '</div><div>';
 		if ( $id ) {
@@ -568,17 +569,29 @@ final class MRSA_Views {
 		echo '</div></div></div>';
 	}
 
+	private static function public_results_embed( $event ) {
+		$id = (int) $event['id'];
+		echo '<section class="mrsa-panel"><h2>Public Results Embed</h2><p>Publish this event&rsquo;s overall results in a WordPress post or page. Publication is off by default; enabling it allows anyone to view rider names, bibs, scores, accepted/rejected submission counts, Event Status and placing. Contact details, Registration Status, submission photos, and administrative controls are not published.</p>';
+		self::field( 'MRSA Event ID', 'mrsa_embed_event_id', $id, 'text', false, array( 'readonly' => 'readonly' ) );
+		self::field( 'Results shortcode (copy into a WordPress Shortcode block)', 'mrsa_results_shortcode', '[mrsa_results id="' . $id . '"]', 'text', false, array( 'readonly' => 'readonly' ) );
+		echo '<p>In the WordPress post/page editor, add a <strong>Shortcode</strong> block, paste the shortcode above, then publish or update the post. Results use this explicit Event ID, not the event selected in the administrator header. Disabling public results stops new renders; purge WordPress/CDN page caches to remove previously cached results. Scores and status changes also require cache refreshes on cached pages.</p>';
+		self::form( 'public_results', array( 'event_id' => $id ), 'mrsa-inline-form' );
+		echo '<label><input type="checkbox" name="public_results_enabled" value="1"' . ( ! empty( $event['public_results_enabled'] ) ? ' checked' : '' ) . '> Enable public results for this event</label> ';
+		self::button( 'Save Public Results Setting' );
+		echo '</form></section>';
+	}
+
 	private static function status_catalog( $event_id, $kind, $title ) {
 		echo '<section class="mrsa-panel"><h2>' . esc_html( $title ) . '</h2><p>Manage this event&rsquo;s status choices (maximum 20 bytes). Disabled values remain on existing riders but cannot be newly assigned. In-use values cannot be deleted.</p>';
 		if ( 'event' === $kind ) {
-			echo '<p>Automatic is a calculation mode. It always uses Registered or Preliminary Finisher, even if those values are disabled for manual selection; these two system values cannot be deleted. At the end of the event, manually assign Finisher, DNF or DNS on Results.</p>';
+			echo '<p>Automatic is a calculation mode. It always uses Registered or Preliminary Finisher, even if those values are disabled for manual selection. These two values and DNS cannot be deleted. Changing Registration Status to Cancelled sets manual Event Status to DNS, including when DNS is disabled for manual selection. You may change Event Status afterward. At the end of the event, manually assign Finisher, DNF or DNS on Results.</p>';
 		} else {
-			echo '<p>Keep at least one value enabled. New riders default to Initial Registration when enabled, otherwise the first enabled value.</p>';
+			echo '<p>Keep at least one value enabled. New riders default to Initial Registration when enabled, otherwise the first enabled value. Changing Registration Status to Cancelled sets Event Status to DNS. Saving an unchanged Cancelled value or changing registration away from Cancelled does not overwrite a later manual Event Status.</p>';
 		}
 		echo '<ul class="mrsa-status-options">';
 		foreach ( MRSA_Statuses::options( $event_id, $kind ) as $option ) {
 			$used = MRSA_Statuses::usage( $event_id, $kind, $option['label'] );
-			$protected = 'event' === $kind && in_array( $option['label'], array( 'Registered', 'Preliminary Finisher' ), true );
+			$protected = 'event' === $kind && in_array( $option['label'], array( 'Registered', 'Preliminary Finisher', 'DNS' ), true );
 			echo '<li><strong>' . esc_html( $option['label'] ) . '</strong> <span>' . esc_html( ( $option['enabled'] ? 'Enabled' : 'Disabled' ) . ' / ' . $used . ' riders' ) . '</span>';
 			self::form( 'status_option', array( 'event_id' => $event_id, 'status_kind' => $kind, 'status_label' => $option['label'] ), 'mrsa-inline-form' );
 			echo '<button class="button" name="status_action" value="' . ( $option['enabled'] ? 'disable' : 'enable' ) . '">' . ( $option['enabled'] ? 'Disable' : 'Enable' ) . '</button>';

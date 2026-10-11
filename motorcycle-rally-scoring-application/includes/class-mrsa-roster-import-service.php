@@ -92,7 +92,7 @@ final class MRSA_Roster_Import_Service {
 					if ( ! in_array( $status, $statuses, true ) ) {
 						throw new RuntimeException( 'Select an enabled Registration Status for this event.' );
 					}
-					$records[] = array( 'event_id' => $event_id, 'rider_id' => (int) $rider['id'], 'bib' => $bib, 'registration_status' => $status, 'pillion' => MRSA_Admin::text( $get( 'pillion' ), 160 ) );
+					$records[] = array_merge( array( 'event_id' => $event_id, 'rider_id' => (int) $rider['id'], 'bib' => $bib, 'pillion' => MRSA_Admin::text( $get( 'pillion' ), 160 ) ), MRSA_Statuses::registration_data( $status ) );
 				} catch ( RuntimeException $exception ) {
 					throw new RuntimeException( 'Roster row ' . ( $line + 2 ) . ': ' . $exception->getMessage() . ' No riders were imported.' );
 				}

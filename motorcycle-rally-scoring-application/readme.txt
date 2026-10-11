@@ -4,7 +4,7 @@ Tags: motorcycle, rally, registration, events
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.1.19
+Stable tag: 0.1.20
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -152,7 +152,7 @@ only when a score is strictly greater than Minimum Finisher Points.
 Administrators manually finalize Event Status as Finisher, DNF or DNS;
 manual assignments override later automatic calculations. Registration Status
 is separately editable on Rosters. New registrations use Initial Registration
-when enabled (otherwise the first enabled choice), automatic Event Status,
+when enabled (otherwise the first enabled choice), automatic Event Status unless Cancelled,
 score 0, and unset stored placing. Gallery files live in
 the dedicated uploads/mrsa-event-gallery directory and must be backed up
 separately from the JSON and SQL database exports.
@@ -201,7 +201,29 @@ form or tab. If Rosters has
 no unenrolled rider to select, Add Rider to Event can open the Add Rider form,
 automatically enroll the new rider with the lowest available bib, and return
 to the selected roster. Registration Status is editable by authorized
-administrators and remains independent of Event Status on Results.
+administrators and is separately managed from Event Status on Results.
+Changing registration to Cancelled assigns manual DNS atomically, even if DNS
+is disabled for manual selection. Cancelled imports and enrollments also receive
+DNS. Administrators may override Event Status afterward. Unchanged Cancelled
+saves and registration changes away from Cancelled retain that override.
+Registered, Preliminary Finisher and DNS are protected system values and
+cannot be deleted. The schema 11 upgrade assigns DNS once to existing Cancelled
+registrations, replacing their previous Event Status without changing scores
+or placing. Back up before upgrading and review affected final statuses.
+
+Public Results Embed on Event Configuration displays the read-only MRSA Event
+ID and a copyable shortcode, for example [mrsa_results id="7"]. Publication is
+off by default; a WordPress administrator or assigned Event Administrator must
+enable it and save. Add the existing WordPress Shortcode block to a post/page,
+paste the shortcode, then publish or update. Its explicit ID does not depend
+on the administrator header selection; multiple event embeds are supported.
+Logged-out visitors see only Bib, Rider Name, Total Score, Accepted Bonuses,
+Rejected Bonuses, Event Status and Overall Placing for enabled events.
+Contact details, Registration Status, photos, review details, administrative
+controls and score-sheet links are excluded. Disabled/missing events show an
+unavailable message. Purge WordPress page and CDN caches after visibility or
+score/status changes; disabling publication cannot recall previously cached
+or delivered results.
 
 Choose Event in the header and press Set Event; this event persists per user
 and site across Rosters, Scoring and Results until changed. Changing the
@@ -304,6 +326,14 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.1.20 =
+* Assign manual DNS when Registration Status changes to Cancelled, including imports and enrollments, while allowing later administrator overrides.
+* Protect DNS from deletion without requiring it to remain enabled for manual selection.
+* Add an off-by-default Public Results Embed section with MRSA Event ID, explicit publication control and copyable [mrsa_results id="7"] shortcode for WordPress Shortcode blocks.
+* Publish only rider names, bibs, scores, accepted/rejected counts, Event Status and placing with escaped, responsive read-only output.
+* Upgrade database schema to 11, backfilling existing Cancelled riders to DNS once, preserving scores and placing, and defaulting public results off.
+* Document publication privacy boundaries and WordPress/CDN cache-purge requirements.
 
 = 0.1.19 =
 * Added persistent per-user/site Choose Event header context shared by Rosters, Scoring and Results.
