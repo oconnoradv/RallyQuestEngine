@@ -10,6 +10,7 @@ final class Event_Test_DB {
 	public $last_error = '';
 	public $insert_id = 0;
 	public $fail_write = false;
+	public $fail_read = false;
 	public $sql = array();
 	private $pdo;
 
@@ -21,6 +22,9 @@ final class Event_Test_DB {
 		$this->sql[] = $sql;
 		$this->last_error = '';
 		try {
+			if ( $this->fail_read && 0 === strpos( $sql, 'SELECT' ) ) {
+				throw new RuntimeException( 'Injected read failure' );
+			}
 			if ( $this->fail_write && preg_match( '/^(INSERT|UPDATE|DELETE)/', $sql ) ) {
 				throw new RuntimeException( 'Injected write failure' );
 			}
@@ -55,7 +59,7 @@ final class Event_Test_DB {
 $GLOBALS['actor'] = 1;
 $GLOBALS['site'] = 1;
 $GLOBALS['preferences'] = array();
-function is_user_logged_in() { return true; }
+function is_user_logged_in() { return $GLOBALS['actor'] > 0; }
 function current_user_can( $capability ) { return 1 === $GLOBALS['actor']; }
 function get_current_user_id() { return $GLOBALS['actor']; }
 function get_user_option( $key, $id ) { return $GLOBALS['preferences'][ $GLOBALS['site'] ][ $id ][ $key ] ?? 0; }
@@ -81,6 +85,15 @@ function wp_nonce_field( $action ) { echo '<input type="hidden" name="_wpnonce" 
 function selected( $value, $current, $echo = true ) { $html = (string) $value === (string) $current ? ' selected="selected"' : ''; if ( $echo ) { echo $html; } return $html; }
 function wp_list_pluck( $rows, $key ) { return array_column( $rows, $key ); }
 function wp_timezone_string() { return 'UTC'; }
+function wp_timezone() { return new DateTimeZone( 'UTC' ); }
+function get_post_type( $id ) { return ''; }
+function add_shortcode( $tag, $callback ) { $GLOBALS['shortcodes'][ $tag ] = $callback; }
+function add_action( $hook, $callback ) { $GLOBALS['hooks'][ $hook ] = $callback; }
+function wp_enqueue_style( $handle, $url, $dependencies, $version ) { $GLOBALS['styles'][ $handle ] = $url; }
+function plugins_url( $path, $file ) { return 'https://example.test/plugins/mrsa/' . $path; }
+function shortcode_atts( $defaults, $attributes, $tag = '' ) {
+	return array_merge( $defaults, array_intersect_key( (array) $attributes, $defaults ) );
+}
 function get_users( $args ) { return array(); }
 function get_user_by( $key, $id ) { return (object) array( 'ID' => $id, 'user_login' => 'user-' . $id, 'user_email' => 'user@example.test', 'display_name' => 'User ' . $id ); }
 function get_user_meta( $id, $key, $single ) { return ''; }
@@ -94,6 +107,7 @@ require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-bonus.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-roster-import-service.php';
 require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-views.php';
+require __DIR__ . '/../motorcycle-rally-scoring-application/includes/class-mrsa-public-results.php';
 
 function check( $ok, $label ) { if ( ! $ok ) { throw new RuntimeException( 'FAIL: ' . $label ); } echo 'PASS: ' . $label . PHP_EOL; }
 function rejects( $run, $message ) {
@@ -118,7 +132,7 @@ function render( $method, ...$args ) {
 
 $wpdb = new Event_Test_DB();
 foreach ( array(
-	'events' => 'id INTEGER PRIMARY KEY,name TEXT,event_date TEXT,max_bib INTEGER,min_finisher_points INTEGER,logo_id INTEGER DEFAULT 0',
+	'events' => "id INTEGER PRIMARY KEY,name TEXT,event_date TEXT,max_bib INTEGER,min_finisher_points INTEGER,logo_id INTEGER DEFAULT 0,public_results_enabled INTEGER NOT NULL DEFAULT 0,registration_open TEXT,registration_close TEXT,start_at TEXT,end_at TEXT,rider_price TEXT,pillion_price TEXT,location TEXT,latitude TEXT,longitude TEXT",
 	'riders' => "id INTEGER PRIMARY KEY,name TEXT,email TEXT,alias TEXT DEFAULT '',phone TEXT DEFAULT ''",
 	'registrations' => "id INTEGER PRIMARY KEY,event_id INTEGER,rider_id INTEGER,bib INTEGER,pillion TEXT DEFAULT '',registration_status TEXT DEFAULT 'Initial Registration',status TEXT DEFAULT 'Registered',status_manual INTEGER DEFAULT 0,score INTEGER DEFAULT 0,placing INTEGER",
 	'status_options' => 'id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER,kind TEXT,label TEXT COLLATE NOCASE,enabled INTEGER,UNIQUE(event_id,kind,label)',
@@ -269,8 +283,140 @@ check( strpos( $html, 'name="status_kind" value="registration"' ) !== false && s
 $wpdb->update( MRSA::table( 'event_email_settings' ), array( 'last_test_error' => 'Fixture connection error' ), array( 'event_id' => 7 ) );
 $failed_html = render( 'render_event_edit' );
 check( strpos( $failed_html, 'mrsa-email-connection-failed" open' ) !== false && strpos( $failed_html, 'Fixture connection error' ) !== false, 'failed inbox test remains expanded and prominent' );
+check( strpos( $html, 'Public Results Embed' ) !== false && strpos( $html, '[mrsa_results id=&quot;7&quot;]' ) !== false && strpos( $html, 'name="mrsa_embed_event_id" value="7" readonly="readonly"' ) !== false, 'event edit provides an explicit read-only event ID and copyable shortcode' );
+check( strpos( $html, 'name="op" value="public_results"' ) !== false && strpos( $html, 'name="public_results_enabled" value="1" checked' ) === false && strpos( $html, 'purge WordPress/CDN' ) !== false, 'public results control is off by default with cache-purge guidance' );
+
+MRSA_Statuses::change_option( 7, 'registration', 'enable', 'Cancelled' );
+MRSA_Statuses::change_option( 7, 'registration', 'enable', 'Initial Registration' );
+MRSA_Statuses::change_option( 7, 'event', 'disable', 'DNS' );
+MRSA_Statuses::assign( 7, 1, 'registration', 'Initial Registration' );
+MRSA_Statuses::assign( 7, 1, 'event', 'Finisher' );
+$cancel_before = MRSA::row( 'registrations', 1 );
+MRSA_Statuses::assign( 7, 1, 'registration', 'Cancelled' );
+$cancelled = MRSA::row( 'registrations', 1 );
+check( $cancelled['status'] === 'DNS' && (int) $cancelled['status_manual'] === 1 && $cancelled['score'] === $cancel_before['score'] && $cancelled['placing'] === $cancel_before['placing'], 'cancellation overrides an existing manual result with DNS atomically without changing score or placing, even if DNS is disabled' );
+check( $queries->rider_score( 7, 10 )['effective_status'] === 'DNS', 'cancelled DNS overrides the above-threshold automatic status' );
+MRSA_Statuses::assign( 7, 1, 'event', 'DNF' );
+MRSA_Statuses::assign( 7, 1, 'registration', 'Cancelled' );
+check( MRSA::row( 'registrations', 1 )['status'] === 'DNF', 'administrator may override cancellation DNS; unchanged Cancelled saves retain that manual override' );
+MRSA_Statuses::assign( 7, 1, 'registration', 'Initial Registration' );
+check( MRSA::row( 'registrations', 1 )['status'] === 'DNF', 'restoring registration leaves Event Status unchanged' );
+$wpdb->fail_write = true;
+rejects( function () { MRSA_Statuses::assign( 7, 1, 'registration', 'Cancelled' ); }, 'could not be saved' );
+$wpdb->fail_write = false;
+check( MRSA::row( 'registrations', 1 )['registration_status'] === 'Initial Registration' && MRSA::row( 'registrations', 1 )['status'] === 'DNF', 'failed cancellation rolls back both status fields' );
+MRSA_Statuses::assign( 7, 1, 'registration', 'Cancelled' );
+MRSA_Statuses::assign( 7, 1, 'event', 'Automatic' );
+check( $queries->rider_score( 7, 10 )['effective_status'] === 'Preliminary Finisher', 'explicit return to Automatic is allowed after cancellation' );
+rejects( function () { MRSA_Statuses::change_option( 7, 'event', 'delete', 'DNS' ); }, 'cannot be deleted' );
+$unaffected = MRSA::row( 'registrations', 2 );
+$wpdb->delete( MRSA::table( 'status_options' ), array( 'event_id' => 8, 'kind' => 'event', 'label' => 'DNS' ) );
+$wpdb->fail_write = true;
+rejects( function () { MRSA_Statuses::migrate_cancelled(); }, 'could not be saved' );
+$wpdb->fail_write = false;
+check( (int) MRSA::row( 'registrations', 1 )['status_manual'] === 0 && ! in_array( 'DNS', array_column( MRSA_Statuses::options( 8, 'event' ), 'label' ), true ), 'failed migration leaves catalog and statuses unchanged for a safe upgrade retry' );
+MRSA_Statuses::migrate_cancelled();
+$migrated = MRSA::row( 'registrations', 1 );
+MRSA_Statuses::migrate_cancelled();
+check( MRSA::row( 'registrations', 1 ) === $migrated && $migrated['status'] === 'DNS' && (int) $migrated['status_manual'] === 1 && MRSA::row( 'registrations', 2 ) === $unaffected, 'cancelled migration is repeatable and does not change non-cancelled riders or scores' );
+check( in_array( 'DNS', array_column( MRSA_Statuses::options( 8, 'event' ), 'label' ), true ) && ! in_array( 'DNS', MRSA_Statuses::enabled_labels( MRSA_Statuses::options( 7, 'event' ) ), true ), 'migration restores a previously deleted DNS option without re-enabling disabled DNS' );
+MRSA_Statuses::assign( 7, 1, 'event', 'Finisher' );
+check( MRSA::row( 'registrations', 1 )['status'] === 'Finisher', 'post-upgrade manual assignments are not forced back to DNS' );
+foreach ( array( 'Paid', 'Fully Registered' ) as $label ) {
+	MRSA_Statuses::change_option( 8, 'registration', 'disable', $label );
+}
+check( MRSA_Statuses::initial_registration( 8 ) === 'Cancelled', 'Cancelled may be the enabled enrollment default' );
+$_POST = array( 'rider_id' => '13', 'bib' => '60', 'pillion' => '' );
+$enroll = new ReflectionMethod( 'MRSA_Admin', 'registration' );
+if ( PHP_VERSION_ID < 80100 ) { $enroll->setAccessible( true ); }
+$enroll->invoke( null, 8, 'registration' );
+check( $queries->rider_score( 8, 13 )['effective_status'] === 'DNS', 'manual enrollment with Cancelled default sets DNS' );
+$wpdb->insert( MRSA::table( 'riders' ), array( 'id' => 14, 'name' => 'Rider Five', 'email' => 'five@example.test' ) );
+$enroll_new = new ReflectionMethod( 'MRSA_Admin', 'enroll_new_rider' );
+if ( PHP_VERSION_ID < 80100 ) { $enroll_new->setAccessible( true ); }
+$enroll_new->invoke( null, 8, 14 );
+check( $queries->rider_score( 8, 14 )['effective_status'] === 'DNS', 'new-rider automatic enrollment with Cancelled default sets DNS' );
+$wpdb->insert( MRSA::table( 'riders' ), array( 'id' => 15, 'name' => 'Rider Six', 'email' => 'six@example.test' ) );
+MRSA_Roster_Import_Service::import_rows( 8, array( 'Rider ID', 'Registration Status' ), array( array( '15', 'Cancelled' ) ) );
+check( $queries->rider_score( 8, 15 )['effective_status'] === 'DNS', 'roster imports set Cancelled riders to manual DNS' );
+$_POST = array( 'id' => '0', 'name' => 'New Event', 'max_bib' => '100', 'logo_id' => '0', 'min_finisher_points' => '100', 'registration_open' => '2026-10-01T00:00', 'registration_close' => '2026-10-02T00:00', 'start_at' => '2026-10-03T00:00', 'end_at' => '2026-10-04T00:00' );
+$create_event = new ReflectionMethod( 'MRSA_Admin', 'event' );
+if ( PHP_VERSION_ID < 80100 ) { $create_event->setAccessible( true ); }
+$new_event_id = $create_event->invoke( null );
+check( (int) MRSA::row( 'events', $new_event_id )['public_results_enabled'] === 0, 'new events keep public results disabled and receive seeded status choices' );
+$_POST = array();
+
+MRSA_Public_Results::init();
+check( $GLOBALS['shortcodes']['mrsa_results'] === array( 'MRSA_Public_Results', 'shortcode' ) && $GLOBALS['hooks']['wp_enqueue_scripts'] === array( 'MRSA_Public_Results', 'assets' ), 'WordPress frontend hooks register the shortcode and isolated stylesheet' );
+MRSA_Public_Results::assets();
+check( strpos( $GLOBALS['styles']['mrsa-public-results'], 'assets/public-results.css' ) !== false, 'public stylesheet is local and separate from admin assets' );
+$GLOBALS['actor'] = 0;
+check( ! MRSA::access(), 'anonymous visitors have no administrative access' );
+$off = MRSA_Public_Results::shortcode( array( 'id' => '7' ) );
+check( strpos( $off, 'Results are not available' ) !== false && strpos( $off, 'Rider One' ) === false && strpos( $off, 'Event 7' ) === false, 'unpublished event exposes no rider data or event name to anonymous visitors' );
+rejects( function () { MRSA_Public_Results::save_visibility( 7, 1 ); }, 'not assigned' );
+$GLOBALS['actor'] = 3;
+rejects( function () { MRSA_Public_Results::save_visibility( 8, 1 ); }, 'not assigned' );
+$GLOBALS['actor'] = 2;
+rejects( function () { MRSA_Public_Results::save_visibility( 8, 1 ); }, 'not assigned' );
+MRSA_Public_Results::save_visibility( 7, 1 );
+check( (int) MRSA::row( 'events', 7 )['public_results_enabled'] === 1, 'assigned Event Administrators can explicitly enable public results' );
+rejects( function () { MRSA_Public_Results::save_visibility( 7, 2 ); }, 'whether public results' );
+$wpdb->fail_write = true;
+rejects( function () { MRSA_Public_Results::save_visibility( 7, 0 ); }, 'could not be saved' );
+$wpdb->fail_write = false;
+check( (int) MRSA::row( 'events', 7 )['public_results_enabled'] === 1, 'publication setting write failures roll back' );
+$GLOBALS['actor'] = 1;
+MRSA_Public_Results::save_visibility( 8, 1 );
+MRSA_Public_Results::save_visibility( $new_event_id, 1 );
+request( array( 'event_id' => '8', 'page' => 'mrsa-event-edit' ) );
+MRSA_Admin::selected_event();
+$GLOBALS['actor'] = 0;
+$wpdb->sql = array();
+$public_data = $queries->public_results( 7 );
+$public_columns = array( 'bib', 'score', 'name', 'accepted_bonuses', 'rejected_bonuses', 'overall_placing', 'effective_status' );
+check( count( $public_data['rows'] ) === 2 && array_diff( array_keys( $public_data['rows'][0] ), $public_columns ) === array(), 'public query returns only allowlisted result fields with no registration IDs, statuses or contacts' );
+check( strpos( implode( "\n", $wpdb->sql ), 'reg.*' ) === false && strpos( implode( "\n", $wpdb->sql ), 'e.public_results_enabled=1' ) !== false, 'public SQL selects explicit fields and checks publication on the result query itself' );
+check( array_column( $public_data['rows'], 'overall_placing' ) === array_column( $queries->results( 7, 100 ), 'overall_placing' ) && $public_data['rows'][0]['effective_status'] === 'Finisher', 'public ranking and effective manual statuses match administrative Results' );
+$public_html = MRSA_Public_Results::shortcode( array( 'id' => '7' ) );
+check( strpos( $public_html, '<h2>Event 7</h2>' ) !== false && strpos( $public_html, 'Rider One' ) !== false && strpos( $public_html, 'Accepted Bonuses' ) !== false && strpos( $public_html, 'Rejected Bonuses' ) !== false, 'anonymous visitors can view enabled event results using the explicit shortcode ID instead of header selection' );
+foreach ( array( 'one@example.test', 'Registration Status', 'name="op"', '<form', '<a ', 'admin.php', 'submissions/', 'reviewed_by', 'pillion' ) as $private ) {
+	check( strpos( $public_html, $private ) === false, 'public HTML excludes ' . $private );
+}
+$other_html = MRSA_Public_Results::shortcode( array( 'id' => '8' ) );
+check( strpos( $other_html, '<h2>Event 8</h2>' ) !== false && substr_count( $public_html . $other_html, '<section class="mrsa-public-results">' ) === 2 && strpos( $public_html . $other_html, ' id=') === false, 'multiple embeds isolate events without duplicate DOM IDs' );
+check( strpos( MRSA_Public_Results::shortcode( array( 'id' => (string) $new_event_id ) ), 'No rider results' ) !== false, 'enabled empty events show an explicit empty-results message' );
+foreach ( array( '', '0', '-7', '7 OR 1=1', '7.0', '9999999999999999999', array( '7' ), true ) as $id ) {
+	$before_queries = count( $wpdb->sql );
+	check( strpos( MRSA_Public_Results::shortcode( array( 'id' => $id ) ), 'valid MRSA Event ID' ) !== false && count( $wpdb->sql ) === $before_queries, 'invalid shortcode IDs are rejected before querying' );
+}
+check( strpos( MRSA_Public_Results::shortcode( array( 'id' => '999' ) ), 'Results are not available' ) !== false, 'missing and unpublished events have the same non-disclosing response' );
+$wpdb->update( MRSA::table( 'events' ), array( 'name' => '<script>alert("event")</script>' ), array( 'id' => 7 ) );
+$wpdb->update( MRSA::table( 'riders' ), array( 'name' => '<img src=x onerror=alert(1)>' ), array( 'id' => 10 ) );
+$escaped = MRSA_Public_Results::shortcode( array( 'id' => '7' ) );
+check( strpos( $escaped, '<script>' ) === false && strpos( $escaped, '<img ' ) === false && strpos( $escaped, '&lt;script&gt;' ) !== false && strpos( $escaped, '&lt;img ' ) !== false, 'public headings, captions, labels and cells escape stored content' );
+$wpdb->update( MRSA::table( 'events' ), array( 'name' => 'Event 7' ), array( 'id' => 7 ) );
+$wpdb->update( MRSA::table( 'riders' ), array( 'name' => 'Rider One' ), array( 'id' => 10 ) );
+$log = tempnam( sys_get_temp_dir(), 'mrsa-public-test-' );
+$old_log = ini_get( 'error_log' );
+ini_set( 'error_log', $log );
+$wpdb->fail_read = true;
+try {
+	$unavailable = MRSA_Public_Results::shortcode( array( 'id' => '7' ) );
+	check( strpos( $unavailable, 'temporarily unavailable' ) !== false && strpos( $unavailable, 'Check the database' ) === false && strpos( file_get_contents( $log ), 'MRSA public results #7:' ) !== false, 'database failures show a generic public message and log administrator diagnostics' );
+} finally {
+	$wpdb->fail_read = false;
+	ini_set( 'error_log', $old_log );
+	unlink( $log );
+}
+$GLOBALS['actor'] = 1;
+MRSA_Public_Results::save_visibility( 7, 0 );
+check( MRSA_Public_Results::shortcode( array( 'id' => '7' ) ) === $off, 'disabling publication hides results on the next render, even from administrators' );
+$edit_off = render( 'public_results_embed', MRSA::row( 'events', 7 ) );
+check( strpos( $edit_off, 'value="1" checked' ) === false, 'disabled publication is reflected in the edit checkbox' );
 if ( getenv( 'MRSA_PREVIEW_DIR' ) ) {
 	file_put_contents( getenv( 'MRSA_PREVIEW_DIR' ) . '/event.html', '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="admin.css">' . $html );
 	file_put_contents( getenv( 'MRSA_PREVIEW_DIR' ) . '/riders.html', '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="admin.css"><script defer src="admin.js"></script>' . $riders_html );
 	file_put_contents( getenv( 'MRSA_PREVIEW_DIR' ) . '/results.html', '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="admin.css"><script defer src="admin.js"></script>' . $results_html );
+	file_put_contents( getenv( 'MRSA_PREVIEW_DIR' ) . '/public-results.html', '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="public-results.css">' . $public_html . $other_html );
 }

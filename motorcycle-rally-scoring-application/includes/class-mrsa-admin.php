@@ -235,6 +235,13 @@ final class MRSA_Admin {
 					MRSA_Statuses::change_option( $extra['event_id'], self::posted( 'status_kind' ), self::posted( 'status_action' ), self::posted( 'status_label' ) );
 					$tab = 'event-edit';
 					break;
+				case 'public_results':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					self::require_event( $extra['event_id'] );
+					MRSA_Public_Results::save_visibility( $extra['event_id'], self::integer( self::posted( 'public_results_enabled', '0' ), 0, 1 ) );
+					$message = 'Public results setting saved. Purge WordPress/CDN page caches to update previously cached embeds.';
+					$tab = 'event-edit';
+					break;
 				case 'event_admin':
 				case 'remove_event_admin':
 					self::require_site_admin();
@@ -691,7 +698,7 @@ final class MRSA_Admin {
 					}
 					$data['rider_id'] = $rider_id;
 					$data['event_id'] = $event_id;
-					$data['registration_status'] = MRSA_Statuses::initial_registration( $event_id );
+					$data = array_merge( $data, MRSA_Statuses::registration_data( MRSA_Statuses::initial_registration( $event_id ) ) );
 					self::checked( $wpdb->insert( MRSA::table( 'registrations' ), $data ) );
 				} else {
 					self::checked( $wpdb->update( MRSA::table( 'registrations' ), $data, array( 'id' => $id, 'event_id' => $event_id ) ) );
@@ -733,7 +740,7 @@ final class MRSA_Admin {
 			if ( ! $bib ) {
 				throw new RuntimeException( 'The rider was saved, but every event bib is assigned. Increase the maximum bib before enrolling the rider.' );
 			}
-			self::checked( $wpdb->insert( MRSA::table( 'registrations' ), array( 'event_id' => $event_id, 'rider_id' => $rider_id, 'bib' => $bib, 'pillion' => '', 'registration_status' => MRSA_Statuses::initial_registration( $event_id ) ) ) );
+			self::checked( $wpdb->insert( MRSA::table( 'registrations' ), array_merge( array( 'event_id' => $event_id, 'rider_id' => $rider_id, 'bib' => $bib, 'pillion' => '' ), MRSA_Statuses::registration_data( MRSA_Statuses::initial_registration( $event_id ) ) ) ) );
 			MRSA::commit_transaction();
 		} catch ( RuntimeException $e ) {
 			MRSA::rollback_transaction();

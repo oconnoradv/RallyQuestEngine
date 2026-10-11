@@ -35,6 +35,7 @@ final class MRSA {
 			MRSA_Admin::init();
 		}
 		MRSA_Email_Submissions::schedule();
+		MRSA_Public_Results::init();
 		add_filter( 'wp_privacy_personal_data_exporters', array( __CLASS__, 'exporters' ) );
 		add_filter( 'wp_privacy_personal_data_erasers', array( __CLASS__, 'erasers' ) );
 	}
@@ -128,6 +129,7 @@ final class MRSA {
 			latitude decimal(10,7) DEFAULT NULL,
 			longitude decimal(10,7) DEFAULT NULL,
 			min_finisher_points bigint(20) unsigned NOT NULL DEFAULT 0,
+			public_results_enabled tinyint(1) unsigned NOT NULL DEFAULT 0,
 			PRIMARY KEY  (id)
 		) ENGINE=InnoDB $c;" );
 		$t = self::table( 'registrations' );
@@ -214,6 +216,13 @@ final class MRSA {
 		) ENGINE=InnoDB $c;" );
 		if ( (int) $previous_db_version < 10 ) {
 			MRSA_Statuses::migrate();
+		}
+		if ( (int) $previous_db_version < 11 ) {
+			$columns = $wpdb->get_results( 'SELECT public_results_enabled FROM ' . self::table( 'events' ) . ' LIMIT 0', ARRAY_A );
+			if ( ! is_array( $columns ) || $wpdb->last_error ) {
+				throw new RuntimeException( 'Public results schema upgrade failed. Check database permissions and retry the upgrade.' );
+			}
+			MRSA_Statuses::migrate_cancelled();
 		}
 		update_option( 'mrsa_db_version', MRSA_DB_VERSION, false );
 	}
