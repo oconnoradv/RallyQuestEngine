@@ -243,7 +243,7 @@ Before publishing, enable **Dependency graph** and **Dependabot alerts** under t
 
 Dependabot version updates are configured weekly for GitHub Actions in `.github/dependabot.yml`. Dependabot alert checks reflect GitHub's repository dependency graph, not a new scan of the tagged package; a clear alert list is not proof of deployed dependencies being secure. The repository currently has no Composer/npm runtime manifests. Keep release dependencies reflected in the default branch's dependency graph and resolve open alerts before tagging. Run `node tests/release-security.cjs` to exercise the fail-closed alert and SARIF gate contracts.
 
-`.github/gitleaks.toml` retains all default Gitleaks rules and allows only the exact non-secret transient-key prefix `rqe_bonus_pending_1_` in `tests/bonus-import.php` for the generic API-key rule. It does not exclude test files or historical commits from secret scanning.
+`.github/gitleaks.toml` retains all default Gitleaks rules and allows only the exact non-secret transient-key prefix `rqe_bonus_pending_1_` (and its pre-rename history form `mrsa_bonus_pending_1_`) in `tests/bonus-import.php` for the generic API-key rule. It does not exclude test files or historical commits from secret scanning.
 
 ## Building and publishing releases
 
