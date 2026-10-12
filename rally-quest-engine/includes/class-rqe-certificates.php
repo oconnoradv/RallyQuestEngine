@@ -4,6 +4,18 @@ defined( 'ABSPATH' ) || exit;
 
 final class RQE_Certificates {
 	const BATCH_SIZE = 10;
+	const TEMPLATE_VERSION = 2;
+
+	public static function designs() {
+		return array( 'vintage' => 'Vintage Ornamental - cream, charcoal and gold', 'classic' => 'Classic Formal - white, navy and gold' );
+	}
+
+	public static function design( $value ) {
+		if ( ! is_string( $value ) || ! isset( self::designs()[ $value ] ) ) {
+			throw new RuntimeException( 'Choose a predefined certificate design.' );
+		}
+		return $value;
+	}
 
 	public static function init() {
 		add_action( 'admin_post_rqe_certificates', array( __CLASS__, 'handle' ) );
@@ -28,6 +40,9 @@ final class RQE_Certificates {
 		if ( empty( $row['status_manual'] ) || in_array( strtolower( $row['status'] ), $excluded, true ) ) {
 			return false;
 		}
+		if ( in_array( strtolower( $row['status'] ), array_map( 'strtolower', RQE_Statuses::final_finishers() ), true ) ) {
+			return true;
+		}
 		foreach ( $options as $option ) {
 			if ( $option['label'] === $row['status'] && ! empty( $option['certificate_eligible'] ) ) {
 				return true;
@@ -51,19 +66,25 @@ final class RQE_Certificates {
 			throw new RuntimeException( 'Certificate recipients could not be read.' );
 		}
 		$emails = array_column( $participants, 'email', 'id' );
+		$image = self::image_reference( (int) ( $event['logo_id'] ?? 0 ) );
 		$snapshots = array();
 		foreach ( $rows as $row ) {
 			if ( ( $rider_id && (int) $row['rider_id'] !== $rider_id ) || ! self::eligible( $row, $options ) ) {
 				continue;
 			}
 			$snapshots[] = array(
+				'template' => self::TEMPLATE_VERSION,
+				'design' => self::design( $event['certificate_design'] ?? 'vintage' ),
 				'event_id' => (int) $event_id,
 				'rider_id' => (int) $row['rider_id'],
 				'event' => $event['name'],
+				'description' => $event['description'] ?? '',
+				'image' => $image,
 				'year' => substr( ( $event['start_at'] ?? '' ) ?: $event['event_date'], 0, 4 ),
 				'name' => $row['name'],
 				'number' => (int) $row['bib'],
 				'score' => (int) $row['score'],
+				'position' => (int) $row['overall_placing'],
 				'accepted' => (int) $row['accepted_bonuses'],
 				'rejected' => (int) $row['rejected_bonuses'],
 				'status' => $row['effective_status'],
@@ -80,26 +101,147 @@ final class RQE_Certificates {
 		return hash( 'sha256', wp_json_encode( $data ) );
 	}
 
-	public static function certificate_html( array $data ) {
-		$html = '<article class="certificate"><h1>Finisher Certificate</h1><h2>' . esc_html( $data['event'] ) . '</h2><p>' . esc_html( $data['year'] ) . '</p><h2>' . esc_html( $data['name'] ) . '</h2>';
-		foreach ( array( 'number' => 'Participant Number (Bib)', 'score' => 'Total Score', 'accepted' => 'Accepted Bonuses', 'rejected' => 'Rejected Bonuses', 'status' => 'Event Status' ) as $key => $label ) {
-			$html .= '<p><strong>' . esc_html( $label ) . ':</strong> ' . esc_html( (string) $data[ $key ] ) . '</p>';
+	/** Reference only local upload rasters; never enable remote resources in the PDF renderer. */
+	private static function image_file( $attachment_id ) {
+		$file = get_attached_file( $attachment_id );
+		$uploads = wp_upload_dir();
+		$root = realpath( $uploads['basedir'] ?? '' );
+		$file = $file ? realpath( $file ) : false;
+		if ( ! empty( $uploads['error'] ) || ! $root || ! $file || 0 !== strpos( strtolower( wp_normalize_path( $file ) ), strtolower( trailingslashit( wp_normalize_path( $root ) ) ) ) || ! is_readable( $file ) ) {
+			throw new RuntimeException( 'The event image must be readable local WordPress media inside this site\'s uploads directory. Update the Event Image before producing certificates.' );
 		}
-		return $html . '</article>';
+		$size = filesize( $file );
+		$info = getimagesize( $file );
+		if ( false === $size || $size > 10 * 1024 * 1024 || ! $info || ! in_array( $info['mime'] ?? '', array( 'image/jpeg', 'image/png', 'image/gif', 'image/webp' ), true ) || $info[0] * $info[1] > 16000000 ) {
+			throw new RuntimeException( 'Certificate event images must be JPEG, PNG, GIF or WebP, no larger than 10 MB or 16 million pixels. Save a smaller raster Event Image and review again.' );
+		}
+		return $file;
+	}
+
+	public static function image_reference( $attachment_id ) {
+		if ( ! $attachment_id ) {
+			return array();
+		}
+		$file = self::image_file( $attachment_id );
+		$hash = hash_file( 'sha256', $file );
+		if ( false === $hash ) {
+			throw new RuntimeException( 'The certificate event image could not be fingerprinted.' );
+		}
+		return array( 'id' => $attachment_id, 'sha256' => $hash );
+	}
+
+	private static function image_data( array $reference ) {
+		if ( ! $reference ) {
+			return '';
+		}
+		$current = self::image_reference( (int) $reference['id'] );
+		if ( ! hash_equals( $reference['sha256'], $current['sha256'] ) ) {
+			throw new RuntimeException( 'The event image changed after certificate review. Review again.' );
+		}
+		$file = self::image_file( (int) $reference['id'] );
+		$directory = RQE_Bonus::create_stage_directory();
+		try {
+			$editor = wp_get_image_editor( $file );
+			if ( is_wp_error( $editor ) ) {
+				throw new RuntimeException( 'The event image could not be decoded. Check the WordPress image editor and save a supported Event Image.' );
+			}
+			$size = $editor->get_size();
+			if ( $size['width'] > 600 || $size['height'] > 240 ) {
+				$resized = $editor->resize( 600, 240, false );
+				if ( is_wp_error( $resized ) ) {
+					throw new RuntimeException( 'The certificate event image could not be resized.' );
+				}
+			}
+			$saved = $editor->save( $directory . '/event.png', 'image/png' );
+			if ( is_wp_error( $saved ) || empty( $saved['path'] ) ) {
+				throw new RuntimeException( 'The normalized certificate image could not be saved privately.' );
+			}
+			$bytes = file_get_contents( $saved['path'] );
+			if ( false === $bytes || ! hash_equals( $reference['sha256'], hash_file( 'sha256', $file ) ?: '' ) ) {
+				throw new RuntimeException( 'The event image could not be read consistently. Review again.' );
+			}
+			return 'data:image/png;base64,' . base64_encode( $bytes );
+		} finally {
+			( new RQE_Gallery_Filesystem() )->remove_directory( $directory );
+		}
+	}
+
+	private static function medal( $status ) {
+		$tier = '';
+		foreach ( array( 'Gold', 'Silver', 'Bronze' ) as $label ) {
+			if ( preg_match( '/\b' . $label . '\b/i', $status ) ) {
+				$tier = $label;
+				break;
+			}
+		}
+		if ( ! $tier ) {
+			return '';
+		}
+		$colors = array( 'Gold' => array( '#d4aa43', '#80601c', '#fae3a3' ), 'Silver' => array( '#bfc7cf', '#59636c', '#f2f5f7' ), 'Bronze' => array( '#bd8657', '#714625', '#efd0ac' ) );
+		list( $fill, $edge, $light ) = $colors[ $tier ];
+		$svg = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="116" viewBox="0 0 100 116"><path d="M22 64L12 112L33 103L43 115L52 72M78 64L88 112L67 103L57 115L48 72" fill="#293d3d" stroke="' . $edge . '" stroke-width="2"/><circle cx="50" cy="44" r="37" fill="' . $fill . '" stroke="' . $edge . '" stroke-width="3"/><circle cx="50" cy="44" r="30" fill="none" stroke="' . $light . '" stroke-width="2"/><path d="M50 22L56 36L72 38L60 49L63 65L50 57L37 65L40 49L28 38L44 36Z" fill="' . $light . '" stroke="' . $edge . '" stroke-width="1"/></svg>';
+		return '<img class="medal" alt="' . $tier . ' medal" src="data:image/svg+xml;base64,' . base64_encode( $svg ) . '">';
+	}
+
+	public static function certificate_html( array $data ) {
+		$design = self::design( $data['design'] ?? 'vintage' );
+		$frame_file = 'classic' === $design ? 'certificate-classic.svg' : 'certificate-frame.svg';
+		$frame = file_get_contents( dirname( __DIR__ ) . '/assets/' . $frame_file );
+		if ( false === $frame ) {
+			throw new RuntimeException( 'The bundled certificate frame could not be read.' );
+		}
+		$image = self::image_data( $data['image'] ?? array() );
+		$description = $data['description'] ?? '';
+		$length = function ( $text ) { return function_exists( 'mb_strlen' ) ? mb_strlen( $text, 'UTF-8' ) : strlen( $text ); };
+		$lines = 0;
+		foreach ( explode( "\n", str_replace( "\r", '', $description ) ) as $line ) {
+			$lines += max( 1, (int) ceil( $length( $line ) / 85 ) );
+		}
+		$continued = $length( $description ) > 400 || $lines > 5;
+		$excerpt = $continued ? 'The full event description follows this certificate.' : $description;
+		$name_size = strlen( $data['name'] ) > 80 ? 19 : ( strlen( $data['name'] ) > 40 ? 25 : 32 );
+		$title_size = $length( $data['event'] ) > 55 ? 15 : 20;
+		$html = '<article class="certificate certificate-' . esc_attr( $design ) . '"><img class="certificate-frame" alt="" src="data:image/svg+xml;base64,' . base64_encode( $frame ) . '">';
+		if ( $image ) {
+			$html .= '<div class="event-image"><img alt="' . esc_attr( $data['event'] . ' event image' ) . '" src="' . esc_attr( $image ) . '"></div>';
+		} else {
+			$html .= '<div class="event-image event-mark">RALLY QUEST ENGINE</div>';
+		}
+		$html .= '<h2 class="event-name" style="font-size:' . $title_size . 'pt">' . esc_html( $data['event'] ) . '</h2><p class="event-year">' . esc_html( $data['year'] ) . '</p><h1>Certificate of Achievement</h1><p class="presented">PROUDLY PRESENTED TO</p><h2 class="participant-name" style="font-size:' . $name_size . 'pt">' . esc_html( $data['name'] ) . '</h2>';
+		$html .= '<p class="event-description">' . nl2br( esc_html( $excerpt ) ) . '</p><table class="certificate-stats"><tr>';
+		foreach ( array( 'accepted' => 'Accepted Bonuses', 'rejected' => 'Rejected Bonuses', 'score' => 'Total Score', 'position' => 'Overall Position' ) as $key => $label ) {
+			$html .= '<td><strong>' . esc_html( (string) ( $data[ $key ] ?? '' ) ) . '</strong><span>' . esc_html( $label ) . '</span></td>';
+		}
+		$html .= '</tr></table><div class="award">' . self::medal( $data['status'] ) . '<div class="award-title"><span>FINISHER STATUS</span><strong>' . esc_html( $data['status'] ) . '</strong></div></div><p class="certificate-footer">PARTICIPANT NUMBER (BIB) ' . esc_html( (string) $data['number'] ) . ' &nbsp; | &nbsp; RALLY QUEST ENGINE</p></article>';
+		if ( $continued ) {
+			$html .= '<section class="certificate-description-continuation"><h2>' . esc_html( $data['event'] ) . '</h2><h3>Full Event Description</h3><p>' . nl2br( esc_html( $description ) ) . '</p></section>';
+		}
+		return $html;
 	}
 
 	public static function document( array $snapshots ) {
-		$html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Finisher Certificates</title><style>@page{size:A4 landscape;margin:15mm}body{font-family:"DejaVu Sans",sans-serif;color:#172b4d}.certificate{border:4px double #365d78;padding:12mm;text-align:center;page-break-after:always}.certificate:last-child{page-break-after:auto}h1{font-size:28pt}h2{font-size:20pt}p{font-size:12pt}@media print{.controls{display:none}}.controls{margin:16px}</style></head><body>';
+		$html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Finisher Certificates</title><style>' . self::styles() . '</style></head><body>';
 		foreach ( $snapshots as $data ) {
 			$html .= self::certificate_html( $data );
 		}
 		return $html . '</body></html>';
 	}
 
+	private static function styles() {
+		$css = file_get_contents( dirname( __DIR__ ) . '/assets/certificate.css' );
+		if ( false === $css ) {
+			throw new RuntimeException( 'The bundled certificate styles could not be read.' );
+		}
+		return $css;
+	}
+
 	/** Render only fixed local HTML; no remote resources, embedded PHP or JavaScript are allowed. */
 	public static function pdf( array $snapshots ) {
 		if ( ! extension_loaded( 'dom' ) || ! extension_loaded( 'mbstring' ) ) {
 			throw new RuntimeException( 'Certificate PDFs require the PHP DOM and mbstring extensions. Ask the site host to enable them, or use browser Print / Save as PDF.' );
+		}
+		if ( ! extension_loaded( 'gd' ) && array_filter( $snapshots, function ( $data ) { return ! empty( $data['image'] ); } ) ) {
+			throw new RuntimeException( 'PDFs with event images require the PHP GD extension. Ask the site host to enable it, or use browser Print / Save as PDF.' );
 		}
 		if ( count( $snapshots ) > 100 ) {
 			throw new RuntimeException( 'For more than 100 certificates, use Print All / Save as PDF in your browser instead of a server PDF download.' );
@@ -111,6 +253,7 @@ final class RQE_Certificates {
 			$options->set( 'isRemoteEnabled', false );
 			$options->set( 'isPhpEnabled', false );
 			$options->set( 'isJavascriptEnabled', false );
+			$options->set( 'defaultMediaType', 'print' );
 			$options->set( 'tempDir', $directory );
 			$options->set( 'fontCache', $directory );
 			$options->set( 'chroot', dirname( __DIR__ ) . '/vendor/dompdf/dompdf' );
@@ -318,9 +461,9 @@ final class RQE_Certificates {
 			} elseif ( 'review' === $mode ) {
 				$review = self::review( $event_id, RQE_Admin::integer( RQE_Admin::query( 'rider_id', '0' ) ) );
 				header( 'Content-Type: text/html; charset=utf-8' );
-				echo '<!doctype html><meta charset="utf-8"><title>Review Certificate Emails</title><h1>Review Certificate Emails</h1><p>Review every recipient and certificate. Nothing is sent until you approve. Unchanged pending/sent certificates are skipped unless you explicitly request a resend. Invalid addresses block approval. Delivery batches process up to 10 participants per request; continue remaining batches below.</p>';
+				echo '<!doctype html><meta charset="utf-8"><title>Review Certificate Emails</title><style>' . self::styles() . '</style><h1>Review Certificate Emails</h1><p>Review every recipient and certificate. Nothing is sent until you approve. Unchanged pending/sent certificates are skipped unless you explicitly request a resend. Invalid addresses block approval. Delivery batches process up to 10 participants per request; continue remaining batches below.</p>';
 				foreach ( $review['draft']['rows'] as $data ) {
-					echo '<details><summary>' . esc_html( $data['name'] . ' — ' . $data['email'] ) . '</summary>' . self::certificate_html( $data ) . '</details>';
+					echo '<details><summary>' . esc_html( $data['name'] . ' — ' . $data['email'] ) . '</summary><div class="review-preview">' . self::certificate_html( $data ) . '</div></details>';
 				}
 				self::form( $event_id, 'approve' );
 				echo '<input type="hidden" name="token" value="' . esc_attr( $review['token'] ) . '"><p><label>Subject <input name="subject" maxlength="200" required value="Your finisher certificate"></label></p><p><label>Message <textarea name="message" maxlength="5000" rows="5">Congratulations! Your reviewed finisher certificate is attached.</textarea></label></p><p><label><input type="checkbox" name="resend" value="1">Explicitly resend unchanged certificates, including ones already sent or with an uncertain outcome</label></p><p><label><input type="checkbox" name="approved" value="1" required>I reviewed and approve these recipients and certificates</label></p><button>Approve and Send First Batch</button></form>';

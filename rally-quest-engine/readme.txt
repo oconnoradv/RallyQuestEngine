@@ -4,7 +4,7 @@ Tags: rally, scavenger hunt, motorcycle, bicycle, geocache
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.2.2
+Stable tag: 0.2.3
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -297,9 +297,18 @@ unconfirmed, or non-motorcycle. Manual motorcycle entry remains available.
 == Privacy and retention ==
 
 Results provides administrator-reviewed finisher certificates. Manually assigned
-Finisher is eligible by default; custom final statuses can opt in. Preliminary
+Finisher, Bronze Finisher, Silver Finisher and Gold Finisher are always eligible;
+custom final statuses can opt in. Preliminary
 statuses, Registered, DNF and DNS are excluded. Certificates include event/year,
 participant name and Bib, score, accepted/rejected bonus counts and Event Status.
+The original vintage-style A4 landscape template also includes the Event Image,
+Event Description and Overall Position. Bronze, Silver or Gold final statuses
+show a matching medal; ordinary Finisher has none. Long descriptions continue
+on following pages without truncation. A configured event image must be a
+readable local-upload JPEG/PNG/GIF/WebP up to 10 MB / 16 million pixels; image
+PDFs require PHP GD. Missing configured media shows an error, while an event
+with no image uses the Rally Quest Engine wordmark. Description, image content,
+overall position or template-revision changes require a fresh email review.
 Print individually or all, save through the browser, or download individual PDFs.
 PDF attachments are generated locally using bundled Dompdf, with remote resources
 disabled and private staging outside the web root. Attachments are removed after
@@ -383,6 +392,14 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.2.3 =
+* Set Event Status defaults to Registered, DNS, Active, Preliminary Finisher, Preliminary Bronze Finisher, Preliminary Silver Finisher, Preliminary Gold Finisher, Finisher, Bronze Finisher, Silver Finisher, Gold Finisher, DNF. One-time schema 15 migration preserves custom labels, disabled flags and participant results.
+* All four manually finalized finisher statuses always qualify for individual/all certificates.
+* Choose Vintage Ornamental or Classic Formal in Event Details. Print/PDF/email uses the saved design; medal color follows actual status and design changes require re-review.
+* Added an original vintage-style certificate design with local Event Image, Event Description, Overall Position and Bronze/Silver/Gold medal icons.
+* Print, PDF downloads and email review share the design. Image content, description, ranking and template revision are included in approval fingerprints.
+* Preserve long descriptions on continuation pages and provide four fictional sample certificates for each predefined design in the repository documentation.
 
 = 0.2.2 =
 * Added Move Up / Move Down ordering for independent Registration and Event Status catalogs.

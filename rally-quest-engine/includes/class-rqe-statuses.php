@@ -4,7 +4,44 @@ defined( 'ABSPATH' ) || exit;
 
 final class RQE_Statuses {
 	public static function defaults( $kind ) {
-		return 'registration' === $kind ? array( 'Initial Registration', 'Paid', 'Fully Registered', 'Cancelled' ) : array_merge( array( 'Registered', 'Preliminary Finisher', 'Finisher', 'DNF', 'DNS' ), array_values( RQE_Results::tiers() ) );
+		return 'registration' === $kind ? array( 'Initial Registration', 'Paid', 'Fully Registered', 'Cancelled' ) : array( 'Registered', 'DNS', 'Active', 'Preliminary Finisher', 'Preliminary Bronze Finisher', 'Preliminary Silver Finisher', 'Preliminary Gold Finisher', 'Finisher', 'Bronze Finisher', 'Silver Finisher', 'Gold Finisher', 'DNF' );
+	}
+
+	public static function final_finishers() {
+		return array( 'Finisher', 'Bronze Finisher', 'Silver Finisher', 'Gold Finisher' );
+	}
+
+	/** One-time upgrade order; retain custom choices, enabled flags and participant assignments. */
+	public static function migrate_finishers() {
+		global $wpdb;
+		$ids = $wpdb->get_col( 'SELECT id FROM ' . RQE::table( 'events' ) . ' ORDER BY id FOR UPDATE' );
+		if ( ! is_array( $ids ) || $wpdb->last_error ) {
+			throw new RuntimeException( 'Finisher status migration could not read events.' );
+		}
+		foreach ( $ids as $event_id ) {
+			self::seed( (int) $event_id );
+			$options = self::options( $event_id, 'event' );
+			$order = array();
+			foreach ( self::defaults( 'event' ) as $label ) {
+				foreach ( $options as $option ) {
+					if ( 0 === strcasecmp( $label, $option['label'] ) ) {
+						$order[] = $option;
+					}
+				}
+			}
+			foreach ( $options as $option ) {
+				if ( ! in_array( $option['id'], array_column( $order, 'id' ), true ) ) {
+					$order[] = $option;
+				}
+			}
+			foreach ( $order as $position => $option ) {
+				$data = array( 'sort_order' => $position );
+				if ( in_array( strtolower( $option['label'] ), array_map( 'strtolower', self::final_finishers() ), true ) ) {
+					$data['certificate_eligible'] = 1;
+				}
+				RQE_Admin::checked( $wpdb->update( RQE::table( 'status_options' ), $data, array( 'id' => $option['id'] ) ) );
+			}
+		}
 	}
 
 	public static function protected_labels() {
@@ -46,8 +83,8 @@ final class RQE_Statuses {
 		foreach ( array( 'registration', 'event' ) as $kind ) {
 			$existing = array_column( self::options( $event_id, $kind ), 'label' );
 			foreach ( self::defaults( $kind ) as $label ) {
-				if ( ! in_array( $label, $existing, true ) ) {
-					RQE_Admin::checked( $wpdb->insert( RQE::table( 'status_options' ), array( 'event_id' => $event_id, 'kind' => $kind, 'label' => $label, 'enabled' => 1, 'sort_order' => count( $existing ), 'certificate_eligible' => 'event' === $kind && 'Finisher' === $label ? 1 : 0 ) ) );
+				if ( ! in_array( strtolower( $label ), array_map( 'strtolower', $existing ), true ) ) {
+					RQE_Admin::checked( $wpdb->insert( RQE::table( 'status_options' ), array( 'event_id' => $event_id, 'kind' => $kind, 'label' => $label, 'enabled' => 1, 'sort_order' => count( $existing ), 'certificate_eligible' => 'event' === $kind && in_array( $label, self::final_finishers(), true ) ? 1 : 0 ) ) );
 					$existing[] = $label;
 				}
 			}
@@ -193,6 +230,9 @@ final class RQE_Statuses {
 					return;
 				}
 				if ( in_array( $action, array( 'certificate_on', 'certificate_off' ), true ) ) {
+					if ( 'event' === $kind && in_array( strtolower( $label ), array_map( 'strtolower', self::final_finishers() ), true ) ) {
+						throw new RuntimeException( 'Standard final finisher statuses are always certificate eligible.' );
+					}
 					if ( 'event' !== $kind || in_array( strtolower( $label ), array_map( 'strtolower', array_merge( self::protected_labels(), array( 'DNF', 'Automatic' ) ) ), true ) ) {
 						throw new RuntimeException( 'Only final finisher statuses can be certificate eligible.' );
 					}
