@@ -679,6 +679,7 @@ final class RQE_Admin {
 			throw new RuntimeException( 'Choose a valid scavenger hunt style.' );
 		}
 		$data = array( 'name' => self::text( self::posted( 'name' ), 160, true ), 'description' => $description, 'hunt_style' => $style, 'max_bib' => self::integer( self::posted( 'max_bib' ), 1, 10000 ), 'logo_id' => self::integer( self::posted( 'logo_id', '0' ) ), 'location' => self::text( self::posted( 'location' ), 200 ), 'min_finisher_points' => self::integer( self::posted( 'min_finisher_points' ), 0, 1000000000 ) );
+		$data['certificate_design'] = RQE_Certificates::design( self::posted( 'certificate_design', 'vintage' ) );
 		$lower = $data['min_finisher_points'];
 		$lower_label = 'Minimum Finisher Points';
 		foreach ( RQE_Results::tiers() as $key => $status ) {

@@ -162,7 +162,7 @@ function render( $method, ...$args ) {
 
 $wpdb = new Event_Test_DB();
 foreach ( array(
-	'events' => "id INTEGER PRIMARY KEY,name TEXT,description TEXT DEFAULT '',hunt_style TEXT DEFAULT 'motorcycle',event_date TEXT,max_bib INTEGER,min_finisher_points INTEGER,bronze_finisher_points INTEGER DEFAULT NULL,silver_finisher_points INTEGER DEFAULT NULL,gold_finisher_points INTEGER DEFAULT NULL,is_locked INTEGER DEFAULT 0,is_archived INTEGER DEFAULT 0,logo_id INTEGER DEFAULT 0,public_results_enabled INTEGER NOT NULL DEFAULT 0,registration_open TEXT,registration_close TEXT,start_at TEXT,end_at TEXT,rider_price TEXT,pillion_price TEXT,location TEXT,latitude TEXT,longitude TEXT",
+	'events' => "id INTEGER PRIMARY KEY,name TEXT,description TEXT DEFAULT '',hunt_style TEXT DEFAULT 'motorcycle',certificate_design TEXT NOT NULL DEFAULT 'vintage',event_date TEXT,max_bib INTEGER,min_finisher_points INTEGER,bronze_finisher_points INTEGER DEFAULT NULL,silver_finisher_points INTEGER DEFAULT NULL,gold_finisher_points INTEGER DEFAULT NULL,is_locked INTEGER DEFAULT 0,is_archived INTEGER DEFAULT 0,logo_id INTEGER DEFAULT 0,public_results_enabled INTEGER NOT NULL DEFAULT 0,registration_open TEXT,registration_close TEXT,start_at TEXT,end_at TEXT,rider_price TEXT,pillion_price TEXT,location TEXT,latitude TEXT,longitude TEXT",
 	'horses' => "id INTEGER PRIMARY KEY,rider_id INTEGER DEFAULT 0,name TEXT,breed TEXT DEFAULT '',sex TEXT DEFAULT '',age INTEGER,color TEXT DEFAULT ''",
 	'riders' => "id INTEGER PRIMARY KEY,name TEXT,email TEXT,alias TEXT DEFAULT '',phone TEXT DEFAULT ''",
 	'registrations' => "id INTEGER PRIMARY KEY,event_id INTEGER,rider_id INTEGER,bib INTEGER,pillion TEXT DEFAULT '',registration_status TEXT DEFAULT 'Initial Registration',status TEXT DEFAULT 'Registered',status_manual INTEGER DEFAULT 0,score INTEGER DEFAULT 0,placing INTEGER",
@@ -597,6 +597,35 @@ RQE_Event_State::change( 8, 'unarchive' );
 RQE_Event_State::change( 8, 'unlock' );
 RQE_Admin::remember_event( 7 );
 request();
+RQE_Statuses::change_option( 7, 'event', 'disable', 'Silver Finisher' );
+$before_assignments = $wpdb->get_results( 'SELECT * FROM ' . RQE::table( 'registrations' ) . ' ORDER BY id', ARRAY_A );
+RQE::begin_transaction();
+RQE_Statuses::migrate_finishers();
+RQE::commit_transaction();
+$ordered = array_column( RQE_Statuses::options( 7, 'event' ), 'label' );
+check( array_slice( $ordered, 0, 12 ) === RQE_Statuses::defaults( 'event' ), 'upgrade installs the requested twelve-status order before custom labels' );
+check( ! in_array( 'Silver Finisher', RQE_Statuses::enabled_labels( RQE_Statuses::options( 7, 'event' ) ), true ), 'upgrade preserves disabled status choices' );
+check( $before_assignments === $wpdb->get_results( 'SELECT * FROM ' . RQE::table( 'registrations' ) . ' ORDER BY id', ARRAY_A ), 'order migration leaves scores and participant statuses unchanged' );
+foreach ( RQE_Statuses::final_finishers() as $label ) {
+	check( RQE_Certificates::eligible( array( 'status' => $label, 'status_manual' => 1 ), array() ), $label . ' qualifies even when disabled or absent from manual choices' );
+}
+rejects( function () { RQE_Statuses::change_option( 7, 'event', 'certificate_off', 'Silver Finisher' ); }, 'always certificate eligible' );
+check( strpos( render( 'event_form', 7, RQE::row( 'events', 7 ) ), 'name="certificate_design"' ) !== false, 'event edit provides the predefined certificate design selector' );
+rejects( function () { RQE_Certificates::design( 'arbitrary-path' ); }, 'predefined certificate design' );
+$_POST = array_merge( $event_post, array( 'id' => (string) $new_event_id, 'certificate_design' => 'classic' ) );
+$create_event->invoke( null );
+check( RQE::row( 'events', $new_event_id )['certificate_design'] === 'classic', 'event save persists a predefined certificate design' );
+$_POST['certificate_design'] = 'unknown';
+rejects( function () use ( $create_event ) { $create_event->invoke( null ); }, 'predefined certificate design' );
+check( RQE::row( 'events', $new_event_id )['certificate_design'] === 'classic', 'invalid design does not overwrite the saved selection' );
+check( array_column( RQE_Statuses::options( $new_event_id, 'event' ), 'label' ) === RQE_Statuses::defaults( 'event' ), 'new events seed the exact requested status order' );
+RQE_Statuses::change_option( 7, 'event', 'up', 'DNS' );
+check( 'DNS' === RQE_Statuses::options( 7, 'event' )[0]['label'], 'manual ordering remains available after the one-time default migration' );
+$wpdb->update( RQE::table( 'status_options' ), array( 'label' => 'bronze finisher', 'enabled' => 0 ), array( 'event_id' => 7, 'kind' => 'event', 'label' => 'Bronze Finisher' ) );
+$status_count = count( RQE_Statuses::options( 7, 'event' ) );
+RQE_Statuses::migrate_finishers();
+$bronze_options = array_values( array_filter( RQE_Statuses::options( 7, 'event' ), function ( $option ) { return 'bronze finisher' === strtolower( $option['label'] ); } ) );
+check( count( RQE_Statuses::options( 7, 'event' ) ) === $status_count && count( $bronze_options ) === 1 && (int) $bronze_options[0]['enabled'] === 0, 'upgrade matches historical status labels case-insensitively without duplication or re-enabling' );
 if ( getenv( 'RQE_PREVIEW_DIR' ) ) {
 	file_put_contents( getenv( 'RQE_PREVIEW_DIR' ) . '/event.html', '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="admin.css">' . $html );
 	file_put_contents( getenv( 'RQE_PREVIEW_DIR' ) . '/riders.html', '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="admin.css"><script defer src="admin.js"></script>' . $riders_html );

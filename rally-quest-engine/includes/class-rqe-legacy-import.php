@@ -106,6 +106,7 @@ final class RQE_Legacy_Import {
 			}
 			RQE_Statuses::migrate_tiers();
 			RQE_Statuses::migrate_ordering();
+			RQE_Statuses::migrate_finishers();
 			RQE::commit_transaction();
 		} catch ( Throwable $exception ) {
 			RQE::rollback_transaction();

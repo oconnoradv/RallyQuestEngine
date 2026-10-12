@@ -138,6 +138,7 @@ final class RQE {
 			hunt_style varchar(20) NOT NULL DEFAULT 'motorcycle',
 			max_bib int(10) unsigned NOT NULL DEFAULT 100,
 			logo_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			certificate_design varchar(20) NOT NULL DEFAULT 'vintage',
 			event_date date NOT NULL,
 			registration_open datetime NOT NULL,
 			registration_close datetime NOT NULL,
@@ -283,6 +284,20 @@ final class RQE {
 				}
 			}
 			RQE_Statuses::migrate_ordering();
+		}
+		if ( (int) $previous_db_version < 15 ) {
+			$verified = $wpdb->get_results( 'SELECT certificate_design FROM ' . self::table( 'events' ) . ' LIMIT 0', ARRAY_A );
+			if ( ! is_array( $verified ) || $wpdb->last_error ) {
+				throw new RuntimeException( 'Certificate design schema upgrade failed. Check database permissions and retry.' );
+			}
+			self::begin_transaction();
+			try {
+				RQE_Statuses::migrate_finishers();
+				self::commit_transaction();
+			} catch ( RuntimeException $exception ) {
+				self::rollback_transaction();
+				throw $exception;
+			}
 		}
 		update_option( 'rqe_db_version', RQE_DB_VERSION, false );
 	}

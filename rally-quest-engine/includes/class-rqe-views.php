@@ -668,6 +668,11 @@ final class RQE_Views {
 			self::field( str_replace( 'Preliminary ', '', $status ) . ' Points (optional)', $key, $event[ $key ] ?? '', 'number', false, array( 'min' => 0, 'max' => 1000000000, 'step' => 1, 'placeholder' => 'Not Used' ) );
 		}
 		echo '<p>Leave optional finisher thresholds blank for <strong>Not Used</strong>. Each configured tier must exceed the highest configured lower threshold. Scores equal to or greater than a threshold qualify; manual Event Status assignments override automatic tiers.</p>';
+		echo '<label class="rqe-field"><span>Finisher Certificate Design</span><select name="certificate_design" required>';
+		foreach ( RQE_Certificates::designs() as $key => $label ) {
+			echo '<option value="' . esc_attr( $key ) . '"' . selected( $event['certificate_design'] ?? 'vintage', $key, false ) . '>' . esc_html( $label ) . '</option>';
+		}
+		echo '</select></label><p>The selected design applies to this event\'s printed, downloaded and emailed certificates. Medals follow each participant\'s actual Bronze, Silver or Gold status. Changing the design requires fresh email review.</p>';
 		echo '<div class="rqe-logo">';
 		self::field( 'Existing media image ID (0 = none)', 'logo_id', $event['logo_id'] ?? 0, 'number', false, array( 'min' => 0, 'step' => 1 ) );
 		echo '<button type="button" class="button rqe-media">Select logo in WordPress media library</button><button type="button" class="button rqe-clear-media">Clear logo</button><div class="rqe-logo-preview">';
@@ -762,7 +767,7 @@ final class RQE_Views {
 		$event = RQE::row( 'events', $event_id );
 		echo '<fieldset' . ( ! empty( $event['is_locked'] ) || ! empty( $event['is_archived'] ) ? ' disabled' : '' ) . '>';
 		if ( 'event' === $kind ) {
-			echo '<p>Automatic is a calculation mode. It uses Registered or the highest Preliminary Finisher tier whose configured threshold is met or exceeded: Minimum, Bronze, Silver or Gold. Unused tiers are skipped. These system statuses and DNS cannot be deleted; disabling them affects manual choices only. Changing Registration Status to Cancelled sets manual Event Status to DNS. Manual assignments remain authoritative until returned to Automatic. At the end of the event, manually assign Finisher, DNF or DNS on Results. Mark custom final finisher statuses certificate eligible below.</p>';
+			echo '<p>Automatic is a calculation mode. It uses Registered or the highest Preliminary Finisher tier whose configured threshold is met or exceeded: Minimum, Bronze, Silver or Gold. Unused tiers are skipped. These system statuses and DNS cannot be deleted; disabling them affects manual choices only. Changing Registration Status to Cancelled sets manual Event Status to DNS. Manual assignments remain authoritative until returned to Automatic. At the end of the event, manually assign Finisher, Bronze Finisher, Silver Finisher, Gold Finisher, DNF or DNS on Results. Mark custom final finisher statuses certificate eligible below.</p>';
 		} else {
 			echo '<p>Keep at least one value enabled. New participants default to Initial Registration when enabled, otherwise the first enabled value. Changing Registration Status to Cancelled sets Event Status to DNS. Saving an unchanged Cancelled value or changing registration away from Cancelled does not overwrite a later manual Event Status.</p>';
 		}
@@ -775,7 +780,9 @@ final class RQE_Views {
 			self::form( 'status_option', array( 'event_id' => $event_id, 'status_kind' => $kind, 'status_label' => $option['label'] ), 'rqe-inline-form' );
 			echo '<button class="button" name="status_action" value="' . ( $option['enabled'] ? 'disable' : 'enable' ) . '">' . ( $option['enabled'] ? 'Disable' : 'Enable' ) . '</button>';
 			echo ' <button class="button" name="status_action" value="up"' . ( 0 === $index ? ' disabled' : '' ) . '>Move Up</button> <button class="button" name="status_action" value="down"' . ( count( $ordered_options ) - 1 === $index ? ' disabled' : '' ) . '>Move Down</button>';
-			if ( 'event' === $kind && ! $protected && 'DNF' !== $option['label'] ) {
+			if ( 'event' === $kind && in_array( strtolower( $option['label'] ), array_map( 'strtolower', RQE_Statuses::final_finishers() ), true ) ) {
+				echo ' <span>Certificate Eligible: Always</span>';
+			} elseif ( 'event' === $kind && ! $protected && 'DNF' !== $option['label'] ) {
 				echo ' <button class="button" name="status_action" value="' . ( ! empty( $option['certificate_eligible'] ) ? 'certificate_off' : 'certificate_on' ) . '">' . esc_html( ! empty( $option['certificate_eligible'] ) ? 'Certificate Eligible: Yes (disable)' : 'Certificate Eligible: No (enable)' ) . '</button>';
 			}
 			if ( ! $used && ! $protected ) {
@@ -1442,7 +1449,7 @@ final class RQE_Views {
 			}
 			echo '<button class="button" name="state_action" value="' . ( ! empty( $event['is_archived'] ) ? 'unarchive' : 'archive' ) . '" data-confirm="Change this event archive state?">' . esc_html( ! empty( $event['is_archived'] ) ? 'Unarchive Event (keep locked)' : 'Archive Event (also lock)' ) . '</button>';
 		}
-		echo '</form><p>Certificates require a manually finalized certificate-eligible status. Finisher is eligible by default; preliminary statuses, DNF and DNS are excluded.</p><p><a class="button" href="' . esc_url( RQE_Certificates::link( $id, 'print' ) ) . '">Print All Finisher Certificates / Save as PDF</a> <a class="button" href="' . esc_url( RQE_Certificates::link( $id, 'review' ) ) . '">Review &amp; Email All Certificates</a></p></section>';
+		echo '</form><p>Finisher, Bronze Finisher, Silver Finisher and Gold Finisher always qualify after manual finalization; preliminary statuses, DNF and DNS are excluded. Design: <strong>' . esc_html( RQE_Certificates::designs()[ RQE_Certificates::design( $event['certificate_design'] ?? 'vintage' ) ] ) . '</strong> (choose in Event Details).</p><p><a class="button" href="' . esc_url( RQE_Certificates::link( $id, 'print' ) ) . '">Print All Finisher Certificates / Save as PDF</a> <a class="button" href="' . esc_url( RQE_Certificates::link( $id, 'review' ) ) . '">Review &amp; Email All Certificates</a></p></section>';
 		global $wpdb;
 		$batches = $wpdb->get_col( $wpdb->prepare( 'SELECT batch FROM ' . RQE::table( 'certificate_mail' ) . ' WHERE event_id=%d AND user_id=%d GROUP BY batch ORDER BY MAX(id) DESC LIMIT 10', $id, get_current_user_id() ) );
 		if ( ! is_array( $batches ) || $wpdb->last_error ) {
