@@ -10,7 +10,7 @@ Rally Quest Engine is a WordPress plugin that helps organizers produce and manag
 
 > **Version status:** The current release provides scavenger hunt styles with style-coded Event IDs, rally administration, participant and event management, event-scoped email bonus-submission inboxes (Gmail-API/IMAP/MS365), submission review and scoring by admin or event admins, overall rankings, embedding overall rankings in a page/post, exports, and backups.
 >
-> **Future Enhancements:** Contested-submission handling, phone applications, beautification of standings pages as well as displaying detail score history on public pages.
+> **Future Enhancements:** Contested-submission handling, phone applications, and beautification of standings pages.
 
 ## Installation
 
