@@ -108,6 +108,7 @@ final class Email_Submission_Test_DB {
 }
 
 final class RQE {
+	public static function site_access() { return $GLOBALS['email_site_admin'] ?? true; }
 	public static function table( $name ) { return $name; }
 	public static function begin_transaction() { global $wpdb; $wpdb->query( 'START TRANSACTION' ); }
 	public static function commit_transaction() { global $wpdb; $wpdb->query( 'COMMIT' ); }
@@ -184,6 +185,26 @@ RQE_Email_Submissions::save_configuration( 7, array(
 	'password' => '',
 ) );
 check( 'first-secret' === RQE_Email_Submissions::configuration( 7, true )['settings']['password'], 'blank secret fields preserve the saved credential' );
+$original_settings = $wpdb->tables['event_email_settings'][7];
+$imap_input = array( 'provider' => 'imap', 'enabled' => '1', 'mailbox' => 'submissions@example.test', 'host' => 'imap.example.test', 'port' => '993', 'encryption' => 'ssl', 'username' => 'submissions@example.test', 'folder' => 'INBOX', 'password' => '' );
+foreach ( array( 'host' => 'attacker.example.test', 'port' => '143', 'encryption' => 'none', 'username' => 'other@example.test' ) as $key => $value ) {
+	try {
+		RQE_Email_Submissions::save_configuration( 7, array_merge( $imap_input, array( $key => $value ) ) );
+		throw new RuntimeException( 'Changed credential destination unexpectedly succeeded.' );
+	} catch ( RuntimeException $exception ) {
+		check( false !== strpos( $exception->getMessage(), 'required when the server or account changes' ) && $wpdb->tables['event_email_settings'][7] === $original_settings, 'changing IMAP ' . $key . ' cannot reuse or overwrite saved credentials' );
+	}
+}
+$GLOBALS['email_site_admin'] = false;
+foreach ( array( 'save', 'test' ) as $operation ) {
+	try {
+		if ( 'save' === $operation ) { RQE_Email_Submissions::save_configuration( 7, $imap_input ); } else { RQE_Email_Submissions::test_connection( 7 ); }
+		throw new RuntimeException( 'Non-administrator mailbox operation unexpectedly succeeded.' );
+	} catch ( RuntimeException $exception ) {
+		check( false !== strpos( $exception->getMessage(), 'Only WordPress administrators' ), 'event administrators cannot ' . $operation . ' mailbox credentials' );
+	}
+}
+$GLOBALS['email_site_admin'] = true;
 $status = RQE_Email_Submissions::configuration_status( 7 );
 check( $status['configured'] && ! $status['connected'] && 'IMAP' === $status['provider_label'], 'a complete saved inbox is displayed but remains unverified before a connection test' );
 try {

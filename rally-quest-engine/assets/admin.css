@@ -210,3 +210,8 @@
 .rqe .rqe-disabled-field, .rqe input[disabled].rqe-disabled-field { background: #f0f0f1; color: #8c8f94; cursor: not-allowed; }
 .rqe .rqe-horse-choices { margin: 0 0 12px; }
 .rqe .rqe-public-results-image img { max-width: 100%; height: auto; }
+.rqe .rqe-public-results-scroll { max-width: 100%; overflow-x: auto; }
+.rqe .rqe-submitted-proof { display: inline-flex; flex-direction: column; gap: .4em; align-items: flex-start; }
+.rqe .rqe-submitted-proof img { width: 120px; max-width: 100%; height: 90px; object-fit: contain; }
+.rqe .rqe-accepted-bonuses { width: 100%; border-collapse: collapse; }
+.rqe .rqe-accepted-bonuses th, .rqe .rqe-accepted-bonuses td { padding: .6em; border: 1px solid #c3c4c7; text-align: left; vertical-align: top; }

@@ -8,3 +8,5 @@
 .rqe-public-results-image { margin: 0 0 1em; }
 .rqe-public-results-image img { max-width: 100%; height: auto; }
 .rqe-public-results-description { margin-bottom: 1em; }
+.rqe-public-results .rqe-submitted-proof { display: inline-flex; flex-direction: column; gap: .4em; align-items: flex-start; }
+.rqe-public-results .rqe-submitted-proof img { width: 120px; max-width: 100%; height: 90px; object-fit: contain; }

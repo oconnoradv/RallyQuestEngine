@@ -4,7 +4,7 @@ Tags: rally, scavenger hunt, motorcycle, bicycle, geocache
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.2.3
+Stable tag: 0.3.0
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -183,6 +183,12 @@ riders; they cannot manage shared motorcycles, master rider records, other
 events, diagnostics, or role assignments. Event Scorers can access only Scoring
 and About for their assigned events.
 
+Only WordPress site administrators can configure inboxes, test connections or
+manually poll. Event Administrators and Scorers retain assigned submission review.
+Changing the IMAP host, port, encryption or username requires a newly entered
+password; blank passwords retain the old secret only for an unchanged account.
+Use trusted mailbox servers and encrypted transport.
+
 Event inbox secrets are encrypted with AES-256-GCM using the WordPress
 authentication salts. IMAP requires the PHP IMAP extension. Gmail requires a
 refresh token authorized for gmail.modify; selecting Gmail API displays a
@@ -239,7 +245,9 @@ registrations, replacing their previous Event Status without changing scores
 or placing. Back up before upgrading and review affected final statuses.
 
 Public Results Embed on Event Configuration displays the read-only RQE Event
-ID and a copyable shortcode, for example [rqe_results id="MC-7"]. The style`ncode must match the event; a numeric ID is also accepted, and former`n[mrsa_results] embeds keep working while the old plugin is inactive. Publication is
+ID and a copyable shortcode, for example [rqe_results id="MC-7"]. The style
+code must match the event; a numeric ID is also accepted, and former
+[mrsa_results] embeds keep working while the old plugin is inactive. Publication is
 off by default; a WordPress administrator or assigned Event Administrator must
 enable it and save. Add the existing WordPress Shortcode block to a post/page,
 paste the shortcode, then publish or update. Its explicit ID does not depend
@@ -247,11 +255,21 @@ on the administrator header selection; multiple event embeds are supported.
 Logged-out visitors see the event name, description and image, then only Bib,
 Participant Name, Total Score, Accepted Bonuses,
 Rejected Bonuses, Event Status and Overall Placing for enabled events.
-Contact details, Registration Status, photos, review details, administrative
-controls and score-sheet links are excluded. Disabled/missing events show an
+Contact details, Registration Status, private review details, administrative
+controls and administrative score-sheet links are excluded. Disabled/missing events show an
 unavailable message. Purge WordPress page and CDN caches after visibility or
 score/status changes; disabling publication cannot recall previously cached
 or delivered results.
+
+Enable the separate Publish accepted bonus details and photos option to make
+public Bibs link to accepted Bonus IDs, descriptions, awarded points and submitted
+proof thumbnails. This is off by default and requires public results enabled.
+Public details recheck publication and enrollment; rejected and pending records
+are excluded. Obtain participant permission before publishing photos. Missing
+images are identified explicitly. Direct uploads URLs and downloaded/cached
+copies cannot be revoked by turning the listing off.
+Administrative Results and Reviewed Bibs open an accepted-bonus section while
+the participant's complete submission history remains available below it.
 
 Choose a scavenger hunt style (defaulting to the primary style), then one of
 its events in the header and press Set Event; this event persists per user
@@ -392,6 +410,14 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.3.0 =
+* Add opt-in public accepted-bonus details linked from participant Bibs, with submitted proof photos alongside bonus descriptions and awarded points.
+* Link administrative Results and Reviewed Bibs to the participant's accepted-bonus section while retaining full submission history.
+* Keep public bonus details and photos disabled by default; validate event publication and enrollment before displaying accepted submissions.
+* Restrict inbox configuration, connection testing and manual polling to WordPress site administrators. Changed IMAP server/account settings require a newly entered password.
+* Upgrade to schema 16 without changing scores or submission decisions. Back up the database and gallery before updating.
+* Run public-repository CodeQL analysis in addition to the existing dependency, static security and secret-scanning release gates.
 
 = 0.2.3 =
 * Set Event Status defaults to Registered, DNS, Active, Preliminary Finisher, Preliminary Bronze Finisher, Preliminary Silver Finisher, Preliminary Gold Finisher, Finisher, Bronze Finisher, Silver Finisher, Gold Finisher, DNF. One-time schema 15 migration preserves custom labels, disabled flags and participant results.

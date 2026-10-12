@@ -3,7 +3,7 @@
  * Plugin Name: Rally Quest Engine
  * Plugin URI: https://github.com/oconnoradv/RallyQuestEngine
  * Description: Plan, administer and score scavenger-hunt style rallies for motorcycle, bicycle, horseback and geocache participants with near-real-time results.
- * Version: 0.2.3
+ * Version: 0.3.0
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Requires Plugins: action-scheduler
@@ -16,8 +16,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'RQE_VERSION', '0.2.3' );
-define( 'RQE_DB_VERSION', '15' );
+define( 'RQE_VERSION', '0.3.0' );
+define( 'RQE_DB_VERSION', '16' );
 define( 'RQE_FILE', __FILE__ );
 require_once __DIR__ . '/includes/class-rqe.php';
 require_once __DIR__ . '/includes/class-rqe-event-state.php';

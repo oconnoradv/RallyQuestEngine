@@ -85,14 +85,27 @@ function sanitize_text_field( $value ) { return trim( strip_tags( (string) $valu
 function sanitize_key( $value ) { return strtolower( preg_replace( '/[^a-z0-9_-]/', '', (string) $value ) ); }
 function sanitize_email( $value ) { return strtolower( $value ); }
 function is_email( $value ) { return filter_var( $value, FILTER_VALIDATE_EMAIL ); }
-function wp_unslash( $value ) { return $value; }
+function wp_unslash( $value ) { return is_array( $value ) ? array_map( 'wp_unslash', $value ) : stripslashes( $value ); }
 function absint( $value ) { return abs( (int) $value ); }
 function esc_html( $value ) { return htmlspecialchars( (string) $value, ENT_QUOTES ); }
+if ( ! function_exists( '__' ) ) {
+	function __( $value, $domain = 'default' ) { return $value; }
+}
+if ( ! function_exists( 'esc_html__' ) ) {
+	function esc_html__( $value, $domain = 'default' ) { return esc_html( __( $value, $domain ) ); }
+}
 function esc_attr( $value ) { return esc_html( $value ); }
 function esc_url( $value ) { return esc_html( $value ); }
 function esc_textarea( $value ) { return esc_html( $value ); }
 function admin_url( $path = '' ) { return 'https://example.test/wp-admin/' . $path; }
 function add_query_arg( $args, $url ) { return $url . '?' . http_build_query( $args ); }
+function get_permalink() { return 'https://example.test/results/'; }
+if ( ! function_exists( 'trailingslashit' ) ) {
+	function trailingslashit( $path ) { return rtrim( $path, '/\\' ) . '/'; }
+}
+if ( ! function_exists( 'wp_upload_dir' ) ) {
+	function wp_upload_dir() { return array( 'basedir' => $GLOBALS['proof_uploads'] ?? __DIR__ . '/fixtures/public-proof-unused', 'baseurl' => 'https://example.test/uploads', 'error' => false ); }
+}
 function wp_nonce_field( $action ) { echo '<input type="hidden" name="_wpnonce" value="fixture">'; }
 function wp_nonce_url( $url, $action ) { return $url . '&_wpnonce=fixture'; }
 function selected( $value, $current, $echo = true ) { $html = (string) $value === (string) $current ? ' selected="selected"' : ''; if ( $echo ) { echo $html; } return $html; }
@@ -162,7 +175,7 @@ function render( $method, ...$args ) {
 
 $wpdb = new Event_Test_DB();
 foreach ( array(
-	'events' => "id INTEGER PRIMARY KEY,name TEXT,description TEXT DEFAULT '',hunt_style TEXT DEFAULT 'motorcycle',certificate_design TEXT NOT NULL DEFAULT 'vintage',event_date TEXT,max_bib INTEGER,min_finisher_points INTEGER,bronze_finisher_points INTEGER DEFAULT NULL,silver_finisher_points INTEGER DEFAULT NULL,gold_finisher_points INTEGER DEFAULT NULL,is_locked INTEGER DEFAULT 0,is_archived INTEGER DEFAULT 0,logo_id INTEGER DEFAULT 0,public_results_enabled INTEGER NOT NULL DEFAULT 0,registration_open TEXT,registration_close TEXT,start_at TEXT,end_at TEXT,rider_price TEXT,pillion_price TEXT,location TEXT,latitude TEXT,longitude TEXT",
+	'events' => "id INTEGER PRIMARY KEY,name TEXT,description TEXT DEFAULT '',hunt_style TEXT DEFAULT 'motorcycle',certificate_design TEXT NOT NULL DEFAULT 'vintage',event_date TEXT,max_bib INTEGER,min_finisher_points INTEGER,bronze_finisher_points INTEGER DEFAULT NULL,silver_finisher_points INTEGER DEFAULT NULL,gold_finisher_points INTEGER DEFAULT NULL,is_locked INTEGER DEFAULT 0,is_archived INTEGER DEFAULT 0,logo_id INTEGER DEFAULT 0,public_results_enabled INTEGER NOT NULL DEFAULT 0,public_bonus_details_enabled INTEGER NOT NULL DEFAULT 0,registration_open TEXT,registration_close TEXT,start_at TEXT,end_at TEXT,rider_price TEXT,pillion_price TEXT,location TEXT,latitude TEXT,longitude TEXT",
 	'horses' => "id INTEGER PRIMARY KEY,rider_id INTEGER DEFAULT 0,name TEXT,breed TEXT DEFAULT '',sex TEXT DEFAULT '',age INTEGER,color TEXT DEFAULT ''",
 	'riders' => "id INTEGER PRIMARY KEY,name TEXT,email TEXT,alias TEXT DEFAULT '',phone TEXT DEFAULT ''",
 	'registrations' => "id INTEGER PRIMARY KEY,event_id INTEGER,rider_id INTEGER,bib INTEGER,pillion TEXT DEFAULT '',registration_status TEXT DEFAULT 'Initial Registration',status TEXT DEFAULT 'Registered',status_manual INTEGER DEFAULT 0,score INTEGER DEFAULT 0,placing INTEGER",
@@ -480,7 +493,7 @@ $escaped = RQE_Public_Results::shortcode( array( 'id' => '7' ) );
 check( strpos( $escaped, '<script>' ) === false && strpos( $escaped, '<img ' ) === false && strpos( $escaped, '&lt;script&gt;' ) !== false && strpos( $escaped, '&lt;img ' ) !== false, 'public headings, captions, labels and cells escape stored content' );
 $wpdb->update( RQE::table( 'events' ), array( 'name' => 'Event 7' ), array( 'id' => 7 ) );
 $wpdb->update( RQE::table( 'riders' ), array( 'name' => 'Rider One' ), array( 'id' => 10 ) );
-$log = tempnam( sys_get_temp_dir(), 'rqe-public-test-' );
+$log = __DIR__ . '/rqe-public-test-' . bin2hex( random_bytes( 8 ) ) . '.log';
 $old_log = ini_get( 'error_log' );
 ini_set( 'error_log', $log );
 $wpdb->fail_read = true;
@@ -632,3 +645,5 @@ if ( getenv( 'RQE_PREVIEW_DIR' ) ) {
 	file_put_contents( getenv( 'RQE_PREVIEW_DIR' ) . '/results.html', '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="admin.css"><script defer src="admin.js"></script>' . $results_html );
 	file_put_contents( getenv( 'RQE_PREVIEW_DIR' ) . '/public-results.html', '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="public-results.css">' . $public_html . $other_html );
 }
+require_once __DIR__ . '/public-bonus-details.php';
+test_public_bonus_details();
