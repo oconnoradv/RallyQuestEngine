@@ -97,7 +97,7 @@ final class RQE_Queries {
 
 	/** Public-safe results for a published event, or null when unpublished, missing, or the style code does not match. */
 	public function public_results( $event_id, $style = null ) {
-		$events = $this->rows( 'SELECT name,description,logo_id,hunt_style,min_finisher_points FROM ' . RQE::table( 'events' ) . ' WHERE id=%d AND public_results_enabled=1', array( $event_id ) );
+		$events = $this->rows( 'SELECT name,description,logo_id,hunt_style,min_finisher_points,public_bonus_details_enabled FROM ' . RQE::table( 'events' ) . ' WHERE id=%d AND public_results_enabled=1', array( $event_id ) );
 		if ( ! $events || ( null !== $style && $events[0]['hunt_style'] !== $style ) ) {
 			return null;
 		}
@@ -106,7 +106,38 @@ final class RQE_Queries {
 			unset( $row['status'], $row['status_manual'], $row['bronze_finisher_points'], $row['silver_finisher_points'], $row['gold_finisher_points'] );
 		}
 		unset( $row );
-		return array( 'name' => $events[0]['name'], 'description' => $events[0]['description'], 'logo_id' => (int) $events[0]['logo_id'], 'rows' => $rows );
+		return array( 'name' => $events[0]['name'], 'description' => $events[0]['description'], 'logo_id' => (int) $events[0]['logo_id'], 'public_bonus_details_enabled' => (bool) $events[0]['public_bonus_details_enabled'], 'rows' => $rows );
+	}
+
+	/** Public detail requests recheck both publication flags, style and event enrollment. */
+	public function public_accepted_submissions( $event_id, $bib, $style = null ) {
+		$publication = 'e.public_results_enabled=1 AND e.public_bonus_details_enabled=1';
+		$args = array( $event_id, $bib );
+		if ( null !== $style ) {
+			$publication .= ' AND e.hunt_style=%s';
+			$args[] = $style;
+		}
+		$participants = $this->rows( 'SELECT reg.bib,r.name FROM ' . RQE::table( 'registrations' ) . ' reg JOIN ' . RQE::table( 'events' ) . ' e ON e.id=reg.event_id JOIN ' . RQE::table( 'riders' ) . ' r ON r.id=reg.rider_id WHERE reg.event_id=%d AND reg.bib=%d AND ' . $publication, $args );
+		if ( ! $participants ) {
+			return null;
+		}
+		return array( 'bib' => $participants[0]['bib'], 'name' => $participants[0]['name'], 'rows' => $this->accepted_rows( $event_id, 'bib', $bib, $publication, $style ) );
+	}
+
+	/** Accepted-only admin read model; the score-sheet caller enforces scoring access. */
+	public function accepted_submissions( $event_id, $rider_id ) {
+		return $this->accepted_rows( $event_id, 'rider_id', $rider_id );
+	}
+
+	private function accepted_rows( $event_id, $participant_column, $participant_id, $publication = '', $style = null ) {
+		$args = array( $event_id, $participant_id );
+		if ( null !== $style ) {
+			$args[] = $style;
+		}
+		return $this->rows(
+			'SELECT s.bonus_id,b.description bonus_description,s.points_awarded,s.submitted_at,s.image_file FROM ' . RQE::table( 'bonus_submissions' ) . ' s JOIN ' . RQE::table( 'registrations' ) . ' reg ON reg.event_id=s.event_id AND reg.rider_id=s.rider_id JOIN ' . RQE::table( 'events' ) . ' e ON e.id=reg.event_id LEFT JOIN ' . RQE::table( 'bonus_points' ) . " b ON b.event_id=s.event_id AND b.bonus_id=s.bonus_id WHERE s.event_id=%d AND reg.$participant_column=%d AND s.status='accepted'" . ( $publication ? ' AND ' . $publication : '' ) . ' ORDER BY s.submitted_at DESC,s.id DESC',
+			$args
+		);
 	}
 
 	private function ranked( array $rows, $minimum = null ) {

@@ -154,6 +154,7 @@ final class RQE {
 			silver_finisher_points bigint(20) unsigned DEFAULT NULL,
 			gold_finisher_points bigint(20) unsigned DEFAULT NULL,
 			public_results_enabled tinyint(1) unsigned NOT NULL DEFAULT 0,
+			public_bonus_details_enabled tinyint(1) unsigned NOT NULL DEFAULT 0,
 			is_locked tinyint(1) unsigned NOT NULL DEFAULT 0,
 			is_archived tinyint(1) unsigned NOT NULL DEFAULT 0,
 			PRIMARY KEY  (id)
@@ -297,6 +298,12 @@ final class RQE {
 			} catch ( RuntimeException $exception ) {
 				self::rollback_transaction();
 				throw $exception;
+			}
+		}
+		if ( (int) $previous_db_version < 16 ) {
+			$verified = $wpdb->get_results( 'SELECT public_bonus_details_enabled FROM ' . self::table( 'events' ) . ' LIMIT 0', ARRAY_A );
+			if ( ! is_array( $verified ) || $wpdb->last_error ) {
+				throw new RuntimeException( 'Public accepted bonus details schema upgrade failed. Check database permissions and retry.' );
 			}
 		}
 		update_option( 'rqe_db_version', RQE_DB_VERSION, false );

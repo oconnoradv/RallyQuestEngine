@@ -719,7 +719,9 @@ final class RQE_Views {
 			self::public_results_embed( $event );
 		}
 		echo '</div><div>';
-		if ( $id ) {
+		if ( $id && ! RQE::site_access() ) {
+			echo '<section class="rqe-panel rqe-email-panel"><h2>' . esc_html__( 'Email Bonus Submissions', 'rally-quest-engine' ) . '</h2><p>' . esc_html__( 'Only WordPress administrators may configure submission inboxes.', 'rally-quest-engine' ) . '</p></section>';
+		} elseif ( $id ) {
 			$email_status = RQE_Email_Submissions::configuration_status( $id );
 			$ready = $email_status['configured'] && ! $email_status['last_test_error'];
 			$panel_class = $ready ? ' rqe-email-connected' : ( $email_status['last_test_error'] ? ' rqe-email-connection-failed' : '' );
@@ -751,13 +753,14 @@ final class RQE_Views {
 
 	private static function public_results_embed( $event ) {
 		$id = (int) $event['id'];
-		echo '<details class="rqe-panel rqe-embed-panel"><summary><h2>Embed this Event on a Post or Page</h2></summary><p>Publish this event&rsquo;s overall results in a WordPress post or page. Publication is off by default; enabling it allows anyone to view participant names, bibs, scores, accepted/rejected submission counts, Event Status and placing. The event description and image are shown above the results. Contact details, Registration Status, submission photos, and administrative controls are not published.</p>';
+		echo '<details class="rqe-panel rqe-embed-panel"><summary><h2>Embed this Event on a Post or Page</h2></summary><p>Publish this event&rsquo;s overall results in a WordPress post or page. Publication is off by default; enabling it allows anyone to view participant names, bibs, scores, accepted/rejected submission counts, Event Status and placing. The event description and image are shown above the results. Contact details, Registration Status and administrative controls are never published. Accepted submission details and submitted proof photos require the separate opt-in below.</p>';
 		$code = RQE_Styles::event_code( $event );
 		self::field( 'RQE Event ID', 'rqe_embed_event_id', $code, 'text', false, array( 'readonly' => 'readonly' ) );
 		self::field( 'Results shortcode (copy into a WordPress Shortcode block)', 'rqe_results_shortcode', '[rqe_results id="' . $code . '"]', 'text', false, array( 'readonly' => 'readonly' ) );
 		echo '<p>In the WordPress post/page editor, add a <strong>Shortcode</strong> block, paste the shortcode above, then publish or update the post. Results use this explicit Event ID, not the event selected in the administrator header. Disabling public results stops new renders; purge WordPress/CDN page caches to remove previously cached results. Scores and status changes also require cache refreshes on cached pages.</p>';
 		self::form( 'public_results', array( 'event_id' => $id ), 'rqe-inline-form' );
 		echo '<label><input type="checkbox" name="public_results_enabled" value="1"' . ( ! empty( $event['public_results_enabled'] ) ? ' checked' : '' ) . '> Enable public results for this event</label> ';
+		echo '<p><label><input type="checkbox" name="public_bonus_details_enabled" value="1"' . ( ! empty( $event['public_bonus_details_enabled'] ) ? ' checked' : '' ) . '> ' . esc_html__( 'Enable public Bib links to accepted bonus submissions and submitted proof photos (requires public results)', 'rally-quest-engine' ) . '</label></p><p><strong>' . esc_html__( 'Privacy warning:', 'rally-quest-engine' ) . '</strong> ' . esc_html__( 'Opting in makes accepted submitted photos public to anyone visiting the results page. Review participant consent and photos before enabling. Pending/rejected submissions and private message/reviewer details are excluded. Disabling either setting stops new detail renders, but previously shared direct upload URLs remain accessible and downloaded copies cannot be revoked. Purge WordPress/CDN page and image caches; cached copies may persist. Uncheck accepted details before disabling public results.', 'rally-quest-engine' ) . '</p>';
 		self::button( 'Save Public Results Setting' );
 		echo '</form></details>';
 	}
@@ -825,6 +828,9 @@ final class RQE_Views {
 	}
 
 	public static function render_event_email() {
+		if ( ! RQE::site_access() ) {
+			wp_die( esc_html__( 'Only WordPress administrators may configure submission inboxes.', 'rally-quest-engine' ), '', array( 'response' => 403 ) );
+		}
 		$id = absint( RQE_Admin::query( 'event_id', '0' ) );
 		if ( ! $id || ! RQE::event_access( $id ) ) {
 			wp_die( esc_html( 'Event not found or not assigned to you.' ), '', array( 'response' => 403 ) );
@@ -1167,7 +1173,7 @@ final class RQE_Views {
 			$reviewer = $row['reviewed_by'] ? get_user_by( 'id', $row['reviewed_by'] ) : null;
 			echo '<tr><td>' . esc_html( $row['id'] ) . '</td><td>' . esc_html( $row['submitted_at'] ) . '</td><td>';
 			if ( $row['bib'] && $row['rider_id'] ) {
-				self::link( $row['bib'], 'rider-score', array( 'event_id' => $event['id'], 'rider_id' => $row['rider_id'], 'from' => 'reviewed' ) );
+				echo '<a href="' . esc_url( RQE_Admin::url( 'rider-score', array( 'event_id' => $event['id'], 'rider_id' => $row['rider_id'], 'from' => 'reviewed' ) ) . '#rqe-accepted-bonuses' ) . '">' . esc_html( $row['bib'] ) . '</a>';
 			} else {
 				self::h( $row['bib'] ?: '—' );
 			}
@@ -1464,7 +1470,7 @@ final class RQE_Views {
 		foreach ( $rows as $row ) {
 			$rank = $row['overall_placing'];
 			$effective_status = $row['effective_status'];
-			$score_url = admin_url( 'admin.php?page=rqe-rider-score&event_id=' . $id . '&rider_id=' . (int) $row['rider_id'] );
+			$score_url = admin_url( 'admin.php?page=rqe-rider-score&event_id=' . $id . '&rider_id=' . (int) $row['rider_id'] ) . '#rqe-accepted-bonuses';
 			echo '<tr><td><a href="' . esc_url( $score_url ) . '">' . esc_html( $row['bib'] ) . '</a></td><td>' . esc_html( $row['name'] ) . '</td><td>' . esc_html( $row['score'] ) . '</td><td>' . esc_html( $row['accepted_bonuses'] ) . '</td><td>' . esc_html( $row['rejected_bonuses'] ) . '</td><td data-value="' . esc_attr( $effective_status ) . '">' . esc_html( $effective_status ) . '<details><summary>Change Event Status</summary>';
 			self::rider_status_control( $id, $row, 'event', $options );
 			echo '</details></td><td>' . esc_html( $rank ) . '</td><td>';
@@ -1495,7 +1501,9 @@ final class RQE_Views {
 		$back_url = RQE::event_access( $event_id ) && 'reviewed' !== RQE_Admin::query( 'from' ) ? RQE_Admin::url( 'results', array( 'event_id' => $event_id ) ) : RQE_Admin::url( 'scoring', array( 'event_id' => $event_id, 'score_tab' => 'reviewed', 'score_rider' => $rider_id ) );
 		echo '<h2>Participant Overall Event Score Sheet</h2><p><a class="button" href="' . esc_url( $back_url ) . '">Back</a></p>';
 		echo '<div class="rqe-panel"><p><strong>Event:</strong> ' . esc_html( $row['event_name'] ) . '</p><p><strong>Participant:</strong> ' . esc_html( $row['name'] ) . ' (bib ' . esc_html( $row['bib'] ) . ')</p><p><strong>Total score:</strong> ' . esc_html( $row['score'] ) . '</p><p><strong>Event Status:</strong> ' . esc_html( $status ) . '</p><p><strong>Overall placing:</strong> ' . esc_html( $placing ) . '</p></div>';
-		echo '<h3>Bonus Submission History</h3>';
+		echo '<section id="rqe-accepted-bonuses"><h3>' . esc_html__( 'Accepted Bonus Submissions', 'rally-quest-engine' ) . '</h3>';
+		echo RQE_Public_Results::accepted_table( $event_id, self::queries()->accepted_submissions( $event_id, $rider_id ) );
+		echo '</section><details class="rqe-submission-history"><summary><h3>' . esc_html__( 'Bonus Submission History (all decisions)', 'rally-quest-engine' ) . '</h3></summary>';
 		$submissions = self::queries()->rider_submission_history( $event_id, $rider_id );
 		if ( ! $submissions ) {
 			echo '<p>No email bonus submissions have been recorded for this participant.</p>';
@@ -1509,7 +1517,7 @@ final class RQE_Views {
 			}
 			self::end_table();
 		}
-		echo '</div>';
+		echo '</details></div>';
 	}
 
 	private static function diagnostics() {

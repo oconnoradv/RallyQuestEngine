@@ -260,7 +260,7 @@ final class RQE_Admin {
 				case 'public_results':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
-					RQE_Public_Results::save_visibility( $extra['event_id'], self::integer( self::posted( 'public_results_enabled', '0' ), 0, 1 ) );
+					RQE_Public_Results::save_visibility( $extra['event_id'], self::integer( self::posted( 'public_results_enabled', '0' ), 0, 1 ), self::integer( self::posted( 'public_bonus_details_enabled', '0' ), 0, 1 ) );
 					$message = 'Public results setting saved. Purge WordPress/CDN page caches to update previously cached embeds.';
 					$tab = 'event-edit';
 					break;
@@ -279,6 +279,7 @@ final class RQE_Admin {
 					$tab = 'event-edit';
 					break;
 				case 'event_email':
+					self::require_site_admin();
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
 					$input = array();
@@ -289,12 +290,14 @@ final class RQE_Admin {
 					$tab = 'event-email';
 					break;
 				case 'event_email_check':
+					self::require_site_admin();
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
 					$message = RQE_Email_Submissions::process_event( $extra['event_id'] );
 					$tab = 'event-email';
 					break;
 				case 'event_email_test':
+					self::require_site_admin();
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
 					$message = RQE_Email_Submissions::test_connection( $extra['event_id'] );

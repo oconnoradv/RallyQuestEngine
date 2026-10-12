@@ -107,6 +107,9 @@ final class RQE_Email_Submissions {
 
 	public static function save_configuration( $event_id, array $input ) {
 		global $wpdb;
+		if ( ! RQE::site_access() ) {
+			throw new RuntimeException( 'Only WordPress administrators may configure submission inboxes.' );
+		}
 		$provider = sanitize_key( $input['provider'] ?? '' );
 		if ( ! in_array( $provider, array( 'imap', 'gmail', 'microsoft' ), true ) ) {
 			throw new RuntimeException( 'Select IMAP, Gmail API, or Microsoft 365.' );
@@ -127,7 +130,14 @@ final class RQE_Email_Submissions {
 			}
 			$settings['username'] = self::plain( $input, 'username', 254, true, 'IMAP username' );
 			$settings['folder'] = self::mail_folder( $input['folder'] ?? '' );
-			$settings['password'] = self::secret( $input, $old, 'password', 'IMAP password' );
+			$credential_context = $old;
+			foreach ( array( 'host', 'port', 'encryption', 'username' ) as $key ) {
+				if ( (string) ( $old[ $key ] ?? '' ) !== (string) $settings[ $key ] ) {
+					$credential_context = array();
+					break;
+				}
+			}
+			$settings['password'] = self::secret( $input, $credential_context, 'password', 'IMAP password (required when the server or account changes)' );
 		} elseif ( 'gmail' === $provider ) {
 			$settings['client_id'] = self::plain( $input, 'client_id', 255, true, 'OAuth client ID' );
 			$settings['client_secret'] = self::secret( $input, $old, 'client_secret', 'OAuth client secret' );
@@ -156,6 +166,9 @@ final class RQE_Email_Submissions {
 	}
 
 	public static function test_connection( $event_id ) {
+		if ( ! RQE::site_access() ) {
+			throw new RuntimeException( 'Only WordPress administrators may test submission inbox connections.' );
+		}
 		$config = self::configuration( $event_id, true );
 		$status = self::configuration_status( $event_id );
 		if ( ! $status['configured'] ) {

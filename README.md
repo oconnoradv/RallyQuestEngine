@@ -4,7 +4,7 @@
 
 # Rally Quest Engine
 
-**Current release: [v0.2.3](https://github.com/oconnoradv/RallyQuestEngine/releases/tag/v0.2.3)**
+**Current release: [v0.3.0](https://github.com/oconnoradv/RallyQuestEngine/releases/tag/v0.3.0)**
 
 Rally Quest Engine is a WordPress plugin that helps organizers produce and manage a high-quality scavenger-hunt style rally for **Motorcyclists, Bicyclists, Geocachers, or Horseback participants**. Efficient setup guides each event through its required details, focused administration keeps participants, conveyances, rosters, and event roles in one place, and near-real-time results update as emailed bonus submissions are reviewed. Requires WordPress 6.2+, PHP 7.4+, MySQL 8.0+ or MariaDB 10.6+ with InnoDB, and the installed/active [Action Scheduler plugin](https://wordpress.org/plugins/action-scheduler/). Licensed under the GNU General Public License v3 or later (see [LICENSE](LICENSE)).
 
@@ -95,9 +95,25 @@ Results' **Accepted Bonuses** and **Rejected Bonuses** are counts of accepted/re
 
 ### Public results embeds
 
+Starting in **v0.3.0**, **Embed this Event on a Post or Page** also offers **Publish accepted bonus details and photos**, disabled by default. Enable public results and this additional option to make public Bibs link to the participant's accepted-bonus listing. Each accepted bonus shows its ID, description, awarded points and submitted proof photo; thumbnails open the larger image. Missing images are explicitly identified. Administrative Results and Reviewed Bib links open the accepted-bonus section of the existing participant score sheet, which retains full submission history.
+
+Public detail requests recheck event publication, the additional photo/detail opt-in and participant enrollment. Rejected/pending submissions, email addresses, rejection reasons and inbox metadata are not exposed. Obtain participant permission before publishing proof photos. Photos use existing direct uploads URLs: disabling publication prevents new listings, but cannot revoke shared image URLs, downloaded copies or cached pages. Purge WordPress/CDN caches after publication or score changes.
+
+### Release engineering and design review
+
+The v0.3.0 review uses [WordPress security guidance](https://developer.wordpress.org/apis/security/) and [Plugin Directory guidelines](https://developer.wordpress.org/plugins/wordpress-org/detailed-plugin-guidelines/) as references: validate inputs, prepare database values, escape at output, enforce capabilities and nonces on mutations, use WordPress APIs and make public photo disclosure explicitly opt-in. Database queries, publication policy and rendering remain separate responsibilities; the public/admin accepted-bonus presentation is shared rather than duplicated. Existing broad admin/view classes are not claimed to fully satisfy every SOLID principle, and this release does not undertake an unrelated architecture rewrite.
+
+Public release gates include CodeQL JavaScript security-extended analysis, Semgrep PHP/JavaScript and WordPress exploit rules, Gitleaks history/tree scans, Trivy dependencies/secrets, Composer audit and Dependabot alerts. CodeQL does not analyze PHP; PHP coverage comes from the other scanners and regression tests. These checks are not WordPress.org approval, a complete WordPress Coding Standards certification, a formal SOLID certification or a guarantee of no vulnerabilities.
+
+**Mailbox hardening:** Only WordPress site administrators can configure inboxes, test connections or manually poll. Event Administrators and Scorers retain authorized submission review. A blank IMAP password is retained only if host, port, encryption and username are unchanged; changing that credential destination/account requires a newly entered password. Site administrators must use trusted mailbox servers and encrypted transport.
+
+The WordPress Coding Standards checker was also run on the administrative and mailbox code. It reported an existing backlog of formatting, internationalization/documentation and context-insensitive security-sniff findings. Authorization/nonces and late escaping are reviewed at their actual request/render boundaries rather than silencing those diagnostics globally. Full WPCS conformance is not claimed.
+
+### Public results setup
+
 Public results are **off by default for every event**. A WordPress administrator or assigned Event Administrator can open **Events > Configure** (`rqe-event-edit`), find **Public Results Embed**, enable public results, and save. The section displays the read-only style-coded **RQE Event ID** and a copyable shortcode such as `[rqe_results id="MC-7"]`. In a WordPress post or page, add the existing **Shortcode** block, paste that event's shortcode, then publish or update the post. The explicit ID is independent of the remembered administrator header selection, and multiple events can be embedded on one page. The style code must match the event's style; a bare numeric ID such as `7` is also accepted.
 
-Anyone, including logged-out visitors, can view an enabled event's **name, description, event image (when one is set), Bib, Participant Name, Total Score, Accepted Bonuses, Rejected Bonuses, Event Status, and Overall Placing**. Rankings and provisional/manual statuses match administrative Results. Contact information, Registration Status, submission images/review details, administrative controls, and rider score-sheet links are excluded. Missing or disabled events return an unavailable message rather than results. Publication does not grant access to administrative screens.
+Anyone, including logged-out visitors, can view an enabled event's **name, description, event image (when one is set), Bib, Participant Name, Total Score, Accepted Bonuses, Rejected Bonuses, Event Status, and Overall Placing**. Rankings and provisional/manual statuses match administrative Results. Contact information, Registration Status, private review details, administrative controls, and administrative score-sheet links are excluded. Accepted proof photos require the additional opt-in above. Missing or disabled events return an unavailable message rather than results. Publication does not grant access to administrative screens.
 
 Disabling public results stops new renders, but previously delivered content cannot be recalled. **Purge WordPress page caches and CDN caches** after enabling/disabling publication and after score/status changes so cached posts reflect the current results and visibility.
 
@@ -115,6 +131,8 @@ Disabling public results stops new renders, but previously delivered content can
 Successful create, edit, assignment, enrollment, import, and deletion forms return to the form or tab from which they were submitted.
 
 ### Event submission inboxes
+
+Configuration, connection testing and manual polling require a WordPress site administrator. Event Administrators and Scorers continue to review submissions within their assigned events. Blank IMAP passwords are retained only when host, port, encryption and username are unchanged; a changed server/account requires a newly entered password.
 
 Open an event's **Configure Submission Inbox** page and choose one provider; the form displays only that provider's required settings, with provider-specific setup instructions beside the fields on larger screens. IMAP requires the PHP IMAP extension plus host, port, encryption, folder, username, and password. Selecting Gmail API displays a **Help?** hover/focus panel with Google Cloud project, Gmail API, OAuth consent, client-credential, scope, and refresh-token setup steps. Gmail API requires an OAuth client ID, client secret, refresh token, and authorization for the configured mailbox with `https://www.googleapis.com/auth/gmail.modify`; API requests address the account authenticated by that refresh token. Microsoft 365 requires a tenant ID, OAuth client ID/client secret, refresh token, mailbox, folder, and delegated `Mail.ReadWrite offline_access` consent. The plugin accepts administrator-provided refresh tokens; it does not implement the providers' interactive OAuth consent callback. Saving blank password, client-secret, or refresh-token fields preserves the existing secret only when the provider is unchanged. Event Configuration places **Email Bonus Submissions** above the assignments in its right column. Complete saved configuration collapses the section with a green **Configured** label; this is not proof of connectivity. Expand it to see the mailbox/provider and non-destructive **Test Email Inbox** action. A successful test separately reports **Connection verified**; a failed test expands the panel with prominent failure details.
 
