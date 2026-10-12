@@ -20,18 +20,6 @@ Rally Quest Engine is a WordPress plugin that helps organizers produce and manag
 4. In the **Welcome** section, read the getting-started steps and save the primary scavenger hunt style (Motorcycle, Bicycle, Horseback, or GeoCache). The section turns green and stays minimized once saved.
 5. Populate the Bikes or Horses tab, add participants, create events, and enroll participants.
 
-### Upgrading from Motorcycle Rally Scoring Application
-
-Version 0.2.0 renames the plugin, folder, database tables (`RQE_*`), options, and uploads gallery (`rqe-event-gallery`), so WordPress installs it as a new plugin rather than an update.
-
-1. Upgrade the former plugin to v0.1.20 if needed, then back up the database and `uploads/mrsa-event-gallery`.
-2. Upload and activate **Rally Quest Engine** while the former plugin is still installed.
-3. Deactivate **Motorcycle Rally Scoring Application**, then open any wp-admin page as a WordPress administrator. Rally Quest Engine imports events, participants, rosters, bonuses, submissions, role assignments, encrypted inbox settings, audit records, and the event gallery once, inside a single database transaction, and reports the outcome in an admin notice. The import is skipped if Rally Quest Engine already contains data; the legacy tables and gallery are left unchanged.
-4. Existing events presume the Motorcycle style, so event `7` becomes `MC-7`. Update embedded shortcodes to `[rqe_results id="MC-7"]`; existing `[mrsa_results id="7"]` embeds keep working while the former plugin is inactive.
-5. After verifying the imported data, delete the former plugin. Its tables are removed only if its own delete-on-uninstall option was enabled.
-
-Migrating remembered-event preferences clears the affected WordPress user metadata caches. Event selection also verifies the stored preference if WordPress reports an unchanged save, so an already-saved event is not mistaken for a database failure. This correction does not require re-importing existing event data.
-
 The plugin supports individual WordPress sites. On multisite, activate and manage it separately on each site; network activation is not supported.
 
 ## Current administration design
