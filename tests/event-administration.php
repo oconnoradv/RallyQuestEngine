@@ -4,6 +4,7 @@ define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
 define( 'RQE_VERSION', 'test' );
 define( 'RQE_FILE', __DIR__ . '/../rally-quest-engine/rally-quest-engine.php' );
+$GLOBALS['test_options'] = array();
 
 final class Event_Test_DB {
 	public $prefix = '';
@@ -115,6 +116,12 @@ function wp_timezone() { return new DateTimeZone( 'UTC' ); }
 function get_post_type( $id ) { return ''; }
 function checked( $a, $b = true, $echo = true ) { return (string) $a === (string) $b ? ' checked' : ''; }
 function update_option( $key, $value, $autoload = null ) { $GLOBALS['test_options'][ $key ] = $value; return true; }
+function add_option( $key, $value, $deprecated = '', $autoload = 'yes' ) {
+	if ( array_key_exists( $key, $GLOBALS['test_options'] ) ) { return false; }
+	$GLOBALS['test_options'][ $key ] = $value;
+	return true;
+}
+function delete_option( $key ) { unset( $GLOBALS['test_options'][ $key ] ); return true; }
 function sanitize_textarea_field( $value ) { return trim( strip_tags( (string) $value ) ); }
 function wpautop( $value ) { return '<p>' . $value . '</p>'; }
 function wp_attachment_is_image( $id ) { return 55 === (int) $id; }
@@ -127,6 +134,10 @@ function shortcode_atts( $defaults, $attributes, $tag = '' ) {
 	return array_merge( $defaults, array_intersect_key( (array) $attributes, $defaults ) );
 }
 function get_users( $args ) { return array(); }
+function get_transient( $key ) { return false; }
+function get_plugins() { return array( 'action-scheduler/action-scheduler.php' => array() ); }
+function is_plugin_active( $file ) { return false; }
+function self_admin_url( $path = '' ) { return admin_url( $path ); }
 function get_user_by( $key, $id ) { return (object) array( 'ID' => $id, 'user_login' => 'user-' . $id, 'user_email' => 'user@example.test', 'display_name' => 'User ' . $id ); }
 function get_user_meta( $id, $key, $single ) { return ''; }
 function wp_salt( $scheme ) { return 'fixture-salt'; }
@@ -148,6 +159,8 @@ if ( ! function_exists( 'get_option' ) ) {
 }
 require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-styles.php';
 require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-horses.php';
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-diagnostics.php';
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-setup.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-views.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-public-results.php';
 
@@ -329,8 +342,10 @@ check( strpos( $html, 'Submissions - Contested' ) !== false && strpos( $html, 'N
 request( array( 'page' => 'rqe-event-edit', 'event_id' => '7' ) );
 RQE_Email_Submissions::save_configuration( 7, array( 'provider' => 'imap', 'enabled' => '1', 'mailbox' => 'inbox@example.test', 'host' => 'imap.example.test', 'port' => '993', 'encryption' => 'ssl', 'username' => 'inbox@example.test', 'folder' => 'INBOX', 'password' => 'fixture-password' ) );
 $html = render( 'render_event_edit' );
-check( strpos( $html, 'rqe-event-columns' ) !== false && strpos( $html, 'rqe-email-connected"><summary>' ) !== false && strpos( $html, '<strong>Configured</strong>' ) !== false && strpos( $html, 'Configuration saved. Test the inbox' ) !== false, 'configured email panel is green/collapsed without falsely claiming verified connectivity' );
-check( strpos( $html, 'Email Bonus Submissions' ) < strpos( $html, 'Event Administrator Assignments' ) && strpos( $html, 'Event Administrator Assignments' ) < strpos( $html, 'Event Scorer Assignments' ), 'right column orders email, administrator assignments and scorer assignments' );
+check( strpos( $html, 'rqe-event-columns' ) !== false && strpos( $html, 'rqe-email-panel" open' ) !== false && strpos( $html, 'Configuration saved. Test the event override' ) !== false && strpos( $html, 'Global inbox (read-only)' ) !== false, 'event editor shows a read-only global summary and an unverified event override remains open' );
+check( strpos( $html, 'Event Details:' ) < strpos( $html, 'Event Administrator Assignments' ) && strpos( $html, 'Event Administrator Assignments' ) < strpos( $html, 'Event Inbox Override' ), 'administrator and scorer assignments are placed below Event Details in the left column' );
+check( strpos( $html, 'Email Setup' ) < strpos( $html, 'Event Status Customization</h2>' ) && strpos( $html, 'Event Status Customization</h2>' ) < strpos( $html, 'Registration Status Customization</h2>' ), 'Event Status and Registration Status customization follow Email Setup in order' );
+check( strpos( $html, 'name="event_email_override" value="1" checked' ) !== false, 'saved event inbox exposes an explicitly checked override toggle' );
 check( strpos( $html, 'name="status_kind" value="registration"' ) !== false && strpos( $html, 'name="status_kind" value="event"' ) !== false, 'event page exposes separate status catalogs' );
 $wpdb->update( RQE::table( 'event_email_settings' ), array( 'last_test_error' => 'Fixture connection error' ), array( 'event_id' => 7 ) );
 $failed_html = render( 'render_event_edit' );
@@ -513,12 +528,33 @@ check( strpos( $edit_off, 'value="1" checked' ) === false, 'disabled publication
 // Scavenger hunt styles, Welcome and horse conveyance.
 check( RQE_Styles::parse_event_code( 'HB-12' ) === array( 'id' => 12, 'style' => 'horse' ) && RQE_Styles::parse_event_code( 12 ) === array( 'id' => 12, 'style' => null ) && null === RQE_Styles::parse_event_code( 'ZZ-12' ), 'event codes parse style prefixes and legacy numeric IDs' );
 check( '' === RQE_Styles::saved_primary() && 'motorcycle' === RQE_Styles::primary(), 'primary style defaults to Motorcycle until chosen' );
+check( ! RQE_Setup::welcome_complete() && ! RQE_Setup::inbox_complete(), 'Welcome and global inbox readiness remain incomplete before credentials are configured and verified' );
+request( array( 'page' => 'rqe' ) );
+$initial_html = render( 'render' );
+check( strpos( $initial_html, 'nav-tab nav-tab-active" href="https://example.test/wp-admin/admin.php?page=rqe&amp;tab=initial-setup"' ) !== false && strpos( $initial_html, 'Welcome to Rally Quest Engine' ) > strpos( $initial_html, '</nav>' ), 'incomplete setup lands on the leftmost Initial Setup tab with Welcome below navigation' );
+request( array( 'page' => 'rqe', 'tab' => 'events' ) );
+check( strpos( render( 'render' ), 'Welcome to Rally Quest Engine' ) === false, 'explicit Events navigation is honored while setup is incomplete and does not repeat Welcome' );
 $welcome = render( 'welcome' );
-check( strpos( $welcome, ' open><summary><h2>Welcome to Rally Quest Engine' ) !== false && strpos( $welcome, 'name="op" value="primary_style"' ) !== false && strpos( $welcome, 'value="geocache"' ) !== false, 'unsaved Welcome section is expanded with the primary style form' );
+check( strpos( $welcome, ' open><summary><h2>Welcome to Rally Quest Engine' ) !== false && strpos( $welcome, 'name="op" value="primary_style"' ) === false, 'unsatisfied Welcome section is expanded and separate from style selection' );
+$style_section = render( 'primary_style_setup' );
+check( strpos( $style_section, ' open><summary><h2>Primary Scavenger Hunt Style' ) !== false && strpos( $style_section, 'name="op" value="primary_style"' ) !== false && strpos( $style_section, 'value="geocache"' ) !== false, 'unsaved primary style has its own expanded section and explicit save control' );
+RQE_Email_Submissions::save_configuration( 0, array( 'provider' => 'gmail', 'enabled' => '1', 'mailbox' => 'global@example.test', 'client_id' => 'client-id', 'client_secret' => 'client-secret', 'refresh_token' => 'refresh-token' ) );
+check( RQE_Setup::welcome_complete() && ! RQE_Setup::inbox_complete(), 'configured global email plus existing participant and event completes Welcome but not connection readiness' );
+RQE_Email_Submissions::save_global_assignment( 7 );
+$wpdb->update( RQE::table( 'event_email_settings' ), array( 'last_tested_at' => '2026-10-09 21:00:00', 'last_test_error' => '' ), array( 'event_id' => 0 ) );
+check( RQE_Setup::inbox_complete(), 'verified enabled global inbox assigned to an active event completes inbox readiness' );
+$wpdb->update( RQE::table( 'event_email_settings' ), array( 'enabled' => 0 ), array( 'event_id' => 0 ) );
+check( RQE_Setup::inbox_complete() && strpos( render( 'global_inbox_setup' ), 'rqe-complete"><summary><h2>Default Email Inbox Setup' ) !== false, 'verified inbox remains green when scheduled polling is intentionally disabled' );
+$wpdb->update( RQE::table( 'event_email_settings' ), array( 'enabled' => 1 ), array( 'event_id' => 0 ) );
 rejects( function () { RQE_Styles::save_primary( 'skateboard' ); }, 'primary scavenger hunt style' );
 RQE_Styles::save_primary( 'horse' );
-$welcome = render( 'welcome' );
-check( strpos( $welcome, 'rqe-complete"><summary>' ) !== false && strpos( $welcome, 'Primary style: Horseback' ) !== false, 'saved Welcome section is green and collapsed' );
+$style_section = render( 'primary_style_setup' );
+check( strpos( $style_section, 'rqe-complete"><summary>' ) !== false && strpos( $style_section, 'Horseback saved' ) !== false && false === strpos( $style_section, ' open><summary>' ), 'explicitly saved primary style becomes green and collapsed' );
+update_option( RQE_Setup::OPTION, array( 'diagnostics_state' => 'passed' ), false );
+request( array( 'page' => 'rqe' ) );
+$complete_html = render( 'render' );
+check( RQE_Setup::readiness()['complete'] && strpos( $complete_html, 'nav-tab nav-tab-active" href="https://example.test/wp-admin/admin.php?page=rqe&amp;tab=events"' ) !== false && strpos( $complete_html, 'Welcome to Rally Quest Engine' ) === false, 'all green setup sections default plugin entry to Events without relocating the leftmost setup tab' );
+delete_option( RQE_Setup::OPTION );
 rejects( function () { RQE_Horses::data( array( 'name' => '' ) ); }, 'required text field' );
 rejects( function () { RQE_Horses::data( array( 'name' => 'Ace', 'sex' => 'Unicorn' ) ); }, 'horse sex' );
 rejects( function () { RQE_Horses::data( array( 'name' => 'Ace', 'age' => '61' ) ); }, 'Invalid' );
