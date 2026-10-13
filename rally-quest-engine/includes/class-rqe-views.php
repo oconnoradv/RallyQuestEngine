@@ -1672,12 +1672,13 @@ final class RQE_Views {
 		$ignored_reviews = RQE_Setup::ignored_reviews();
 		if ( $has_report ) {
 			$state = RQE_Diagnostic_Report::state( $report['rows'], $ignored_reviews );
-		} elseif ( isset( $shared_state['diagnostics_state'], $labels[ $shared_state['diagnostics_state'] ] ) ) {
-			$state = $shared_state['diagnostics_state'];
 		} elseif ( empty( $shared_state['reset'] ) ) {
 			$last_state = get_user_option( 'rqe_configuration_last_state', get_current_user_id() );
 			if ( isset( $labels[ $last_state ] ) ) {
 				$state = $last_state;
+			}
+			if ( ! $state && isset( $shared_state['diagnostics_state'], $labels[ $shared_state['diagnostics_state'] ] ) ) {
+				$state = $shared_state['diagnostics_state'];
 			}
 		}
 		$override = ! empty( $shared_state['setup_override'] );
