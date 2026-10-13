@@ -107,8 +107,7 @@ function wp_convert_hr_to_bytes( $value ) {
 	return (int) ( $number * ( 'g' === $unit ? 1073741824 : ( 'm' === $unit ? 1048576 : ( 'k' === $unit ? 1024 : 1 ) ) ) );
 }
 function size_format( $bytes ) { return ( $bytes / 1048576 ) . ' MB'; }
-function get_option( $key, $default = '' ) { return $GLOBALS['test_options'][ $key ] ?? ( $GLOBALS['schema_version'] ?? '11' ); }
-function update_option( $key, $value, $autoload = null ) { $GLOBALS['test_options'][ $key ] = $value; return true; }
+function get_option( $key, $default = '' ) { return $GLOBALS['schema_version'] ?? '11'; }
 function wp_max_upload_size() { return $GLOBALS['upload_limit'] ?? 10485760; }
 function get_temp_dir() { return sys_get_temp_dir(); }
 function wp_normalize_path( $value ) { return str_replace( '\\', '/', $value ); }
@@ -124,7 +123,6 @@ require __DIR__ . '/../rally-quest-engine/includes/class-rqe-import-adapters.php
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-bonus.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-views.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-diagnostics.php';
-require __DIR__ . '/../rally-quest-engine/includes/class-rqe-setup.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-diagnostics-deletion-service.php';
 function invoke_method( $class, $name, ...$args ) {
 	$method = new ReflectionMethod( $class, $name );
@@ -151,12 +149,12 @@ if ( in_array( '--preview', $argv ?? array(), true ) ) {
 	exit;
 }
 check( strpos( $html, 'rqe-destructive-grid' ) !== false && substr_count( $html, 'rqe-destructive-action' ) === 6, 'six destructive actions share a compact grid' );
-check( substr_count( $html, 'rqe-diagnostics-section' ) === 9, 'exports, destructive group and individual actions can all collapse' );
+check( substr_count( $html, 'rqe-diagnostics-section' ) === 10, 'configuration, exports, destructive group and individual actions can all collapse' );
 check( strpos( $html, '<details class="rqe-diagnostics-section"><summary><h3>Destructive operations</h3></summary>' ) !== false, 'Destructive operations defaults to collapsed' );
 foreach ( array( 'Export Data', 'Database Backup' ) as $heading ) {
 	check( strpos( $html, '<details class="rqe-panel rqe-diagnostics-section"><summary><h3>' . $heading ) !== false, $heading . ' defaults to collapsed' );
 }
-foreach ( array( 'Export Data', 'Database Backup', 'Destructive operations' ) as $heading ) {
+foreach ( array( 'Required Plugins and Configuration', 'Export Data', 'Database Backup', 'Destructive operations' ) as $heading ) {
 	check( strpos( $html, '<summary><h3>' . $heading . '</h3>' ) !== false, 'native collapse control wraps ' . $heading );
 }
 check( substr_count( $html, 'rqe-destructive-action rqe-diagnostics-section" open><summary><h4>' ) === 6, 'all destructive cards retain initially visible controls with individual collapse buttons' );
@@ -166,8 +164,8 @@ $audit_end = strpos( $html, '</details>', $audit_start );
 check( strpos( substr( $html, $audit_start, $audit_end - $audit_start ), 'Date/time (UTC)' ) !== false && $audit_end < strpos( $html, '<h3>Destructive operations' ), 'collapsed audit contains the existing history table without hiding destructive actions' );
 check( strpos( $html, 'Delete Virus Scan Audit Data' ) !== false && strpos( $html, 'reset remembered ClamAV overrides' ) !== false, 'audit deletion describes override reset and retained deletion record' );
 check( substr_count( $html, 'name="verification_hash"' ) === 6 && substr_count( $html, 'rqe-delete-verification' ) === 6, 'each action retains separate server verification and dialog content' );
-check( substr_count( $html, 'name="_wpnonce"' ) === 8, 'exports and destructive operations retain nonce fields' );
-check( false === strpos( $html, 'id="rqe-configuration"' ), 'environment checks are available on Initial Setup, not Diagnostics' );
+check( substr_count( $html, 'name="_wpnonce"' ) === 9, 'configuration check, exports and destructive operations retain nonce fields' );
+check( strpos( $html, 'id="rqe-configuration"' ) < strpos( $html, '<h3>Database Backup' ), 'configuration section precedes export and backup controls' );
 $operations = array( 'all', 'bikes', 'roster', 'bonus_points', 'rider', 'audit' );
 foreach ( $operations as $suffix ) {
 	$operation = 'diagnostics_delete_' . $suffix;

@@ -69,7 +69,6 @@ final class RQE_Email_Submissions {
 		try {
 			$config = self::configuration( $event_id, true );
 			$settings = $config['settings'];
-			$assigned_event_id = 0 === (int) $event_id ? (int) ( $settings['assigned_event_id'] ?? 0 ) : 0;
 			$required = array( 'mailbox' );
 			if ( 'imap' === $config['provider'] ) {
 				$required = array_merge( $required, array( 'host', 'port', 'encryption', 'username', 'folder', 'password' ) );
@@ -78,7 +77,7 @@ final class RQE_Email_Submissions {
 			} elseif ( 'microsoft' === $config['provider'] ) {
 				$required = array_merge( $required, array( 'tenant_id', 'client_id', 'client_secret', 'refresh_token', 'folder' ) );
 			} else {
-				return array( 'configured' => false, 'connected' => false, 'mailbox' => '', 'provider' => '', 'provider_label' => '', 'last_tested_at' => null, 'last_test_error' => 'The saved mailbox provider is unsupported.', 'assigned_event_id' => $assigned_event_id, 'enabled' => (int) $config['enabled'] );
+				return array( 'configured' => false, 'connected' => false, 'mailbox' => '', 'provider' => '', 'provider_label' => '', 'last_tested_at' => null, 'last_test_error' => 'The saved mailbox provider is unsupported.' );
 			}
 			$configured = true;
 			foreach ( $required as $key ) {
@@ -100,54 +99,10 @@ final class RQE_Email_Submissions {
 				'provider_label' => $labels[ $config['provider'] ],
 				'last_tested_at' => $config['last_tested_at'],
 				'last_test_error' => $config['last_test_error'],
-				'assigned_event_id' => $assigned_event_id,
-				'enabled' => (int) $config['enabled'],
 			);
 		} catch ( RuntimeException $exception ) {
-			return array( 'configured' => false, 'connected' => false, 'mailbox' => '', 'provider' => '', 'provider_label' => '', 'last_tested_at' => null, 'last_test_error' => $exception->getMessage(), 'assigned_event_id' => 0, 'enabled' => 0 );
+			return array( 'configured' => false, 'connected' => false, 'mailbox' => '', 'provider' => '', 'provider_label' => '', 'last_tested_at' => null, 'last_test_error' => $exception->getMessage() );
 		}
-	}
-
-	public static function global_status() {
-		$status = self::configuration_status( 0 );
-		$event_id = (int) $status['assigned_event_id'];
-		$event = $event_id ? RQE::row( 'events', $event_id ) : null;
-		$status['assigned_event'] = $event ? (string) $event['name'] : '';
-		$status['assigned_event_active'] = $event && empty( $event['is_locked'] ) && empty( $event['is_archived'] );
-		return $status;
-	}
-
-	public static function has_event_override( $event_id ) {
-		global $wpdb;
-		$event_id = (int) $event_id;
-		$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT event_id FROM ' . RQE::table( 'event_email_settings' ) . ' WHERE event_id=%d', $event_id ) );
-		if ( $wpdb->last_error ) {
-			throw new RuntimeException( 'The event inbox override could not be checked.' );
-		}
-		return null !== $exists;
-	}
-
-	public static function remove_event_override( $event_id ) {
-		global $wpdb;
-		if ( ! RQE::site_access() ) {
-			throw new RuntimeException( 'Only WordPress administrators may remove event inbox overrides.' );
-		}
-		$event_id = (int) $event_id;
-		if ( $event_id < 1 ) {
-			throw new RuntimeException( 'Select an event inbox override to remove.' );
-		}
-		if ( ! self::has_event_override( $event_id ) ) {
-			throw new RuntimeException( 'This event has no saved inbox override.' );
-		}
-		$locks = self::acquire_configuration_locks( array( 0, $event_id ) );
-		try {
-			if ( false === $wpdb->delete( RQE::table( 'event_email_settings' ), array( 'event_id' => $event_id ) ) ) {
-				throw new RuntimeException( 'The event inbox override could not be removed.' );
-			}
-		} finally {
-			self::release_configuration_locks( $locks );
-		}
-		return 'Event inbox override removed. The global inbox will be used only if it is assigned to this event.';
 	}
 
 	public static function save_configuration( $event_id, array $input ) {
@@ -161,16 +116,11 @@ final class RQE_Email_Submissions {
 		}
 		$existing = self::configuration( $event_id, true );
 		$old = $existing['provider'] === $provider ? $existing['settings'] : array();
-		$global_assignment = 0 === (int) $event_id ? (int) ( $existing['settings']['assigned_event_id'] ?? 0 ) : 0;
 		$mailbox = sanitize_email( trim( (string) ( $input['mailbox'] ?? '' ) ) );
 		if ( ! $mailbox || strlen( $mailbox ) > 254 ) {
 			throw new RuntimeException( 'Enter the event submission mailbox email address.' );
 		}
 		$settings = array( 'mailbox' => $mailbox );
-		if ( 0 === (int) $event_id ) {
-			$assignment = array_key_exists( 'assigned_event_id', $input ) ? self::assignment_id( $input['assigned_event_id'] ) : $global_assignment;
-			$settings['assigned_event_id'] = $assignment;
-		}
 		if ( 'imap' === $provider ) {
 			$settings['host'] = self::imap_host( $input['host'] ?? '' );
 			$settings['port'] = self::port( $input['port'] ?? '993' );
@@ -207,87 +157,47 @@ final class RQE_Email_Submissions {
 			'last_tested_at' => null,
 			'last_test_error' => '',
 		);
-		$locks = self::acquire_configuration_locks( $event_id ? array( 0, $event_id ) : array( 0 ) );
-		try {
-			$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT event_id FROM ' . RQE::table( 'event_email_settings' ) . ' WHERE event_id=%d', $event_id ) );
-			$result = null !== $exists ? $wpdb->update( RQE::table( 'event_email_settings' ), $data, array( 'event_id' => $event_id ) ) : $wpdb->insert( RQE::table( 'event_email_settings' ), array_merge( array( 'event_id' => $event_id ), $data ) );
-			if ( false === $result ) {
-				throw new RuntimeException( 'The event email configuration could not be saved.' );
-			}
-		} finally {
-			self::release_configuration_locks( $locks );
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT event_id FROM ' . RQE::table( 'event_email_settings' ) . ' WHERE event_id=%d', $event_id ) );
+		$result = $exists ? $wpdb->update( RQE::table( 'event_email_settings' ), $data, array( 'event_id' => $event_id ) ) : $wpdb->insert( RQE::table( 'event_email_settings' ), array_merge( array( 'event_id' => $event_id ), $data ) );
+		if ( false === $result ) {
+			throw new RuntimeException( 'The event email configuration could not be saved.' );
 		}
 		return 'Event submission email configuration saved.';
-	}
-
-	public static function save_global_assignment( $event_id ) {
-		if ( ! RQE::site_access() ) {
-			throw new RuntimeException( 'Only WordPress administrators may assign the global submission inbox.' );
-		}
-		$config = self::configuration( 0, true );
-		if ( ! $config['settings'] ) {
-			throw new RuntimeException( 'Configure the global inbox credentials before assigning it to an event.' );
-		}
-		$settings = $config['settings'];
-		$settings['assigned_event_id'] = self::assignment_id( $event_id );
-		$settings['provider'] = $config['provider'];
-		$settings['enabled'] = $config['enabled'];
-		return self::save_configuration( 0, $settings );
-	}
-
-	private static function assignment_id( $value ) {
-		if ( ! is_scalar( $value ) || ! preg_match( '/^\d{1,18}$/D', (string) $value ) ) {
-			throw new RuntimeException( 'Select an active event for the global submission inbox.' );
-		}
-		$event_id = (int) $value;
-		if ( $event_id ) {
-			$event = RQE::row( 'events', $event_id );
-			if ( ! $event || ! empty( $event['is_locked'] ) || ! empty( $event['is_archived'] ) ) {
-				throw new RuntimeException( 'The global inbox can only be assigned to an existing, unlocked, unarchived event.' );
-			}
-		}
-		return $event_id;
 	}
 
 	public static function test_connection( $event_id ) {
 		if ( ! RQE::site_access() ) {
 			throw new RuntimeException( 'Only WordPress administrators may test submission inbox connections.' );
 		}
-		$event_id = (int) $event_id;
-		$locks = self::acquire_configuration_locks( $event_id ? array( 0, $event_id ) : array( 0 ) );
+		$config = self::configuration( $event_id, true );
+		$status = self::configuration_status( $event_id );
+		if ( ! $status['configured'] ) {
+			throw new RuntimeException( 'Save a complete event submission inbox configuration before testing the connection.' );
+		}
 		try {
-			$config = self::configuration( $event_id, true );
-			$status = self::configuration_status( $event_id );
-			if ( ! $status['configured'] ) {
-				throw new RuntimeException( 'Save a complete event submission inbox configuration before testing the connection.' );
+			if ( 'imap' === $config['provider'] ) {
+				$mailbox = self::open_imap( $config['settings'] );
+				imap_close( $mailbox );
+			} elseif ( 'gmail' === $config['provider'] ) {
+				$token = self::gmail_token( $config['settings'] );
+				self::http_json( 'https://gmail.googleapis.com/gmail/v1/users/me/profile', array( 'method' => 'GET', 'headers' => array( 'Authorization' => 'Bearer ' . $token ) ) );
+			} elseif ( 'microsoft' === $config['provider'] ) {
+				$token = self::microsoft_token( $config['settings'] );
+				$user = rawurlencode( $config['settings']['mailbox'] );
+				$folder = rawurlencode( $config['settings']['folder'] ?: 'inbox' );
+				self::http_json( 'https://graph.microsoft.com/v1.0/users/' . $user . '/mailFolders/' . $folder . '?$select=id,displayName', array( 'method' => 'GET', 'headers' => array( 'Authorization' => 'Bearer ' . $token ) ) );
+			} else {
+				throw new RuntimeException( 'The saved mailbox provider is unsupported.' );
 			}
+			self::record_connection_test( $event_id, '' );
+			return 'Submission inbox connection test passed for ' . $status['mailbox'] . ' using ' . $status['provider_label'] . '.';
+		} catch ( RuntimeException $exception ) {
 			try {
-				if ( 'imap' === $config['provider'] ) {
-					$mailbox = self::open_imap( $config['settings'] );
-					imap_close( $mailbox );
-				} elseif ( 'gmail' === $config['provider'] ) {
-					$token = self::gmail_token( $config['settings'] );
-					self::http_json( 'https://gmail.googleapis.com/gmail/v1/users/me/profile', array( 'method' => 'GET', 'headers' => array( 'Authorization' => 'Bearer ' . $token ) ) );
-				} elseif ( 'microsoft' === $config['provider'] ) {
-					$token = self::microsoft_token( $config['settings'] );
-					$user = rawurlencode( $config['settings']['mailbox'] );
-					$folder = rawurlencode( $config['settings']['folder'] ?: 'inbox' );
-					self::http_json( 'https://graph.microsoft.com/v1.0/users/' . $user . '/mailFolders/' . $folder . '?$select=id,displayName', array( 'method' => 'GET', 'headers' => array( 'Authorization' => 'Bearer ' . $token ) ) );
-				} else {
-					throw new RuntimeException( 'The saved mailbox provider is unsupported.' );
-				}
-				self::record_connection_test( $event_id, '' );
-				return 'Submission inbox connection test passed for ' . $status['mailbox'] . ' using ' . $status['provider_label'] . '.';
-			} catch ( RuntimeException $exception ) {
-				try {
-					self::record_connection_test( $event_id, $exception->getMessage() );
-				} catch ( RuntimeException $status_exception ) {
-					throw new RuntimeException( $exception->getMessage() . ' The connection-test result also could not be saved: ' . $status_exception->getMessage() );
-				}
-				throw $exception;
+				self::record_connection_test( $event_id, $exception->getMessage() );
+			} catch ( RuntimeException $status_exception ) {
+				throw new RuntimeException( $exception->getMessage() . ' The connection-test result also could not be saved: ' . $status_exception->getMessage() );
 			}
-		} finally {
-			self::release_configuration_locks( $locks );
+			throw $exception;
 		}
 	}
 
@@ -349,65 +259,30 @@ final class RQE_Email_Submissions {
 	public static function process_all() {
 		global $wpdb;
 		$event_ids = $wpdb->get_col( 'SELECT s.event_id FROM ' . RQE::table( 'event_email_settings' ) . ' s JOIN ' . RQE::table( 'events' ) . ' e ON e.id=s.event_id WHERE s.enabled=1 AND e.is_locked=0 AND e.is_archived=0' );
-		foreach ( (array) $event_ids as $event_id ) {
+		foreach ( $event_ids as $event_id ) {
 			try {
 				self::process_event( (int) $event_id );
 			} catch ( RuntimeException $exception ) {
 				error_log( 'RQE event inbox #' . (int) $event_id . ': ' . $exception->getMessage() );
 			}
 		}
-		$global = self::global_status();
-		if ( ! empty( $global['enabled'] ) && ! empty( $global['assigned_event_active'] ) ) {
-			try {
-				self::process_global_event( (int) $global['assigned_event_id'] );
-			} catch ( RuntimeException $exception ) {
-				error_log( 'RQE global inbox: ' . $exception->getMessage() );
-			}
-		}
 	}
 
 	public static function process_event( $event_id ) {
-		return self::process_source( (int) $event_id, (int) $event_id );
-	}
-
-	private static function process_global_event( $event_id ) {
-		global $wpdb;
-		$override = $wpdb->get_var( $wpdb->prepare( 'SELECT event_id FROM ' . RQE::table( 'event_email_settings' ) . ' WHERE event_id=%d', $event_id ) );
-		if ( $wpdb->last_error ) {
-			throw new RuntimeException( 'The event inbox override could not be checked; global mail was not processed.' );
+		$config = self::configuration( $event_id, true );
+		if ( ! $config['enabled'] ) {
+			throw new RuntimeException( 'Email submission polling is disabled for this event.' );
 		}
-		if ( null !== $override ) {
-			return 'An explicit event inbox override takes precedence over the global inbox.';
-		}
-		return self::process_source( (int) $event_id, 0, (int) $event_id );
-	}
-
-	private static function process_source( $event_id, $settings_id, $expected_global_event = null ) {
-		$lock = self::acquire_poll_lock( $settings_id );
+		RQE::begin_transaction();
 		try {
-			$config = self::configuration( $settings_id, true );
-			if ( 0 === (int) $settings_id ) {
-				if ( (int) ( $config['settings']['assigned_event_id'] ?? 0 ) !== (int) $expected_global_event ) {
-					throw new RuntimeException( 'The global inbox assignment changed before polling started; no messages were read.' );
-				}
-				global $wpdb;
-				$override = $wpdb->get_var( $wpdb->prepare( 'SELECT event_id FROM ' . RQE::table( 'event_email_settings' ) . ' WHERE event_id=%d', $event_id ) );
-				if ( $wpdb->last_error || null !== $override ) {
-					throw new RuntimeException( 'An explicit event inbox override now takes precedence; global mail was not processed.' );
-				}
-			}
-			if ( ! $config['enabled'] ) {
-				throw new RuntimeException( 'Email submission polling is disabled for this inbox.' );
-			}
-			RQE::begin_transaction();
-			try {
-				RQE_Event_State::writable( $event_id );
-				RQE::commit_transaction();
-			} catch ( RuntimeException $exception ) {
-				RQE::rollback_transaction();
-				throw $exception;
-			}
-			$transaction = false;
+			RQE_Event_State::writable( $event_id );
+			RQE::commit_transaction();
+		} catch ( RuntimeException $exception ) {
+			RQE::rollback_transaction();
+			throw $exception;
+		}
+		$transaction = false;
+		try {
 			$provider = $config['provider'];
 			if ( ! in_array( $provider, array( 'imap', 'gmail', 'microsoft' ), true ) ) {
 				throw new RuntimeException( 'The saved mailbox provider is unsupported.' );
@@ -428,75 +303,19 @@ final class RQE_Email_Submissions {
 					call_user_func( $message['mark_processed'] );
 				}
 			}
-			self::record_check( $settings_id, '' );
+			self::record_check( $event_id, '' );
 			return 'Inbox check completed. ' . $processed . ' new message(s) recorded.';
 		} catch ( RuntimeException $exception ) {
-			if ( ! empty( $transaction ) ) { RQE::rollback_transaction(); }
+			if ( $transaction ) {
+				RQE::rollback_transaction();
+			}
 			try {
-				self::record_check( $settings_id, $exception->getMessage() );
+				self::record_check( $event_id, $exception->getMessage() );
 			} catch ( RuntimeException $status_exception ) {
 				throw new RuntimeException( $exception->getMessage() . ' The failure status also could not be saved: ' . $status_exception->getMessage() );
 			}
 			throw $exception;
-		} finally {
-			self::release_poll_lock( $settings_id, $lock );
 		}
-	}
-
-	private static function poll_lock_key( $settings_id ) {
-		return 'rqe_submission_poll_lock_' . (int) $settings_id;
-	}
-
-	private static function acquire_poll_lock( $settings_id ) {
-		$key = self::poll_lock_key( $settings_id );
-		$existing = get_option( $key, false );
-		if ( is_string( $existing ) && preg_match( '/^(\d+):[a-f0-9]{32}$/D', $existing, $match ) && (int) $match[1] < time() - 1800 ) {
-			self::delete_poll_lock( $key, $existing );
-		} elseif ( false !== $existing ) {
-			throw new RuntimeException( 'This inbox is already being checked by another request. Wait for it to finish, then retry.' );
-		}
-		$token = time() . ':' . bin2hex( random_bytes( 16 ) );
-		if ( ! add_option( $key, $token, '', false ) ) {
-			throw new RuntimeException( 'This inbox is already being checked by another request. Wait for it to finish, then retry.' );
-		}
-		return $token;
-	}
-
-	private static function acquire_configuration_locks( array $settings_ids ) {
-		$settings_ids = array_values( array_unique( array_map( 'intval', $settings_ids ) ) );
-		sort( $settings_ids, SORT_NUMERIC );
-		$locks = array();
-		try {
-			foreach ( $settings_ids as $settings_id ) {
-				$locks[] = array( $settings_id, self::acquire_poll_lock( $settings_id ) );
-			}
-		} catch ( RuntimeException $exception ) {
-			self::release_configuration_locks( $locks );
-			throw $exception;
-		}
-		return $locks;
-	}
-
-	private static function release_configuration_locks( array $locks ) {
-		foreach ( array_reverse( $locks ) as $lock ) {
-			self::release_poll_lock( $lock[0], $lock[1] );
-		}
-	}
-
-	private static function release_poll_lock( $settings_id, $token ) {
-		self::delete_poll_lock( self::poll_lock_key( $settings_id ), $token );
-	}
-
-	private static function delete_poll_lock( $key, $token ) {
-		global $wpdb;
-		if ( ! isset( $wpdb->options ) || ! method_exists( $wpdb, 'prepare' ) || ! method_exists( $wpdb, 'query' ) ) {
-			if ( get_option( $key, false ) === $token ) {
-				delete_option( $key );
-			}
-			return;
-		}
-		$wpdb->query( $wpdb->prepare( 'DELETE FROM ' . $wpdb->options . ' WHERE option_name=%s AND option_value=%s', $key, $token ) );
-		wp_cache_delete( $key, 'options' );
 	}
 
 	private static function record_check( $event_id, $error ) {

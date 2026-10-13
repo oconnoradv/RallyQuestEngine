@@ -99,9 +99,6 @@ final class RQE_Diagnostics_Deletion_Service {
 			}
 			throw $e;
 		}
-		if ( 'diagnostics_delete_all' === $operation ) {
-			RQE_Setup::clear();
-		}
 		if ( $staged_gallery ) {
 			try {
 				RQE_Bonus::finish_staged_storage_removal( $staged_gallery );

@@ -163,10 +163,6 @@
 .rqe .rqe-email-connected { border-color: #008a20; border-left-width: 4px; background: #edfaef; }
 .rqe .rqe-email-connected h2, .rqe .rqe-email-connected .rqe-email-status { color: #006b1b; }
 .rqe .rqe-email-connection-failed { border-color: #b32d2e; border-left-width: 4px; background: #fcf0f1; }
-.rqe .rqe-global-email-readonly { padding: 12px 14px; border: 1px solid #c3c4c7; background: #f0f0f1; color: #50575e; }
-.rqe .rqe-global-email-readonly p { margin: 6px 0 0; }
-.rqe .rqe-email-error { color: #8a2424; }
-.rqe .rqe-setup-override-note { padding: 10px 12px; background: #fff4e5; color: #5a3100; }
 .rqe .rqe-email-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
 .rqe .rqe-email-summary { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 5px 10px; overflow-wrap: anywhere; }
 .rqe .rqe-email-summary span { color: #50575e; }
@@ -205,7 +201,6 @@
 }
 .rqe .rqe-section > summary { cursor: pointer; }
 .rqe .rqe-section > summary h2 { display: inline; margin: 0; }
-.rqe .rqe-section:not(.rqe-complete) { border-color: #b85c00; background: #fff4e5; }
 .rqe .rqe-status-catalog > summary h2, .rqe .rqe-embed-panel > summary h2 { display: inline; margin: 0; vertical-align: baseline; }
 .rqe .rqe-complete { border-color: #008a20; border-left-width: 4px; background: #edfaef; }
 .rqe .rqe-complete > summary h2, .rqe .rqe-complete-label { color: #006b1b; }

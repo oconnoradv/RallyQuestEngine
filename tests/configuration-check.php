@@ -1,7 +1,6 @@
 <?php
 /** Standalone configuration regression tests: php tests/configuration-check.php */
 require __DIR__ . '/diagnostics.php';
-update_option( RQE_Setup::OPTION, array(), false );
 $GLOBALS['authorized'] = true;
 $wp_version = '6.8';
 function render_configuration() {
@@ -151,10 +150,9 @@ $GLOBALS['authorized'] = true;
 try { RQE_Admin::diagnostics_check(); throw new LogicException( 'Invalid nonce accepted.' ); }
 catch ( RuntimeException $exception ) { check( $exception->getMessage() === 'Invalid nonce.' && $GLOBALS['scan_checks'] === $before, 'nonce verification runs before scanner checks' ); }
 $GLOBALS['nonce_valid'] = true;
-$_POST['context_tab'] = 'initial-setup';
 try { RQE_Admin::diagnostics_check(); throw new LogicException( 'Expected redirect.' ); }
 catch ( RuntimeException $exception ) {
-	check( strpos( $exception->getMessage(), 'Redirect:' ) === 0 && strpos( $exception->getMessage(), 'tab=initial-setup' ) !== false && strpos( $exception->getMessage(), '#rqe-configuration' ) !== false && $GLOBALS['report_expiry'] === 900 && isset( $GLOBALS['transients']['rqe_configuration_2']['rows'] ), 'valid setup check stores a private expiring report and returns to Initial Setup' );
+	check( strpos( $exception->getMessage(), 'Redirect:' ) === 0 && strpos( $exception->getMessage(), '#rqe-configuration' ) !== false && $GLOBALS['report_expiry'] === 900 && isset( $GLOBALS['transients']['rqe_configuration_2']['rows'] ), 'valid check stores private expiring report and returns to diagnostic section' );
 	check( get_user_option( 'rqe_configuration_last_state', 2 ) === 'failed', 'latest failed check replaces prior outcome' );
 }
 $GLOBALS['fail_user_option'] = true;
@@ -168,22 +166,3 @@ catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(),
 $_SERVER['REQUEST_METHOD'] = 'GET';
 try { RQE_Admin::diagnostics_check(); throw new LogicException( 'GET mutation accepted.' ); }
 catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), 'Only WordPress' ) !== false, 'check endpoint requires POST' ); }
-
-$GLOBALS['user_id'] = 1;
-$GLOBALS['transients']['rqe_configuration_1'] = array(
-	'checked_at' => '2026-10-09 21:00:00',
-	'rows' => array(
-		array( 'name' => 'Manual capacity', 'status' => 'review', 'detail' => 'Review hosting limits.', 'remedy' => 'Ask the host.' ),
-		array( 'name' => 'PHP', 'status' => 'passed', 'detail' => 'Available.', 'remedy' => 'None.' ),
-	),
-);
-RQE_Setup::set_review_ignored( 'Manual capacity', true, $GLOBALS['transients']['rqe_configuration_1']['rows'], '2026-10-09 21:00:00' );
-$html = render_configuration();
-check( strpos( $html, 'rqe-configuration-passed" id="rqe-configuration' ) !== false && strpos( $html, 'Ignored for setup only' ) !== false && strpos( $html, 'remains unverified' ) !== false, 'an explicitly ignored manual review is still visible while the readiness section turns green' );
-$GLOBALS['transients']['rqe_configuration_1']['rows'][0]['status'] = 'failed';
-$GLOBALS['transients']['rqe_configuration_1']['rows'][0]['detail'] = 'The runtime check failed.';
-RQE_Setup::set_setup_override( true, $GLOBALS['transients']['rqe_configuration_1']['rows'], '2026-10-09 21:05:00' );
-$html = render_configuration();
-check( RQE_Setup::diagnostics_complete() && strpos( $html, 'Setup override active' ) !== false && strpos( $html, 'rqe-configuration-failed-row' ) !== false && strpos( $html, 'runtime validation, polling eligibility and import safety checks are never bypassed' ) !== false, 'setup override records readiness only while the failed diagnostic row and runtime protections remain visible' );
-RQE_Setup::set_setup_override( false, $GLOBALS['transients']['rqe_configuration_1']['rows'], '2026-10-09 21:05:00' );
-check( ! RQE_Setup::diagnostics_complete() && strpos( render_configuration(), 'rqe-configuration-failed" id="rqe-configuration" open' ) !== false, 'removing setup override restores failed readiness and expanded diagnostics' );

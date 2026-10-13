@@ -125,7 +125,7 @@ function test_public_bonus_details() {
 		check( strpos( implode( "\n", $wpdb->sql ), 'event_email_settings' ) === false, 'event administrator inbox page rejection occurs before fetching mailbox configuration' );
 		$wpdb->sql = array();
 		$event_edit = render( 'render_event_edit' );
-		check( strpos( $event_edit, 'Only WordPress administrators may view or configure submission inboxes.' ) !== false && strpos( $event_edit, 'Configure Submission Inbox' ) === false && strpos( $event_edit, 'Test Email Inbox' ) === false && strpos( $event_edit, 'inbox@example.test' ) === false && strpos( implode( "\n", $wpdb->sql ), 'event_email_settings' ) === false, 'event administrators see only informational inbox panel without mailbox status, addresses or controls' );
+		check( strpos( $event_edit, 'Only WordPress administrators may configure submission inboxes.' ) !== false && strpos( $event_edit, 'Configure Submission Inbox' ) === false && strpos( $event_edit, 'Test Email Inbox' ) === false && strpos( $event_edit, 'inbox@example.test' ) === false && strpos( implode( "\n", $wpdb->sql ), 'event_email_settings' ) === false, 'event administrators see only informational inbox panel without mailbox status, addresses or controls' );
 	} finally {
 		$GLOBALS['actor'] = 1;
 		$wpdb->fail_write = false;

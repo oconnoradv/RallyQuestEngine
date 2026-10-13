@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class RQE_Diagnostic_Report {
-	public static function state( array $rows, array $ignored_reviews = array() ) {
+	public static function state( array $rows ) {
 		if ( ! $rows ) {
 			throw new RuntimeException( 'A diagnostic report must contain at least one check.' );
 		}
@@ -12,9 +12,7 @@ final class RQE_Diagnostic_Report {
 			if ( ! is_array( $row ) || ! isset( $row['name'], $row['status'], $row['detail'], $row['remedy'] ) || ! in_array( $row['status'], array( 'passed', 'failed', 'review' ), true ) ) {
 				throw new RuntimeException( 'A diagnostic check returned an invalid result.' );
 			}
-			if ( 'review' !== $row['status'] || empty( $ignored_reviews[ $row['name'] ] ) ) {
-				$statuses[] = $row['status'];
-			}
+			$statuses[] = $row['status'];
 		}
 		return in_array( 'failed', $statuses, true ) ? 'failed' : ( in_array( 'review', $statuses, true ) ? 'review' : 'passed' );
 	}
