@@ -151,12 +151,12 @@ if ( in_array( '--preview', $argv ?? array(), true ) ) {
 	exit;
 }
 check( strpos( $html, 'rqe-destructive-grid' ) !== false && substr_count( $html, 'rqe-destructive-action' ) === 6, 'six destructive actions share a compact grid' );
-check( substr_count( $html, 'rqe-diagnostics-section' ) === 10, 'configuration, exports, destructive group and individual actions can all collapse' );
+check( substr_count( $html, 'rqe-diagnostics-section' ) === 9, 'exports, destructive group and individual actions can all collapse' );
 check( strpos( $html, '<details class="rqe-diagnostics-section"><summary><h3>Destructive operations</h3></summary>' ) !== false, 'Destructive operations defaults to collapsed' );
 foreach ( array( 'Export Data', 'Database Backup' ) as $heading ) {
 	check( strpos( $html, '<details class="rqe-panel rqe-diagnostics-section"><summary><h3>' . $heading ) !== false, $heading . ' defaults to collapsed' );
 }
-foreach ( array( 'Required Plugins and Configuration', 'Export Data', 'Database Backup', 'Destructive operations' ) as $heading ) {
+foreach ( array( 'Export Data', 'Database Backup', 'Destructive operations' ) as $heading ) {
 	check( strpos( $html, '<summary><h3>' . $heading . '</h3>' ) !== false, 'native collapse control wraps ' . $heading );
 }
 check( substr_count( $html, 'rqe-destructive-action rqe-diagnostics-section" open><summary><h4>' ) === 6, 'all destructive cards retain initially visible controls with individual collapse buttons' );
@@ -167,7 +167,7 @@ check( strpos( substr( $html, $audit_start, $audit_end - $audit_start ), 'Date/t
 check( strpos( $html, 'Delete Virus Scan Audit Data' ) !== false && strpos( $html, 'reset remembered ClamAV overrides' ) !== false, 'audit deletion describes override reset and retained deletion record' );
 check( substr_count( $html, 'name="verification_hash"' ) === 6 && substr_count( $html, 'rqe-delete-verification' ) === 6, 'each action retains separate server verification and dialog content' );
 check( substr_count( $html, 'name="_wpnonce"' ) === 9, 'configuration check, exports and destructive operations retain nonce fields' );
-check( strpos( $html, 'id="rqe-configuration"' ) < strpos( $html, '<h3>Database Backup' ), 'configuration section precedes export and backup controls' );
+check( false === strpos( $html, 'id="rqe-configuration"' ), 'environment checks are available on Initial Setup, not Diagnostics' );
 $operations = array( 'all', 'bikes', 'roster', 'bonus_points', 'rider', 'audit' );
 foreach ( $operations as $suffix ) {
 	$operation = 'diagnostics_delete_' . $suffix;
