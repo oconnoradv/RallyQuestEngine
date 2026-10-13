@@ -1,6 +1,7 @@
 <?php
 /** Standalone configuration regression tests: php tests/configuration-check.php */
 require __DIR__ . '/diagnostics.php';
+update_option( RQE_Setup::OPTION, array(), false );
 $GLOBALS['authorized'] = true;
 $wp_version = '6.8';
 function render_configuration() {
