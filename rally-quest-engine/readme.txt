@@ -4,7 +4,7 @@ Tags: rally, scavenger hunt, motorcycle, bicycle, geocache
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.4.0
+Stable tag: 0.4.1
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -310,6 +310,18 @@ an individual Ignore action for setup readiness. Failed checks remain visible;
 a separate confirmation may acknowledge them for setup navigation only.
 Neither choice bypasses event state, polling, import, or other runtime
 safeguards. A new check clears any failed-check setup override.
+Both setup and diagnostics summaries show the count of applicable overridden
+checks, without double-counting overlapping overrides or including passed
+checks. Expired private reports retain a labeled last-check count; older
+summaries without that count require rerunning the check.
+
+Successful global inbox saves and all global connection tests return to Initial
+Setup. Event inbox saves and tests return to Event Configuration. Failed saves
+return to their configuration screen with a correction notice.
+Main tabs are ordered Initial Setup, Events, Rosters, Scoring, Results,
+Participants, Bikes/Horses, Diagnostics, About; GeoCache omits conveyances.
+Green Initial Setup/About, blue workflow tabs, and orange Diagnostics headers
+are categories, not readiness indicators. Role-based visibility is unchanged.
 
 Choose a scavenger hunt style (defaulting to the primary style), then one of
 its events in the header and press Set Event; this event persists per user
@@ -323,6 +335,14 @@ A saved event override takes precedence over the global inbox, including when
 its polling is disabled, until a site administrator removes it. Configure,
 test or remove an override from Event Configuration. Configured does not imply
 Connection verified, and failed tests remain expanded.
+When the effective inbox is verified and enabled, both email sections become
+green and minimized, identifying Global or Event-specific inbox use. Global
+email also requires assignment to this active event.
+Event Protection and Certificates appears minimized below the event embed
+section and on Results, sharing the same saved state and certificate actions.
+Its summary shows Open (green), Locked (yellow), or Locked & Archived (blue).
+Changes return to the invoking screen and appear in both places; existing
+lock, unlock and archive permissions are retained.
 
 The global inbox can be assigned to one unlocked, unarchived event at a time;
 this assignment is independent of the page-header event selector. Event inbox
@@ -464,6 +484,14 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.4.1 =
+* Display the number of applicable overridden checks on Initial Setup and Diagnostics, including a labeled last-check count after private reports expire.
+* Return global inbox saves and connection tests to Initial Setup; return event inbox saves and tests to the originating event. Failed saves retain the configuration screen for correction.
+* Minimize verified global setup and verified enabled effective event inbox sections, shade them green, and identify Global or Event-specific inbox use.
+* Share Event Protection and Certificates controls between Results and Event Configuration below the embed section; default minimized with Open (green), Locked (yellow), or Locked & Archived (blue) status.
+* Order tabs as Initial Setup, Events, Rosters, Scoring, Results, Participants, Bikes/Horses, Diagnostics, About; use green, blue and orange category colors without changing role or style visibility.
+* Preserve mailbox encryption, authorization, nonce checks, audited event-state mutations and runtime safeguards without a schema migration.
 
 = 0.4.0 =
 * Add a leftmost Initial Setup flow for Welcome, global inbox assignment, explicitly saved primary style, and shared Required Plugins and Configuration readiness.

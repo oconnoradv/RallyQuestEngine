@@ -52,6 +52,18 @@ final class RQE_Setup {
 		);
 	}
 
+	/** Count applicable checks once, even when both override mechanisms acknowledge a review. */
+	public static function overridden_count( array $rows, array $ignored_reviews, $setup_override ) {
+		RQE_Diagnostic_Report::state( $rows );
+		$count = 0;
+		foreach ( $rows as $row ) {
+			if ( 'passed' !== $row['status'] && ( $setup_override || ( 'review' === $row['status'] && ! empty( $ignored_reviews[ $row['name'] ] ) ) ) ) {
+				++$count;
+			}
+		}
+		return $count;
+	}
+
 	public static function record_diagnostics( array $rows, $checked_at, $clear_override = false ) {
 		$state = self::diagnostics_state();
 		$ignored = self::ignored_reviews();
@@ -69,6 +81,7 @@ final class RQE_Setup {
 			'setup_override' => $clear_override ? 0 : ( ! empty( $state['setup_override'] ) ? 1 : 0 ),
 			'failed_count' => $failed_count,
 			'review_count' => $review_count,
+			'overridden_count' => self::overridden_count( $rows, $ignored, ! $clear_override && ! empty( $state['setup_override'] ) ),
 			'reset' => 0,
 		);
 		self::save_state( $next );

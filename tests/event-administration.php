@@ -539,7 +539,11 @@ check( '' === RQE_Styles::saved_primary() && 'motorcycle' === RQE_Styles::primar
 check( ! RQE_Setup::welcome_complete() && ! RQE_Setup::inbox_complete(), 'Welcome and global inbox readiness remain incomplete before credentials are configured and verified' );
 request( array( 'page' => 'rqe' ) );
 $initial_html = render( 'render' );
-check( strpos( $initial_html, 'nav-tab nav-tab-active" href="https://example.test/wp-admin/admin.php?page=rqe&amp;tab=initial-setup"' ) !== false && strpos( $initial_html, 'Welcome to Rally Quest Engine' ) > strpos( $initial_html, '</nav>' ), 'incomplete setup lands on the leftmost Initial Setup tab with Welcome below navigation' );
+check( strpos( $initial_html, 'nav-tab nav-tab-active rqe-tab-green" aria-current="page" href="https://example.test/wp-admin/admin.php?page=rqe&amp;tab=initial-setup"' ) !== false && strpos( $initial_html, 'Welcome to Rally Quest Engine' ) > strpos( $initial_html, '</nav>' ), 'incomplete setup lands on the leftmost green Initial Setup tab with Welcome below navigation' );
+preg_match( '/<nav class="nav-tab-wrapper"[^>]*>(.*?)<\/nav>/s', $initial_html, $navigation );
+preg_match_all( '/>([^<]+)<\/a>/', $navigation[1], $tab_labels );
+check( $tab_labels[1] === array( 'Initial Setup', 'Events', 'Rosters', 'Scoring', 'Results', 'Participants', 'Bikes', 'Diagnostics', 'About' ), 'main navigation follows the requested workflow-first order' );
+check( substr_count( $navigation[1], 'rqe-tab-green' ) === 2 && substr_count( $navigation[1], 'rqe-tab-blue' ) === 4 && substr_count( $navigation[1], 'rqe-tab-orange' ) === 1, 'tab category colors are independent of completion and include exactly the requested tabs' );
 request( array( 'page' => 'rqe', 'tab' => 'events' ) );
 check( strpos( render( 'render' ), 'Welcome to Rally Quest Engine' ) === false, 'explicit Events navigation is honored while setup is incomplete and does not repeat Welcome' );
 $welcome = render( 'welcome' );
@@ -561,7 +565,7 @@ check( strpos( $style_section, 'rqe-complete"><summary>' ) !== false && strpos( 
 update_option( RQE_Setup::OPTION, array( 'diagnostics_state' => 'passed' ), false );
 request( array( 'page' => 'rqe' ) );
 $complete_html = render( 'render' );
-check( RQE_Setup::readiness()['complete'] && strpos( $complete_html, 'nav-tab nav-tab-active" href="https://example.test/wp-admin/admin.php?page=rqe&amp;tab=events"' ) !== false && strpos( $complete_html, 'Welcome to Rally Quest Engine' ) === false, 'all green setup sections default plugin entry to Events without relocating the leftmost setup tab' );
+check( RQE_Setup::readiness()['complete'] && strpos( $complete_html, 'nav-tab nav-tab-active rqe-tab-blue" aria-current="page" href="https://example.test/wp-admin/admin.php?page=rqe&amp;tab=events"' ) !== false && strpos( $complete_html, 'Welcome to Rally Quest Engine' ) === false, 'all green setup sections default plugin entry to Events without relocating the leftmost setup tab' );
 delete_option( RQE_Setup::OPTION );
 rejects( function () { RQE_Horses::data( array( 'name' => '' ) ); }, 'required text field' );
 rejects( function () { RQE_Horses::data( array( 'name' => 'Ace', 'sex' => 'Unicorn' ) ); }, 'horse sex' );

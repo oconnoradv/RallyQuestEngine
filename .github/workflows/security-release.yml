@@ -48,6 +48,7 @@ jobs:
           php tests/raster-policy.php
           php tests/read-models.php
           php tests/event-administration.php
+          php tests/admin-navigation.php
           php tests/public-bonus-details.php
           php tests/certificates.php
           php tests/diagnostic-contracts.php

@@ -181,6 +181,17 @@ RQE_Setup::set_review_ignored( 'Manual capacity', true, $GLOBALS['transients']['
 check( end( $wpdb->tables['import_audit'] )['action'] === 'setup_review_override', 'manual review acknowledgments record the acting administrator in the audit log' );
 $html = render_configuration();
 check( strpos( $html, 'rqe-configuration-passed" id="rqe-configuration' ) !== false && strpos( $html, 'Ignored for setup only' ) !== false && strpos( $html, 'remains unverified' ) !== false, 'an explicitly ignored manual review is still visible while the readiness section turns green' );
+check( strpos( $html, '1 checks overridden' ) !== false && RQE_Setup::diagnostics_state()['overridden_count'] === 1, 'applicable ignored reviews have a numeric summary and persisted count' );
+ob_start();
+invoke_method( 'RQE_Views', 'configuration_check', 'initial-setup' );
+$setup_summary = ob_get_clean();
+check( strpos( $setup_summary, '1 checks overridden' ) !== false, 'Initial Setup and Diagnostics display the same overridden count' );
+$count_rows = array_merge( $GLOBALS['transients']['rqe_configuration_1']['rows'], array(
+	array( 'name' => 'Another review', 'status' => 'review', 'detail' => 'Review it.', 'remedy' => 'Verify.' ),
+	array( 'name' => 'Failure', 'status' => 'failed', 'detail' => 'Failed.', 'remedy' => 'Fix.' ),
+) );
+check( RQE_Setup::overridden_count( $count_rows, array( 'Manual capacity' => true, 'PHP' => true, 'Old check' => true ), false ) === 1, 'passed and removed checks are never counted as overridden' );
+check( RQE_Setup::overridden_count( $count_rows, array( 'Manual capacity' => true ), true ) === 3, 'setup-wide overrides count failed and review checks once without double-counting individual ignores' );
 $GLOBALS['transients']['rqe_configuration_1']['rows'][0]['status'] = 'failed';
 $GLOBALS['transients']['rqe_configuration_1']['rows'][0]['detail'] = 'The runtime check failed.';
 RQE_Setup::set_setup_override( true, $GLOBALS['transients']['rqe_configuration_1']['rows'], '2026-10-09 21:05:00' );
@@ -189,7 +200,9 @@ check( RQE_Setup::diagnostics_complete() && strpos( $html, 'Setup override activ
 RQE_Setup::set_setup_override( false, $GLOBALS['transients']['rqe_configuration_1']['rows'], '2026-10-09 21:05:00' );
 check( ! RQE_Setup::diagnostics_complete() && strpos( render_configuration(), 'rqe-configuration-failed" id="rqe-configuration" open' ) !== false, 'removing setup override restores failed readiness and expanded diagnostics' );
 check( end( $wpdb->tables['import_audit'] )['action'] === 'setup_override', 'setup-only override changes are audited without changing runtime checks' );
+RQE_Setup::record_diagnostics( $count_rows, '2026-10-09 21:10:00' );
 unset( $GLOBALS['transients']['rqe_configuration_1'] );
+check( strpos( render_configuration(), '1 checks overridden (last check)' ) !== false, 'expired private reports retain a labeled numeric last-check count without retaining detailed results' );
 RQE_Setup::clear();
 ob_start();
 invoke_method( 'RQE_Views', 'configuration_check', 'initial-setup' );

@@ -231,9 +231,13 @@ final class RQE_Admin {
 					$message = 'Archived-event visibility updated.';
 					break;
 				case 'event_state':
+					$return_url = '';
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					$tab = self::posted( 'context_tab', 'results' );
+					if ( ! in_array( $tab, array( 'results', 'event-edit' ), true ) ) {
+						throw new RuntimeException( 'Select a supported event protection screen.' );
+					}
 					RQE_Event_State::change( $extra['event_id'], self::posted( 'state_action' ) );
-					$tab = 'results';
 					$message = 'Event state updated.';
 					break;
 				case 'choose_event':
@@ -279,6 +283,7 @@ final class RQE_Admin {
 					$tab = 'event-edit';
 					break;
 				case 'event_email':
+					$return_url = '';
 					self::require_site_admin();
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
@@ -287,17 +292,17 @@ final class RQE_Admin {
 						$input[ $key ] = self::posted( $key );
 					}
 					$message = RQE_Email_Submissions::save_configuration( $extra['event_id'], $input );
-					$tab = 'event-email';
+					$tab = 'event-edit';
 					break;
 				case 'global_email':
+					$return_url = '';
 					self::require_site_admin();
 					$input = array();
 					foreach ( array( 'provider', 'enabled', 'mailbox', 'host', 'port', 'encryption', 'username', 'folder', 'password', 'client_id', 'client_secret', 'refresh_token', 'tenant_id' ) as $key ) {
 						$input[ $key ] = self::posted( $key );
 					}
 					$message = RQE_Email_Submissions::save_configuration( 0, $input );
-					$tab = 'event-email';
-					$extra['scope'] = 'global';
+					$tab = 'initial-setup';
 					break;
 				case 'global_inbox_assignment':
 					self::require_site_admin();
@@ -309,6 +314,7 @@ final class RQE_Admin {
 					$tab = 'initial-setup';
 					break;
 				case 'global_email_test':
+					$return_url = '';
 					self::require_site_admin();
 					$message = RQE_Email_Submissions::test_connection( 0 );
 					$tab = 'initial-setup';
@@ -321,6 +327,7 @@ final class RQE_Admin {
 					$tab = RQE_Email_Submissions::has_event_override( $extra['event_id'] ) ? 'event-email' : 'initial-setup';
 					break;
 				case 'event_email_test':
+					$return_url = '';
 					self::require_site_admin();
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
@@ -561,6 +568,10 @@ final class RQE_Admin {
 			wp_safe_redirect( $redirect );
 			exit;
 		} catch ( RuntimeException $e ) {
+			if ( 'event_email' === $op && ! empty( $extra['event_id'] ) && RQE::site_access() && RQE::row( 'events', $extra['event_id'] ) ) {
+				wp_safe_redirect( self::url( 'event-email', array( 'event_id' => $extra['event_id'], 'error' => $e->getMessage() ) ) );
+				exit;
+			}
 			if ( in_array( $op, array( 'event_email_test', 'event_email_clear' ), true ) && ! empty( $extra['event_id'] ) && RQE::event_access( $extra['event_id'] ) && RQE::row( 'events', $extra['event_id'] ) ) {
 				wp_safe_redirect( self::url( 'event-edit', array( 'event_id' => $extra['event_id'], 'error' => $e->getMessage() ) ) );
 				exit;

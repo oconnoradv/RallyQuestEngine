@@ -31,6 +31,18 @@
 	.rqe .rqe-riders-toolbar .rqe-server-search { margin-left: 0; text-align: left; }
 }
 .rqe .rqe-panel { background: #fff; border: 1px solid #c3c4c7; padding: 18px; margin: 16px 0; }
+.rqe .nav-tab-wrapper .rqe-tab-green { --rqe-tab-bg: #edfaef; --rqe-tab-text: #006b1b; --rqe-tab-border: #008a20; }
+.rqe .nav-tab-wrapper .rqe-tab-blue { --rqe-tab-bg: #eaf3ff; --rqe-tab-text: #135e96; --rqe-tab-border: #2271b1; }
+.rqe .nav-tab-wrapper .rqe-tab-orange { --rqe-tab-bg: #fff4e5; --rqe-tab-text: #924500; --rqe-tab-border: #b85c00; }
+.rqe .nav-tab-wrapper a[class*="rqe-tab-"] { background: var(--rqe-tab-bg); color: var(--rqe-tab-text); border-color: var(--rqe-tab-border); }
+.rqe .nav-tab-wrapper .nav-tab-active { font-weight: 700; text-decoration: underline; text-underline-offset: 4px; }
+.rqe .nav-tab-wrapper a:hover { text-decoration: underline; }
+.rqe .nav-tab-wrapper a:focus-visible { outline: 2px solid #1d2327; outline-offset: 2px; }
+.rqe .rqe-event-protection > summary { cursor: pointer; }
+.rqe .rqe-event-protection > summary h3 { display: inline; margin: 0; }
+.rqe .rqe-protection-open { background: #edfaef; border-color: #008a20; color: #006b1b; }
+.rqe .rqe-protection-locked { background: #fff8c5; border-color: #dba617; color: #614200; }
+.rqe .rqe-protection-archived { background: #eaf3ff; border-color: #2271b1; color: #135e96; }
 .rqe .rqe-check-passed { color: #006b1b; }
 .rqe .rqe-check-failed { color: #b32d2e; }
 .rqe .rqe-check-review { color: #924500; }

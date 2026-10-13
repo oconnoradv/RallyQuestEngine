@@ -161,7 +161,7 @@ final class RQE_Views {
 		$tab = RQE_Admin::query( 'tab', $default_tab );
 		$style = RQE_Styles::primary();
 		$tabs = $site_admin ? array( 'initial-setup' => 'Initial Setup' ) : array();
-		$tabs += array( 'riders' => 'Participants', 'events' => 'Events', 'rosters' => 'Rosters', 'scoring' => 'Scoring', 'results' => 'Results' );
+		$tabs += array( 'events' => 'Events', 'rosters' => 'Rosters', 'scoring' => 'Scoring', 'results' => 'Results', 'riders' => 'Participants' );
 		// Conveyance tabs follow the primary style: vehicles for Motorcycle/Bicycle, horses for Horseback, none for GeoCache.
 		if ( RQE_Styles::uses_vehicles( $style ) ) {
 			$tabs['bikes'] = 'Bikes';
@@ -183,7 +183,8 @@ final class RQE_Views {
 			if ( ( ! $site_admin && in_array( $key, $shared, true ) ) || ( $scorer_only && ! in_array( $key, array( 'scoring', 'about' ), true ) ) ) {
 				continue;
 			}
-			echo '<a class="nav-tab' . ( $key === $tab ? ' nav-tab-active' : '' ) . '" href="' . esc_url( RQE_Admin::url( $key ) ) . '">' . esc_html( $label ) . '</a>';
+			$tone = in_array( $key, array( 'initial-setup', 'about' ), true ) ? 'green' : ( in_array( $key, array( 'events', 'rosters', 'scoring', 'results' ), true ) ? 'blue' : ( 'diagnostics' === $key ? 'orange' : '' ) );
+			echo '<a class="nav-tab' . ( $key === $tab ? ' nav-tab-active' : '' ) . ( $tone ? ' rqe-tab-' . esc_attr( $tone ) : '' ) . '"' . ( $key === $tab ? ' aria-current="page"' : '' ) . ' href="' . esc_url( RQE_Admin::url( $key ) ) . '">' . esc_html( $label ) . '</a>';
 		}
 		echo '</nav>';
 		self::notice();
@@ -794,12 +795,19 @@ final class RQE_Views {
 				self::event_roles( $event );
 			}
 			self::public_results_embed( $event );
+			self::event_protection( $event, 'event-edit' );
 		}
 		echo '</div><div>';
 		if ( $id && RQE::site_access() ) {
 			$global_status = RQE_Email_Submissions::global_status();
 			$assigned = $global_status['assigned_event_id'] === $id && $global_status['assigned_event_active'];
-			echo '<section class="rqe-panel rqe-global-email-summary" aria-labelledby="rqe-global-email-heading"><h2 id="rqe-global-email-heading">Email Setup</h2><div class="rqe-global-email-readonly"><strong>Global inbox (read-only)</strong>';
+			$has_override = RQE_Email_Submissions::has_event_override( $id );
+			$email_status = RQE_Email_Submissions::configuration_status( $id );
+			$effective_status = $has_override ? $email_status : $global_status;
+			$ready = $effective_status['connected'] && $effective_status['enabled'] && ( $has_override || $assigned );
+			$source_label = $has_override ? 'Event-specific inbox' : 'Global inbox';
+			self::section_open( 'Email Setup', $ready, 'rqe-global-email-summary', $source_label . ' — connection verified' );
+			echo '<div class="rqe-global-email-readonly"><strong>Global inbox (read-only)</strong>';
 			if ( $global_status['configured'] ) {
 				echo '<p>' . esc_html( $global_status['mailbox'] . ' — ' . $global_status['provider_label'] ) . '</p>';
 				echo '<p>' . esc_html( $assigned ? 'Assigned to this event' : ( $global_status['assigned_event'] ? 'Assigned to ' . $global_status['assigned_event'] : 'Not assigned to this event' ) ) . '</p>';
@@ -808,24 +816,20 @@ final class RQE_Views {
 				echo '<p>Global email is not configured.</p>';
 			}
 			echo '</div>';
-			$has_override = RQE_Email_Submissions::has_event_override( $id );
 			self::form( 'event_email_override', array( 'event_id' => $id ) );
 			echo '<label><input type="checkbox" name="event_email_override" value="1"' . checked( $has_override, true, false ) . '> Override global email inbox settings for this event</label><p>Check and save to configure an independent inbox. Uncheck and save to delete this event\'s saved credentials and restore global assignment rules.</p>';
 			self::button( 'Save Email Choice' );
 			echo '</form>';
 			echo '<p><a href="' . esc_url( RQE_Admin::url( 'initial-setup' ) ) . '">Manage global inbox assignment and credentials</a></p>';
-			echo '</section>';
+			echo '<p><strong>Inbox source:</strong> ' . esc_html( $source_label ) . ( $ready ? ' — verified and enabled.' : ' — not ready for polling.' ) . '</p></details>';
 		} elseif ( $id ) {
 			echo '<section class="rqe-panel rqe-global-email-summary" aria-labelledby="rqe-global-email-heading"><h2 id="rqe-global-email-heading">Email Setup</h2><div class="rqe-global-email-readonly"><strong>Global inbox (read-only)</strong><p>Only WordPress administrators may view or configure submission inboxes.</p></div></section>';
 		}
 		if ( $id && ! RQE::site_access() ) {
 			echo '<section class="rqe-panel rqe-email-panel"><h2>' . esc_html__( 'Event Inbox Override', 'rally-quest-engine' ) . '</h2><p>' . esc_html__( 'Only WordPress administrators may configure or test an event-specific inbox. Existing event mailboxes continue to override the global inbox.', 'rally-quest-engine' ) . '</p></section>';
 		} elseif ( $id ) {
-			$email_status = RQE_Email_Submissions::configuration_status( $id );
-			$has_override = RQE_Email_Submissions::has_event_override( $id );
-			$ready = $email_status['connected'];
 			$panel_class = $ready ? ' rqe-email-connected' : ( $email_status['last_test_error'] ? ' rqe-email-connection-failed' : '' );
-			echo '<details class="rqe-panel rqe-email-panel' . esc_attr( $panel_class ) . '"' . ( $ready ? '' : ' open' ) . '><summary><h2>Event Inbox Override</h2>' . ( $ready ? ' <strong>Connection verified</strong>' : '' ) . '</summary><p>Configure an independent mailbox for this event. A saved event inbox takes precedence over the global inbox and is tested separately.</p><div class="rqe-email-actions"><a class="button button-primary" href="' . esc_url( RQE_Admin::url( 'event-email', array( 'event_id' => $id ) ) ) . '">Configure Event Inbox Override</a>';
+			echo '<details class="rqe-panel rqe-email-panel' . esc_attr( $panel_class ) . '"' . ( $ready ? '' : ' open' ) . '><summary><h2>Event Inbox Override</h2>' . ( $ready ? ' <strong>' . esc_html( $source_label . ' — connection verified' ) . '</strong>' : '' ) . '</summary><p>Configure an independent mailbox for this event. A saved event inbox takes precedence over the global inbox and is tested separately.</p><div class="rqe-email-actions"><a class="button button-primary" href="' . esc_url( RQE_Admin::url( 'event-email', array( 'event_id' => $id ) ) ) . '">Configure Event Inbox Override</a>';
 			if ( $email_status['configured'] ) {
 				echo '<span class="rqe-email-summary"><strong>' . esc_html( $email_status['mailbox'] ) . '</strong><span>' . esc_html( $email_status['provider_label'] ) . '</span></span>';
 				self::form( 'event_email_test', array( 'event_id' => $id ), 'rqe-inline-form' );
@@ -1534,6 +1538,25 @@ final class RQE_Views {
 		echo '</p></form></div>';
 	}
 
+	/** Both event screens operate on the same persisted state and certificate actions. */
+	private static function event_protection( array $event, $context_tab ) {
+		$id = (int) $event['id'];
+		$state = ! empty( $event['is_archived'] ) ? 'archived' : ( ! empty( $event['is_locked'] ) ? 'locked' : 'open' );
+		$labels = array( 'open' => 'Open', 'locked' => 'Locked', 'archived' => 'Locked & Archived' );
+		echo '<details class="rqe-panel rqe-event-protection rqe-protection-' . esc_attr( $state ) . '"><summary><h3>Event Protection and Certificates</h3> <strong>' . esc_html( $labels[ $state ] ) . '</strong></summary><p>Archive hides the event by default and locks results. Unarchiving keeps it locked. Locking does not automatically finalize preliminary statuses.</p>';
+		self::form( 'event_state', array( 'event_id' => $id, 'context_tab' => $context_tab, 'return_url' => '' ), 'rqe-inline-form' );
+		if ( 'open' === $state ) {
+			echo '<button class="button" name="state_action" value="lock" data-confirm="Lock this event and prevent result changes?">Lock Event</button> ';
+		}
+		if ( RQE::site_access() ) {
+			if ( 'locked' === $state ) {
+				echo '<button class="button" name="state_action" value="unlock" data-confirm="Unlock this event and allow editing?">Unlock Event</button> ';
+			}
+			echo '<button class="button" name="state_action" value="' . ( 'archived' === $state ? 'unarchive' : 'archive' ) . '" data-confirm="Change this event archive state?">' . esc_html( 'archived' === $state ? 'Unarchive Event (keep locked)' : 'Archive Event (also lock)' ) . '</button>';
+		}
+		echo '</form><p>Finisher, Bronze Finisher, Silver Finisher and Gold Finisher always qualify after manual finalization; preliminary statuses, DNF and DNS are excluded. Design: <strong>' . esc_html( RQE_Certificates::designs()[ RQE_Certificates::design( $event['certificate_design'] ?? 'vintage' ) ] ) . '</strong> (choose in Event Details).</p><p><a class="button" href="' . esc_url( RQE_Certificates::link( $id, 'print' ) ) . '">Print All Finisher Certificates / Save as PDF</a> <a class="button" href="' . esc_url( RQE_Certificates::link( $id, 'review' ) ) . '">Review &amp; Email All Certificates</a></p></details>';
+	}
+
 	private static function overall_results() {
 		$rider_id = absint( RQE_Admin::query( 'rider_id', '0' ) );
 		$events = self::events( $rider_id );
@@ -1558,18 +1581,7 @@ final class RQE_Views {
 		$event = RQE::row( 'events', $id );
 		$rows = self::queries()->results( $id, $event['min_finisher_points'] );
 		$options = RQE_Statuses::options( $id, 'event' );
-		echo '<section class="rqe-panel"><h3>Event Protection and Certificates</h3><p>State: <strong>' . esc_html( ! empty( $event['is_archived'] ) ? 'Archived / Locked' : ( ! empty( $event['is_locked'] ) ? 'Locked' : 'Editable' ) ) . '</strong>. Archive hides the event by default and locks results. Unarchiving keeps it locked. Locking does not automatically finalize preliminary statuses.</p>';
-		self::form( 'event_state', array( 'event_id' => $id ), 'rqe-inline-form' );
-		if ( empty( $event['is_locked'] ) && empty( $event['is_archived'] ) ) {
-			echo '<button class="button" name="state_action" value="lock" data-confirm="Lock this event and prevent result changes?">Lock Event</button> ';
-		}
-		if ( RQE::site_access() ) {
-			if ( ! empty( $event['is_locked'] ) && empty( $event['is_archived'] ) ) {
-				echo '<button class="button" name="state_action" value="unlock" data-confirm="Unlock this event and allow editing?">Unlock Event</button> ';
-			}
-			echo '<button class="button" name="state_action" value="' . ( ! empty( $event['is_archived'] ) ? 'unarchive' : 'archive' ) . '" data-confirm="Change this event archive state?">' . esc_html( ! empty( $event['is_archived'] ) ? 'Unarchive Event (keep locked)' : 'Archive Event (also lock)' ) . '</button>';
-		}
-		echo '</form><p>Finisher, Bronze Finisher, Silver Finisher and Gold Finisher always qualify after manual finalization; preliminary statuses, DNF and DNS are excluded. Design: <strong>' . esc_html( RQE_Certificates::designs()[ RQE_Certificates::design( $event['certificate_design'] ?? 'vintage' ) ] ) . '</strong> (choose in Event Details).</p><p><a class="button" href="' . esc_url( RQE_Certificates::link( $id, 'print' ) ) . '">Print All Finisher Certificates / Save as PDF</a> <a class="button" href="' . esc_url( RQE_Certificates::link( $id, 'review' ) ) . '">Review &amp; Email All Certificates</a></p></section>';
+		self::event_protection( $event, 'results' );
 		global $wpdb;
 		$batches = $wpdb->get_col( $wpdb->prepare( 'SELECT batch FROM ' . RQE::table( 'certificate_mail' ) . ' WHERE event_id=%d AND user_id=%d GROUP BY batch ORDER BY MAX(id) DESC LIMIT 10', $id, get_current_user_id() ) );
 		if ( ! is_array( $batches ) || $wpdb->last_error ) {
@@ -1697,6 +1709,7 @@ final class RQE_Views {
 			}
 		}
 		$override = ! empty( $shared_state['setup_override'] );
+		$overridden_count = $has_report ? RQE_Setup::overridden_count( $report['rows'], $ignored_reviews, $override ) : ( isset( $shared_state['overridden_count'] ) ? (int) $shared_state['overridden_count'] : null );
 		$display_state = $override ? 'passed' : $state;
 		$review_count = 0;
 		$failed_count = 0;
@@ -1715,6 +1728,13 @@ final class RQE_Views {
 			$status_label = $has_report ? ( 'passed' === $state && $review_count ? 'Passed for setup — manual reviews ignored' : $labels[ $state ] ) : 'Last check: ' . $labels[ $state ] . ( 'passed' === $state && $review_count ? ' — manual review overrides in place' : '' ) . ' — Results expired';
 		} else {
 			$status_label = '';
+		}
+		if ( null !== $overridden_count ) {
+			$status_label .= ( $status_label ? ' — ' : '' ) . $overridden_count . ' checks overridden' . ( $has_report ? '' : ' (last check)' );
+		} elseif ( $override || $ignored_reviews ) {
+			$status_label .= ( $status_label ? ' — ' : '' ) . 'Override count unavailable; rerun check';
+		} else {
+			$status_label .= ( $status_label ? ' — ' : '' ) . '0 checks overridden';
 		}
 		$expanded = 'failed' === $display_state || ( ! $display_state && 'initial-setup' !== $context_tab );
 		echo '<details class="rqe-panel rqe-diagnostics-section' . ( $display_state ? ' rqe-configuration-' . esc_attr( $display_state ) : '' ) . '" id="rqe-configuration"' . ( $expanded ? ' open' : '' ) . '><summary><h3>Required Plugins and Configuration</h3>' . ( $status_label ? ' <strong class="rqe-check-' . esc_attr( $display_state ) . '">' . esc_html( $status_label ) . '</strong>' : '' ) . '</summary><p>Check the current WordPress/PHP environment, RQE database, local ClamAV scanner, storage, and import settings. Action Scheduler is required; Gallery for SpotWalla remains optional.</p><p>Manual-review choices and setup overrides affect only this readiness summary. Failed results remain visible and runtime validation, polling eligibility and import safety checks are never bypassed.</p><p><strong>RQE limits:</strong> spreadsheets and individual images: 10 MB; remote downloads/ZIP archives: 50 MB; accepted images per queue: 100 MB / 200 images; spreadsheet rows: 5,000. Server settings are checked against these existing safety limits. Sequential image uploads need at least 11 MB post capacity including overhead for each 10 MB file.</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="rqe_diagnostics_check"><input type="hidden" name="context_tab" value="' . esc_attr( $context_tab ) . '">';
