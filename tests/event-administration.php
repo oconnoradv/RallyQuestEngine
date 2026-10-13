@@ -134,10 +134,18 @@ function shortcode_atts( $defaults, $attributes, $tag = '' ) {
 	return array_merge( $defaults, array_intersect_key( (array) $attributes, $defaults ) );
 }
 function get_users( $args ) { return array(); }
-function get_transient( $key ) { return false; }
-function get_plugins() { return array( 'action-scheduler/action-scheduler.php' => array() ); }
-function is_plugin_active( $file ) { return false; }
-function self_admin_url( $path = '' ) { return admin_url( $path ); }
+if ( ! function_exists( 'get_transient' ) ) {
+	function get_transient( $key ) { return false; }
+}
+if ( ! function_exists( 'get_plugins' ) ) {
+	function get_plugins() { return array( 'action-scheduler/action-scheduler.php' => array() ); }
+}
+if ( ! function_exists( 'is_plugin_active' ) ) {
+	function is_plugin_active( $file ) { return false; }
+}
+if ( ! function_exists( 'self_admin_url' ) ) {
+	function self_admin_url( $path = '' ) { return admin_url( $path ); }
+}
 function get_user_by( $key, $id ) { return (object) array( 'ID' => $id, 'user_login' => 'user-' . $id, 'user_email' => 'user@example.test', 'display_name' => 'User ' . $id ); }
 function get_user_meta( $id, $key, $single ) { return ''; }
 function wp_salt( $scheme ) { return 'fixture-salt'; }
