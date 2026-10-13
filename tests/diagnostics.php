@@ -107,7 +107,8 @@ function wp_convert_hr_to_bytes( $value ) {
 	return (int) ( $number * ( 'g' === $unit ? 1073741824 : ( 'm' === $unit ? 1048576 : ( 'k' === $unit ? 1024 : 1 ) ) ) );
 }
 function size_format( $bytes ) { return ( $bytes / 1048576 ) . ' MB'; }
-function get_option( $key, $default = '' ) { return $GLOBALS['schema_version'] ?? '11'; }
+function get_option( $key, $default = '' ) { return $GLOBALS['test_options'][ $key ] ?? ( $GLOBALS['schema_version'] ?? '11' ); }
+function update_option( $key, $value, $autoload = null ) { $GLOBALS['test_options'][ $key ] = $value; return true; }
 function wp_max_upload_size() { return $GLOBALS['upload_limit'] ?? 10485760; }
 function get_temp_dir() { return sys_get_temp_dir(); }
 function wp_normalize_path( $value ) { return str_replace( '\\', '/', $value ); }
@@ -123,6 +124,7 @@ require __DIR__ . '/../rally-quest-engine/includes/class-rqe-import-adapters.php
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-bonus.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-views.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-diagnostics.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-setup.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-diagnostics-deletion-service.php';
 function invoke_method( $class, $name, ...$args ) {
 	$method = new ReflectionMethod( $class, $name );

@@ -20,9 +20,11 @@ $cleanup = static function () use ( $wpdb ) {
 	delete_option( 'rqe_db_version' );
 	delete_option( 'rqe_delete_on_uninstall' );
 	delete_option( 'rqe_primary_style' );
+	delete_option( 'rqe_setup_readiness' );
 	delete_option( 'rqe_legacy_import' );
 	delete_metadata( 'user', 0, $wpdb->prefix . 'rqe_selected_event', '', true );
 	delete_metadata( 'user', 0, $wpdb->prefix . 'rqe_show_archived', '', true );
+	delete_metadata( 'user', 0, $wpdb->prefix . 'rqe_configuration_last_state', '', true );
 };
 if ( is_multisite() ) {
 	$offset = 0;

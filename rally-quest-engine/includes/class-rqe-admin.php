@@ -221,7 +221,7 @@ final class RQE_Admin {
 			switch ( $op ) {
 				case 'archive_visibility':
 					$tab = self::posted( 'context_tab', 'events' );
-					if ( ! in_array( $tab, array( 'riders', 'events', 'rosters', 'scoring', 'results', 'bikes', 'horses', 'diagnostics', 'about' ), true ) ) {
+					if ( ! in_array( $tab, array( 'initial-setup', 'riders', 'events', 'rosters', 'scoring', 'results', 'bikes', 'horses', 'diagnostics', 'about' ), true ) || ( 'initial-setup' === $tab && ! RQE::site_access() ) ) {
 						throw new RuntimeException( 'Select an application tab.' );
 					}
 					if ( ! RQE::site_access() && ! RQE::event_ids() && ! in_array( $tab, array( 'scoring', 'about' ), true ) ) {
@@ -239,7 +239,7 @@ final class RQE_Admin {
 				case 'choose_event':
 					$return_url = '';
 					$tab = self::posted( 'context_tab', 'events' );
-					if ( ! in_array( $tab, array( 'riders', 'events', 'rosters', 'scoring', 'results', 'bikes', 'horses', 'diagnostics', 'about' ), true ) ) {
+					if ( ! in_array( $tab, array( 'initial-setup', 'riders', 'events', 'rosters', 'scoring', 'results', 'bikes', 'horses', 'diagnostics', 'about' ), true ) || ( 'initial-setup' === $tab && ! RQE::site_access() ) ) {
 						throw new RuntimeException( 'Select an application tab.' );
 					}
 					if ( ! RQE::site_access() && ! RQE::event_ids() && ! in_array( $tab, array( 'scoring', 'about' ), true ) ) {
@@ -289,6 +289,26 @@ final class RQE_Admin {
 					$message = RQE_Email_Submissions::save_configuration( $extra['event_id'], $input );
 					$tab = 'event-email';
 					break;
+				case 'global_email':
+					self::require_site_admin();
+					$input = array();
+					foreach ( array( 'provider', 'enabled', 'mailbox', 'host', 'port', 'encryption', 'username', 'folder', 'password', 'client_id', 'client_secret', 'refresh_token', 'tenant_id' ) as $key ) {
+						$input[ $key ] = self::posted( $key );
+					}
+					$message = RQE_Email_Submissions::save_configuration( 0, $input );
+					$tab = 'event-email';
+					$extra['scope'] = 'global';
+					break;
+				case 'global_inbox_assignment':
+					self::require_site_admin();
+					$message = RQE_Email_Submissions::save_global_assignment( self::posted( 'assigned_event_id', '0' ) );
+					$tab = 'initial-setup';
+					break;
+				case 'global_email_test':
+					self::require_site_admin();
+					$message = RQE_Email_Submissions::test_connection( 0 );
+					$tab = 'initial-setup';
+					break;
 				case 'event_email_check':
 					self::require_site_admin();
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
@@ -301,6 +321,13 @@ final class RQE_Admin {
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
 					$message = RQE_Email_Submissions::test_connection( $extra['event_id'] );
+					$tab = 'event-edit';
+					break;
+				case 'event_email_clear':
+					self::require_site_admin();
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					self::require_event( $extra['event_id'] );
+					$message = RQE_Email_Submissions::remove_event_override( $extra['event_id'] );
 					$tab = 'event-edit';
 					break;
 				case 'submission_review':
@@ -467,6 +494,35 @@ final class RQE_Admin {
 					$message = self::diagnostics_delete( $op );
 					$tab = 'diagnostics';
 					break;
+				case 'diagnostics_review':
+					self::require_site_admin();
+					$report = self::current_diagnostics_report();
+					$message = RQE_Setup::set_review_ignored(
+						self::text( self::posted( 'review_name' ), 160, true ),
+						'1' === self::posted( 'ignore_review' ),
+						$report['rows'],
+						$report['checked_at']
+					);
+					$tab = 'initial-setup';
+					$message = 'Manual review preference saved. This affects setup readiness only; it does not change or bypass the check.';
+					break;
+				case 'diagnostics_setup_override':
+					self::require_site_admin();
+					if ( '1' !== self::posted( 'setup_override_confirmation' ) ) {
+						throw new RuntimeException( 'Confirm that you understand failed checks remain visible and runtime protections still apply.' );
+					}
+					$report = self::current_diagnostics_report();
+					RQE_Setup::set_setup_override( true, $report['rows'], $report['checked_at'] );
+					$tab = 'initial-setup';
+					$message = 'Setup override acknowledged. Failed checks remain visible and runtime validation and safety checks are unchanged.';
+					break;
+				case 'diagnostics_override_remove':
+					self::require_site_admin();
+					$report = self::current_diagnostics_report();
+					RQE_Setup::set_setup_override( false, $report['rows'], $report['checked_at'] );
+					$tab = 'initial-setup';
+					$message = 'Setup override removed. Readiness now reflects the diagnostic results and manual-review choices.';
+					break;
 				default:
 					throw new RuntimeException( 'Unknown operation.' );
 			}
@@ -488,8 +544,16 @@ final class RQE_Admin {
 			wp_safe_redirect( $redirect );
 			exit;
 		} catch ( RuntimeException $e ) {
-			if ( 'event_email_test' === $op && ! empty( $extra['event_id'] ) && RQE::event_access( $extra['event_id'] ) && RQE::row( 'events', $extra['event_id'] ) ) {
+			if ( in_array( $op, array( 'event_email_test', 'event_email_clear' ), true ) && ! empty( $extra['event_id'] ) && RQE::event_access( $extra['event_id'] ) && RQE::row( 'events', $extra['event_id'] ) ) {
 				wp_safe_redirect( self::url( 'event-edit', array( 'event_id' => $extra['event_id'], 'error' => $e->getMessage() ) ) );
+				exit;
+			}
+			if ( 'global_email_test' === $op ) {
+				wp_safe_redirect( self::url( 'initial-setup', array( 'error' => $e->getMessage() ) ) );
+				exit;
+			}
+			if ( 'global_email' === $op ) {
+				wp_safe_redirect( self::url( 'event-email', array( 'scope' => 'global', 'error' => $e->getMessage() ) ) );
 				exit;
 			}
 			if ( null !== $bonus_step && ! empty( $extra['event_id'] ) && RQE::event_access( $extra['event_id'] ) && RQE::row( 'events', $extra['event_id'] ) ) {
@@ -497,6 +561,15 @@ final class RQE_Admin {
 			}
 			wp_die( esc_html( $e->getMessage() ), esc_html( 'Rally update not saved' ), array( 'response' => 400, 'back_link' => true ) );
 		}
+	}
+
+	private static function current_diagnostics_report() {
+		$report = get_transient( 'rqe_configuration_' . get_current_user_id() );
+		if ( ! is_array( $report ) || empty( $report['rows'] ) || empty( $report['checked_at'] ) ) {
+			throw new RuntimeException( 'The private diagnostic report is missing or expired. Rerun Required Plugins and Configuration first.' );
+		}
+		RQE_Diagnostic_Report::state( $report['rows'] );
+		return $report;
 	}
 
 	private static function bonus_redirect( $extra, $step, $message, $severity ) {
@@ -915,13 +988,17 @@ final class RQE_Admin {
 		if ( ! set_transient( 'rqe_configuration_' . get_current_user_id(), $report, 15 * MINUTE_IN_SECONDS ) ) {
 			wp_die( esc_html( 'The configuration report could not be saved. Rerun the check.' ), '', array( 'response' => 500 ) );
 		}
-		$state = RQE_Diagnostic_Report::state( $report['rows'] );
+		$state = RQE_Setup::record_diagnostics( $report['rows'], $report['checked_at'], true );
 		// Retain only the last outcome for this administrator/site, not expired diagnostic details.
 		update_user_option( get_current_user_id(), 'rqe_configuration_last_state', $state );
 		if ( get_user_option( 'rqe_configuration_last_state', get_current_user_id() ) !== $state ) {
 			wp_die( esc_html( 'The last configuration outcome could not be saved. Rerun the check.' ), '', array( 'response' => 500 ) );
 		}
-		wp_safe_redirect( self::url( 'diagnostics' ) . '#rqe-configuration' );
+		$context_tab = self::posted( 'context_tab', 'diagnostics' );
+		if ( ! in_array( $context_tab, array( 'initial-setup', 'diagnostics' ), true ) ) {
+			$context_tab = 'diagnostics';
+		}
+		wp_safe_redirect( self::url( $context_tab ) . '#rqe-configuration' );
 		exit;
 	}
 
