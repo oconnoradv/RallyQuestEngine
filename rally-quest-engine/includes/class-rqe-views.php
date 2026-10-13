@@ -785,7 +785,7 @@ final class RQE_Views {
 			self::public_results_embed( $event );
 		}
 		echo '</div><div>';
-		if ( $id ) {
+		if ( $id && RQE::site_access() ) {
 			$global_status = RQE_Email_Submissions::global_status();
 			$assigned = $global_status['assigned_event_id'] === $id && $global_status['assigned_event_active'];
 			echo '<section class="rqe-panel rqe-global-email-summary" aria-labelledby="rqe-global-email-heading"><h2 id="rqe-global-email-heading">Email Setup</h2><div class="rqe-global-email-readonly"><strong>Global inbox (read-only)</strong>';
@@ -797,12 +797,10 @@ final class RQE_Views {
 				echo '<p>Global email is not configured.</p>';
 			}
 			echo '</div>';
-			if ( RQE::site_access() ) {
-				echo '<p><a href="' . esc_url( RQE_Admin::url( 'initial-setup' ) ) . '">Manage global inbox assignment and credentials</a></p>';
-			} else {
-				echo '<p>Only a WordPress administrator can manage the global inbox.</p>';
-			}
+			echo '<p><a href="' . esc_url( RQE_Admin::url( 'initial-setup' ) ) . '">Manage global inbox assignment and credentials</a></p>';
 			echo '</section>';
+		} elseif ( $id ) {
+			echo '<section class="rqe-panel rqe-global-email-summary" aria-labelledby="rqe-global-email-heading"><h2 id="rqe-global-email-heading">Email Setup</h2><div class="rqe-global-email-readonly"><strong>Global inbox (read-only)</strong><p>Only site administrators can view global inbox status or manage inbox settings.</p></div></section>';
 		}
 		if ( $id && ! RQE::site_access() ) {
 			echo '<section class="rqe-panel rqe-email-panel"><h2>' . esc_html__( 'Event Inbox Override', 'rally-quest-engine' ) . '</h2><p>' . esc_html__( 'Only WordPress administrators may configure or test an event-specific inbox. Existing event mailboxes continue to override the global inbox.', 'rally-quest-engine' ) . '</p></section>';
