@@ -7,6 +7,7 @@ final class RQE_Email_Submissions {
 	const MAX_ATTACHMENT_SIZE = 10485760;
 
 	public static function schedule() {
+		// A shared dispatcher checks each inbox's own interval under its existing source lock.
 		if ( function_exists( 'as_has_scheduled_action' ) && function_exists( 'as_schedule_recurring_action' ) && ! as_has_scheduled_action( 'rqe_process_submission_inboxes' ) ) {
 			as_schedule_recurring_action( time() + 300, 300, 'rqe_process_submission_inboxes', array(), 'rqe' );
 		}
@@ -100,6 +101,8 @@ final class RQE_Email_Submissions {
 				'provider_label' => $labels[ $config['provider'] ],
 				'last_tested_at' => $config['last_tested_at'],
 				'last_test_error' => $config['last_test_error'],
+				'last_error' => $config['last_error'],
+				'poll_interval_minutes' => self::poll_interval_minutes( $settings['poll_interval_minutes'] ?? 5 ),
 				'assigned_event_id' => $assigned_event_id,
 				'enabled' => (int) $config['enabled'],
 			);
@@ -167,6 +170,7 @@ final class RQE_Email_Submissions {
 			throw new RuntimeException( 'Enter the event submission mailbox email address.' );
 		}
 		$settings = array( 'mailbox' => $mailbox );
+		$settings['poll_interval_minutes'] = self::poll_interval_minutes( $input['poll_interval_minutes'] ?? ( $existing['settings']['poll_interval_minutes'] ?? 5 ) );
 		if ( 0 === (int) $event_id ) {
 			$assignment = array_key_exists( 'assigned_event_id', $input ) ? self::assignment_id( $input['assigned_event_id'] ) : $global_assignment;
 			$settings['assigned_event_id'] = $assignment;
@@ -370,9 +374,12 @@ final class RQE_Email_Submissions {
 	public static function process_all() {
 		global $wpdb;
 		$event_ids = $wpdb->get_col( 'SELECT s.event_id FROM ' . RQE::table( 'event_email_settings' ) . ' s JOIN ' . RQE::table( 'events' ) . ' e ON e.id=s.event_id WHERE s.enabled=1 AND e.is_locked=0 AND e.is_archived=0' );
+		if ( ! is_array( $event_ids ) || $wpdb->last_error ) {
+			throw new RuntimeException( 'Scheduled inbox sources could not be read; no inboxes were processed.' );
+		}
 		foreach ( (array) $event_ids as $event_id ) {
 			try {
-				self::process_event( (int) $event_id );
+				self::process_event( (int) $event_id, true );
 			} catch ( RuntimeException $exception ) {
 				error_log( 'RQE event inbox #' . (int) $event_id . ': ' . $exception->getMessage() );
 			}
@@ -380,25 +387,57 @@ final class RQE_Email_Submissions {
 		$global = self::global_status();
 		if ( ! empty( $global['enabled'] ) && ! empty( $global['assigned_event_active'] ) ) {
 			try {
-				self::process_global_event( (int) $global['assigned_event_id'] );
+				self::process_global_event( (int) $global['assigned_event_id'], true );
 			} catch ( RuntimeException $exception ) {
 				error_log( 'RQE global inbox: ' . $exception->getMessage() );
 			}
 		}
 	}
 
-	public static function process_event( $event_id ) {
+	public static function process_event( $event_id, $scheduled = false ) {
 		if ( ! self::has_event_override( $event_id ) ) {
 			$global = self::global_status();
 			if ( (int) $global['assigned_event_id'] === (int) $event_id ) {
-				return self::process_global_event( (int) $event_id );
+				return self::process_global_event( (int) $event_id, $scheduled );
 			}
 			throw new RuntimeException( 'This event has no inbox override and is not assigned the global inbox.' );
 		}
-		return self::process_source( (int) $event_id, (int) $event_id );
+		return self::process_source( (int) $event_id, (int) $event_id, null, $scheduled );
 	}
 
-	private static function process_global_event( $event_id ) {
+	/** Resolve the source without creating an event override when testing inherited email. */
+	public static function test_event_connection( $event_id ) {
+		if ( self::has_event_override( $event_id ) ) {
+			return self::test_connection( $event_id );
+		}
+		$global = self::global_status();
+		if ( (int) $global['assigned_event_id'] !== (int) $event_id || ! $global['assigned_event_active'] ) {
+			throw new RuntimeException( 'Assign the global inbox to this active event or configure an event-specific inbox before testing.' );
+		}
+		return self::test_connection( 0 );
+	}
+
+	public static function poll_interval_minutes( $value ) {
+		if ( ! preg_match( '/^\d{1,4}$/D', (string) $value ) || (int) $value < 5 || (int) $value > 1440 ) {
+			throw new RuntimeException( 'Enter a polling interval from 5 to 1440 minutes (1 day).' );
+		}
+		return (int) $value;
+	}
+
+	/** Scheduled eligibility is rechecked under the source lock; manual pulls bypass only timing. */
+	private static function poll_due( array $config, $now ) {
+		$interval = self::poll_interval_minutes( $config['settings']['poll_interval_minutes'] ?? 5 );
+		if ( empty( $config['last_checked_at'] ) ) {
+			return true;
+		}
+		$checked = strtotime( $config['last_checked_at'] . ' UTC' );
+		if ( false === $checked ) {
+			throw new RuntimeException( 'The last inbox check timestamp is invalid; inspect the saved inbox status.' );
+		}
+		return $now >= $checked + $interval * 60;
+	}
+
+	private static function process_global_event( $event_id, $scheduled = false ) {
 		global $wpdb;
 		$override = $wpdb->get_var( $wpdb->prepare( 'SELECT event_id FROM ' . RQE::table( 'event_email_settings' ) . ' WHERE event_id=%d', $event_id ) );
 		if ( $wpdb->last_error ) {
@@ -407,10 +446,10 @@ final class RQE_Email_Submissions {
 		if ( null !== $override ) {
 			return 'An explicit event inbox override takes precedence over the global inbox.';
 		}
-		return self::process_source( (int) $event_id, 0, (int) $event_id );
+		return self::process_source( (int) $event_id, 0, (int) $event_id, $scheduled );
 	}
 
-	private static function process_source( $event_id, $settings_id, $expected_global_event = null ) {
+	private static function process_source( $event_id, $settings_id, $expected_global_event = null, $scheduled = false ) {
 		$lock = self::acquire_poll_lock( $settings_id );
 		try {
 			$config = self::configuration( $settings_id, true );
@@ -426,6 +465,9 @@ final class RQE_Email_Submissions {
 			}
 			if ( ! $config['enabled'] ) {
 				throw new RuntimeException( 'Email submission polling is disabled for this inbox.' );
+			}
+			if ( $scheduled && ! self::poll_due( $config, time() ) ) {
+				return 'The next scheduled inbox check is not due yet.';
 			}
 			self::assert_independent_mailbox( $settings_id, $config['settings'] );
 			RQE::begin_transaction();

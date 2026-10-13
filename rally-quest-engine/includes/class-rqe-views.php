@@ -805,48 +805,42 @@ final class RQE_Views {
 			$email_status = RQE_Email_Submissions::configuration_status( $id );
 			$effective_status = $has_override ? $email_status : $global_status;
 			$ready = $effective_status['connected'] && $effective_status['enabled'] && ( $has_override || $assigned );
-			$source_label = $has_override ? 'Event-specific inbox' : 'Global inbox';
-			self::section_open( 'Email Setup', $ready, 'rqe-global-email-summary', $source_label . ' — connection verified' );
-			echo '<div class="rqe-global-email-readonly"><strong>Global inbox (read-only)</strong>';
-			if ( $global_status['configured'] ) {
-				echo '<p>' . esc_html( $global_status['mailbox'] . ' — ' . $global_status['provider_label'] ) . '</p>';
-				echo '<p>' . esc_html( $assigned ? 'Assigned to this event' : ( $global_status['assigned_event'] ? 'Assigned to ' . $global_status['assigned_event'] : 'Not assigned to this event' ) ) . '</p>';
-				echo '<p>' . esc_html( $global_status['connected'] ? 'Connection verified ' . $global_status['last_tested_at'] . ' UTC' : 'Connection not verified' ) . '</p>';
+			$source_label = $has_override ? 'Event Specific Email' : 'Global Email';
+			$panel_class = 'rqe-email-panel' . ( $effective_status['last_test_error'] ? ' rqe-email-connection-failed' : '' );
+			self::section_open( 'Email Setup', $ready, $panel_class, $source_label . ' — connection verified' );
+			echo '<p><strong>Inbox source:</strong> ' . esc_html( $source_label ) . ( $ready ? ' — verified and enabled.' : ' — not ready for polling.' ) . '</p>';
+			if ( $effective_status['configured'] ) {
+				echo '<p>' . esc_html( $effective_status['mailbox'] . ' — ' . $effective_status['provider_label'] ) . '</p>';
 			} else {
-				echo '<p>Global email is not configured.</p>';
+				echo '<p>No usable inbox configuration is saved.</p>';
 			}
-			echo '</div>';
-			self::form( 'event_email_override', array( 'event_id' => $id ) );
-			echo '<label><input type="checkbox" name="event_email_override" value="1"' . checked( $has_override, true, false ) . '> Override global email inbox settings for this event</label><p>Check and save to configure an independent inbox. Uncheck and save to delete this event\'s saved credentials and restore global assignment rules.</p>';
-			self::button( 'Save Email Choice' );
-			echo '</form>';
-			echo '<p><a href="' . esc_url( RQE_Admin::url( 'initial-setup' ) ) . '">Manage global inbox assignment and credentials</a></p>';
-			echo '<p><strong>Inbox source:</strong> ' . esc_html( $source_label ) . ( $ready ? ' — verified and enabled.' : ' — not ready for polling.' ) . '</p></details>';
-		} elseif ( $id ) {
-			echo '<section class="rqe-panel rqe-global-email-summary" aria-labelledby="rqe-global-email-heading"><h2 id="rqe-global-email-heading">Email Setup</h2><div class="rqe-global-email-readonly"><strong>Global inbox (read-only)</strong><p>Only WordPress administrators may view or configure submission inboxes.</p></div></section>';
-		}
-		if ( $id && ! RQE::site_access() ) {
-			echo '<section class="rqe-panel rqe-email-panel"><h2>' . esc_html__( 'Event Inbox Override', 'rally-quest-engine' ) . '</h2><p>' . esc_html__( 'Only WordPress administrators may configure or test an event-specific inbox. Existing event mailboxes continue to override the global inbox.', 'rally-quest-engine' ) . '</p></section>';
-		} elseif ( $id ) {
-			$panel_class = $ready ? ' rqe-email-connected' : ( $email_status['last_test_error'] ? ' rqe-email-connection-failed' : '' );
-			echo '<details class="rqe-panel rqe-email-panel' . esc_attr( $panel_class ) . '"' . ( $ready ? '' : ' open' ) . '><summary><h2>Event Inbox Override</h2>' . ( $ready ? ' <strong>' . esc_html( $source_label . ' — connection verified' ) . '</strong>' : '' ) . '</summary><p>Configure an independent mailbox for this event. A saved event inbox takes precedence over the global inbox and is tested separately.</p><div class="rqe-email-actions"><a class="button button-primary" href="' . esc_url( RQE_Admin::url( 'event-email', array( 'event_id' => $id ) ) ) . '">Configure Event Inbox Override</a>';
-			if ( $email_status['configured'] ) {
-				echo '<span class="rqe-email-summary"><strong>' . esc_html( $email_status['mailbox'] ) . '</strong><span>' . esc_html( $email_status['provider_label'] ) . '</span></span>';
+			$interval = $effective_status['poll_interval_minutes'] ?? null;
+			echo '<p>Scheduled polling: ' . esc_html( null === $interval ? 'unavailable; correct the inbox configuration' : ( $effective_status['enabled'] ? 'every ' . $interval . ' minutes' . ( 1440 === $interval ? ' (1 day)' : '' ) : 'disabled' ) ) . '. Events using global email inherit its interval.</p>';
+			if ( ! $has_override && ! $assigned ) {
+				echo '<p class="rqe-email-error">The global inbox is not assigned to this active event. Assign it in Initial Setup or configure event-specific email.</p>';
+			}
+			echo '<div class="rqe-email-actions"><a class="button button-primary" href="' . esc_url( RQE_Admin::url( 'event-email', array( 'event_id' => $id ) ) ) . '">Configure Event Specific Email</a>';
+			if ( $effective_status['configured'] && ( $has_override || $assigned ) ) {
 				self::form( 'event_email_test', array( 'event_id' => $id ), 'rqe-inline-form' );
-				self::button( 'Test Event Override' );
+				self::button( 'Test Event Email' );
 				echo '</form>';
+				if ( $effective_status['enabled'] ) {
+					self::form( 'event_email_check', array( 'event_id' => $id ), 'rqe-inline-form' );
+					self::button( 'Pull Email Now' );
+					echo '</form>';
+				}
 			}
 			if ( $has_override ) {
 				self::form( 'event_email_clear', array( 'event_id' => $id ), 'rqe-inline-form' );
 				echo '<button type="submit" class="button" data-confirm="Remove this saved event inbox override and its credentials?">Remove Event Inbox Override</button></form>';
 			}
 			echo '</div>';
-			if ( $email_status['connected'] ) {
-				echo '<p class="rqe-email-status"><strong>Connection verified:</strong> ' . esc_html( $email_status['last_tested_at'] ) . ' UTC</p>';
-			} elseif ( $email_status['last_test_error'] ) {
-				echo '<p class="rqe-email-status"><strong>Connection test failed:</strong> ' . esc_html( $email_status['last_test_error'] ) . '</p>';
-			} elseif ( $email_status['configured'] ) {
-				echo '<p class="rqe-email-status">Configuration saved. Test the event override to verify credentials and mailbox access. Saving invalidates its previous connection test.</p>';
+			if ( $effective_status['connected'] ) {
+				echo '<p class="rqe-email-status"><strong>Connection verified:</strong> ' . esc_html( $effective_status['last_tested_at'] ) . ' UTC</p>';
+			} elseif ( $effective_status['last_test_error'] ) {
+				echo '<p class="rqe-email-status"><strong>Connection test failed:</strong> ' . esc_html( $effective_status['last_test_error'] ) . '</p>';
+			} elseif ( $effective_status['configured'] ) {
+				echo '<p class="rqe-email-status">Configuration saved. Test the event email to verify credentials and mailbox access. Saving invalidates its previous connection test.</p>';
 			} elseif ( $has_override ) {
 				echo '<p class="rqe-email-error">A saved event override is incomplete or unreadable. It still takes precedence over the global inbox until removed and must be reconfigured or removed.</p>';
 			} else {
@@ -855,7 +849,13 @@ final class RQE_Views {
 			if ( $has_override && ! $email_status['enabled'] ) {
 				echo '<p class="rqe-email-error"><strong>Event override polling is disabled.</strong> This explicit override takes precedence over the global inbox, so this event will not poll either inbox until the override is enabled or removed.</p>';
 			}
+			if ( ! empty( $effective_status['last_error'] ) ) {
+				echo '<p class="rqe-email-error"><strong>Last inbox pull failed:</strong> ' . esc_html( $effective_status['last_error'] ) . '</p>';
+			}
+			echo '<p><a href="' . esc_url( RQE_Admin::url( 'initial-setup' ) ) . '">Manage global email and assignment</a></p>';
 			echo '</details>';
+		} elseif ( $id ) {
+			echo '<section class="rqe-panel rqe-email-panel"><h2>Email Setup</h2><p>Only WordPress administrators may view, configure, test or pull submission inboxes.</p></section>';
 		}
 		if ( $id ) {
 			self::status_catalog( $id, 'event', 'Event Status Customization' );
@@ -965,7 +965,9 @@ final class RQE_Views {
 		foreach ( array( 'imap' => 'IMAP', 'gmail' => 'Gmail API', 'microsoft' => 'Microsoft 365 / Graph API' ) as $value => $label ) {
 			echo '<option value="' . esc_attr( $value ) . '"' . selected( $config['provider'], $value, false ) . '>' . esc_html( $label ) . '</option>';
 		}
-		echo '</select></label><label><input type="checkbox" name="enabled" value="1"' . checked( 1, $config['enabled'], false ) . '> Enable scheduled inbox polling every five minutes</label>';
+		echo '</select></label><label><input type="checkbox" name="enabled" value="1"' . checked( 1, $config['enabled'], false ) . '> Enable scheduled inbox polling</label>';
+		self::field( 'Polling interval (minutes)', 'poll_interval_minutes', RQE_Email_Submissions::poll_interval_minutes( $settings['poll_interval_minutes'] ?? 5 ), 'number', true, array( 'min' => 5, 'max' => 1440, 'step' => 1 ) );
+		echo '<p>Choose 5 to 1440 minutes (1 day). Automatic checks run on the five-minute dispatcher after the interval has elapsed and depend on site cron execution. Pull Email Now bypasses the interval, not inbox safety checks.</p>';
 		echo '<div class="rqe-email-setup-layout"><div class="rqe-email-setup-fields">';
 		self::field( 'Submission mailbox email', 'mailbox', $settings['mailbox'] ?? '', 'email', true, array( 'maxlength' => 254 ) );
 		echo '<div data-email-provider-types="imap"' . ( 'imap' === $config['provider'] ? '' : ' hidden' ) . '><h3>IMAP settings</h3>';
@@ -1542,8 +1544,8 @@ final class RQE_Views {
 	private static function event_protection( array $event, $context_tab ) {
 		$id = (int) $event['id'];
 		$state = ! empty( $event['is_archived'] ) ? 'archived' : ( ! empty( $event['is_locked'] ) ? 'locked' : 'open' );
-		$labels = array( 'open' => 'Open', 'locked' => 'Locked', 'archived' => 'Locked & Archived' );
-		echo '<details class="rqe-panel rqe-event-protection rqe-protection-' . esc_attr( $state ) . '"><summary><h3>Event Protection and Certificates</h3> <strong>' . esc_html( $labels[ $state ] ) . '</strong></summary><p>Archive hides the event by default and locks results. Unarchiving keeps it locked. Locking does not automatically finalize preliminary statuses.</p>';
+		$labels = array( 'open' => 'Active', 'locked' => 'Locked', 'archived' => 'Locked & Archived' );
+		echo '<details class="rqe-panel rqe-event-protection rqe-protection-' . esc_attr( $state ) . '" open><summary><h3>Event Protection and Certificates</h3> <strong>' . esc_html( $labels[ $state ] ) . '</strong></summary><p>Archive hides the event by default and locks results. Unarchiving keeps it locked. Locking does not automatically finalize preliminary statuses.</p>';
 		self::form( 'event_state', array( 'event_id' => $id, 'context_tab' => $context_tab, 'return_url' => '' ), 'rqe-inline-form' );
 		if ( 'open' === $state ) {
 			echo '<button class="button" name="state_action" value="lock" data-confirm="Lock this event and prevent result changes?">Lock Event</button> ';

@@ -4,7 +4,7 @@ Tags: rally, scavenger hunt, motorcycle, bicycle, geocache
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.4.1
+Stable tag: 0.4.2
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -328,21 +328,31 @@ its events in the header and press Set Event; this event persists per user
 and site across Rosters, Scoring and Results until changed. Changing the
 header event clears record filters; already-open forms keep their own event.
 Two-column event configuration places Event Details and Event Administrator /
-Scorer assignments on the left. The right side shows a grey read-only global
-inbox summary and Event Inbox Override controls, followed immediately by Event
+Scorer assignments on the left. The right side shows one Email Setup section
+identifying Global Email or Event Specific Email, followed immediately by Event
 Status and Registration Status customization. Columns stack on small screens.
 A saved event override takes precedence over the global inbox, including when
 its polling is disabled, until a site administrator removes it. Configure,
 test or remove an override from Event Configuration. Configured does not imply
 Connection verified, and failed tests remain expanded.
-When the effective inbox is verified and enabled, both email sections become
-green and minimized, identifying Global or Event-specific inbox use. Global
+When the effective inbox is verified and enabled, Email Setup becomes
+green and minimized, identifying Global Email or Event Specific Email use. Global
 email also requires assignment to this active event.
-Event Protection and Certificates appears minimized below the event embed
+Event Protection and Certificates appears expanded below the event embed
 section and on Results, sharing the same saved state and certificate actions.
-Its summary shows Open (green), Locked (yellow), or Locked & Archived (blue).
+Its summary shows Active (green), Locked (yellow), or Locked & Archived (blue).
 Changes return to the invoking screen and appear in both places; existing
 lock, unlock and archive permissions are retained.
+Email Setup provides Configure Event Specific Email, Test Event Email,
+Pull Email Now and Remove Event Inbox Override actions when applicable.
+Testing/pulling resolve the effective global or event-specific source; removal
+deletes only the event override. Actions return to Event Configuration.
+Each inbox independently accepts a polling interval of 5 to 1440 whole minutes
+(1 day). Global-email events inherit the global interval. Legacy inboxes default
+to five minutes. The five-minute dispatcher polls only due sources, rechecking
+under the source lock. Actual timing depends on site cron. Successful and failed
+pulls restart the interval; manual pulls bypass timing but not disabled inbox,
+event protection, mailbox conflict or ingestion safety checks.
 
 The global inbox can be assigned to one unlocked, unarchived event at a time;
 this assignment is independent of the page-header event selector. Event inbox
@@ -484,6 +494,13 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.4.2 =
+* Consolidate event email into one Email Setup section with source-aware configure, test, pull-now and override removal actions; retain Initial Setup/email return paths.
+* Minimize and shade the single verified enabled email section green, identifying Global Email or Event Specific Email without exposing credentials to event roles.
+* Default shared Event Protection and Certificates to expanded and rename Open to Active, retaining existing state colors and permissions.
+* Add independent 5-to-1440-minute polling intervals stored with encrypted inbox settings; global-email events inherit the global interval and legacy inboxes default to five minutes.
+* Gate automatic polling by elapsed time under the source lock while retaining manual pulling and all runtime safeguards; add scheduling and navigation regressions without a schema migration.
 
 = 0.4.1 =
 * Display the number of applicable overridden checks on Initial Setup and Diagnostics, including a labeled last-check count after private reports expire.

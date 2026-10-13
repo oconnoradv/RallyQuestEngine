@@ -64,6 +64,12 @@ final class Email_Submission_Test_DB {
 		return null;
 	}
 	public function get_col( $query ) {
+		if ( is_string( $query ) && strpos( $query, 'SELECT s.event_id FROM event_email_settings' ) === 0 ) {
+			return array_keys( array_filter( $this->tables['event_email_settings'], function ( $row ) {
+				$event = $this->tables['events'][ (int) $row['event_id'] ] ?? null;
+				return $event && ! empty( $row['enabled'] ) && empty( $event['is_locked'] ) && empty( $event['is_archived'] );
+			} ) );
+		}
 		$args = $query['args'];
 		if ( strpos( $query['sql'], 'SELECT event_id FROM event_email_settings' ) !== false ) {
 			return array_keys( array_filter( $this->tables['event_email_settings'], function ( $row ) use ( $args ) { return ! empty( $row['enabled'] ) && (int) $row['event_id'] !== (int) $args[0]; } ) );
@@ -283,6 +289,63 @@ check( $status['connected'] && 'Gmail API (OAuth)' === $status['provider_label']
 	unset( $wpdb->tables['event_email_settings'][8] );
 	$GLOBALS['global_empty_fixture'] = true;
 	check( strpos( RQE_Email_Submissions::process_event( 8 ), '0 new message(s)' ) !== false && $wpdb->tables['event_email_settings'][0]['last_checked_at'], 'manual checks resolve the assigned global source and update its own polling status' );
+	$before = count( $GLOBALS['email_test_requests'] );
+	$last_checked = $wpdb->tables['event_email_settings'][0]['last_checked_at'];
+	check( strpos( RQE_Email_Submissions::process_event( 8, true ), 'not due yet' ) !== false && count( $GLOBALS['email_test_requests'] ) === $before && $wpdb->tables['event_email_settings'][0]['last_checked_at'] === $last_checked, 'scheduled inherited polls skip before their interval without provider requests or timestamp changes' );
+	check( strpos( RQE_Email_Submissions::process_event( 8 ), '0 new message(s)' ) !== false && count( $GLOBALS['email_test_requests'] ) > $before, 'manual pulls bypass interval timing for the effective source' );
+	$config = RQE_Email_Submissions::configuration( 0, true );
+	$config['last_checked_at'] = '2026-10-13 00:00:00';
+	$now = strtotime( '2026-10-13 00:00:00 UTC' );
+	check( ! invoke_private( 'poll_due', $config, $now + 299 ) && invoke_private( 'poll_due', $config, $now + 300 ), 'legacy inboxes become due at exactly five minutes' );
+	$config['settings']['poll_interval_minutes'] = 1440;
+	check( ! invoke_private( 'poll_due', $config, $now + 86399 ) && invoke_private( 'poll_due', $config, $now + 86400 ), 'daily inboxes become due at exactly one day' );
+	$config['last_checked_at'] = null;
+	check( invoke_private( 'poll_due', $config, $now ), 'an inbox that has never been checked is immediately due' );
+	$config['last_checked_at'] = 'not-a-date';
+	try {
+		invoke_private( 'poll_due', $config, $now );
+		throw new LogicException( 'Invalid polling timestamp accepted.' );
+	} catch ( RuntimeException $exception ) {
+		check( strpos( $exception->getMessage(), 'timestamp is invalid' ) !== false, 'invalid saved timestamps produce an explicit failure rather than a fabricated eligibility result' );
+	}
+	foreach ( array( '4', '1441', '5.5', '-5', '', 'abc' ) as $invalid ) {
+		try {
+			RQE_Email_Submissions::poll_interval_minutes( $invalid );
+			throw new LogicException( 'Invalid interval accepted.' );
+		} catch ( RuntimeException $exception ) {
+			check( strpos( $exception->getMessage(), '5 to 1440' ) !== false, 'invalid polling interval rejected: ' . $invalid );
+		}
+	}
+	check( RQE_Email_Submissions::poll_interval_minutes( '5' ) === 5 && RQE_Email_Submissions::poll_interval_minutes( '1440' ) === 1440, 'both polling interval limits are accepted' );
+	RQE_Email_Submissions::save_configuration( 0, array(
+		'provider' => 'gmail', 'enabled' => '1', 'mailbox' => 'global@example.test', 'client_id' => 'global-client-id',
+		'client_secret' => '', 'refresh_token' => '', 'poll_interval_minutes' => '1440',
+	) );
+	check( RQE_Email_Submissions::configuration( 0 )['settings']['poll_interval_minutes'] === 1440 && RQE_Email_Submissions::configuration( 7 )['settings']['poll_interval_minutes'] === 5, 'global and event intervals persist independently in encrypted settings' );
+	$wpdb->tables['event_email_settings'][0]['last_checked_at'] = gmdate( 'Y-m-d H:i:s', time() - 86400 );
+	$before = count( $GLOBALS['email_test_requests'] );
+	check( strpos( RQE_Email_Submissions::process_event( 8, true ), '0 new message(s)' ) !== false && count( $GLOBALS['email_test_requests'] ) > $before, 'due daily global polls resolve the inherited source and contact the provider' );
+	$wpdb->tables['event_email_settings'][7]['last_checked_at'] = gmdate( 'Y-m-d H:i:s' );
+	$event_checked = $wpdb->tables['event_email_settings'][7]['last_checked_at'];
+	$before = count( $GLOBALS['email_test_requests'] );
+	RQE_Email_Submissions::process_all();
+	check( count( $GLOBALS['email_test_requests'] ) === $before, 'the real dispatcher skips both independent sources while their intervals have not elapsed' );
+	$wpdb->tables['event_email_settings'][0]['last_checked_at'] = gmdate( 'Y-m-d H:i:s', time() - 86400 );
+	$before = count( $GLOBALS['email_test_requests'] );
+	RQE_Email_Submissions::process_all();
+	check( count( $GLOBALS['email_test_requests'] ) > $before && $wpdb->tables['event_email_settings'][7]['last_checked_at'] === $event_checked, 'the dispatcher polls a due daily global source without polling the not-yet-due event override' );
+	$before = count( $GLOBALS['email_test_requests'] );
+	$last_checked = $wpdb->tables['event_email_settings'][0]['last_checked_at'];
+	RQE_Email_Submissions::process_all();
+	check( count( $GLOBALS['email_test_requests'] ) === $before && $wpdb->tables['event_email_settings'][0]['last_checked_at'] === $last_checked, 'a subsequent dispatcher run rechecks eligibility and does not duplicate provider reads' );
+	$GLOBALS['email_options']['rqe_submission_poll_lock_0'] = time() . ':' . str_repeat( 'a', 32 );
+	try {
+		RQE_Email_Submissions::process_event( 8, true );
+		throw new LogicException( 'Concurrent scheduled request acquired the source lock.' );
+	} catch ( RuntimeException $exception ) {
+		check( strpos( $exception->getMessage(), 'another request' ) !== false && count( $GLOBALS['email_test_requests'] ) === $before && $wpdb->tables['event_email_settings'][0]['last_checked_at'] === $last_checked, 'concurrent scheduled requests cannot read messages or advance the active source timestamp' );
+	}
+	unset( $GLOBALS['email_options']['rqe_submission_poll_lock_0'] );
 	$GLOBALS['global_empty_fixture'] = false;
 	$before = count( $GLOBALS['email_test_requests'] );
 	try {

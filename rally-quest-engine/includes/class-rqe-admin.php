@@ -288,8 +288,8 @@ final class RQE_Admin {
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
 					$input = array();
-					foreach ( array( 'provider', 'enabled', 'mailbox', 'host', 'port', 'encryption', 'username', 'folder', 'password', 'client_id', 'client_secret', 'refresh_token', 'tenant_id' ) as $key ) {
-						$input[ $key ] = self::posted( $key );
+					foreach ( array( 'provider', 'enabled', 'poll_interval_minutes', 'mailbox', 'host', 'port', 'encryption', 'username', 'folder', 'password', 'client_id', 'client_secret', 'refresh_token', 'tenant_id' ) as $key ) {
+						$input[ $key ] = self::posted( $key, 'poll_interval_minutes' === $key ? '5' : '' );
 					}
 					$message = RQE_Email_Submissions::save_configuration( $extra['event_id'], $input );
 					$tab = 'event-edit';
@@ -298,8 +298,8 @@ final class RQE_Admin {
 					$return_url = '';
 					self::require_site_admin();
 					$input = array();
-					foreach ( array( 'provider', 'enabled', 'mailbox', 'host', 'port', 'encryption', 'username', 'folder', 'password', 'client_id', 'client_secret', 'refresh_token', 'tenant_id' ) as $key ) {
-						$input[ $key ] = self::posted( $key );
+					foreach ( array( 'provider', 'enabled', 'poll_interval_minutes', 'mailbox', 'host', 'port', 'encryption', 'username', 'folder', 'password', 'client_id', 'client_secret', 'refresh_token', 'tenant_id' ) as $key ) {
+						$input[ $key ] = self::posted( $key, 'poll_interval_minutes' === $key ? '5' : '' );
 					}
 					$message = RQE_Email_Submissions::save_configuration( 0, $input );
 					$tab = 'initial-setup';
@@ -320,21 +320,23 @@ final class RQE_Admin {
 					$tab = 'initial-setup';
 					break;
 				case 'event_email_check':
+					$return_url = '';
 					self::require_site_admin();
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
 					$message = RQE_Email_Submissions::process_event( $extra['event_id'] );
-					$tab = RQE_Email_Submissions::has_event_override( $extra['event_id'] ) ? 'event-email' : 'initial-setup';
+					$tab = 'event-edit';
 					break;
 				case 'event_email_test':
 					$return_url = '';
 					self::require_site_admin();
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
-					$message = RQE_Email_Submissions::test_connection( $extra['event_id'] );
+					$message = RQE_Email_Submissions::test_event_connection( $extra['event_id'] );
 					$tab = 'event-edit';
 					break;
 				case 'event_email_clear':
+					$return_url = '';
 					self::require_site_admin();
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					self::require_event( $extra['event_id'] );
@@ -572,7 +574,7 @@ final class RQE_Admin {
 				wp_safe_redirect( self::url( 'event-email', array( 'event_id' => $extra['event_id'], 'error' => $e->getMessage() ) ) );
 				exit;
 			}
-			if ( in_array( $op, array( 'event_email_test', 'event_email_clear' ), true ) && ! empty( $extra['event_id'] ) && RQE::event_access( $extra['event_id'] ) && RQE::row( 'events', $extra['event_id'] ) ) {
+			if ( in_array( $op, array( 'event_email_test', 'event_email_check', 'event_email_clear' ), true ) && ! empty( $extra['event_id'] ) && RQE::event_access( $extra['event_id'] ) && RQE::row( 'events', $extra['event_id'] ) ) {
 				wp_safe_redirect( self::url( 'event-edit', array( 'event_id' => $extra['event_id'], 'error' => $e->getMessage() ) ) );
 				exit;
 			}
