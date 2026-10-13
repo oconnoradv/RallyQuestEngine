@@ -184,6 +184,6 @@ $GLOBALS['transients']['rqe_configuration_1']['rows'][0]['status'] = 'failed';
 $GLOBALS['transients']['rqe_configuration_1']['rows'][0]['detail'] = 'The runtime check failed.';
 RQE_Setup::set_setup_override( true, $GLOBALS['transients']['rqe_configuration_1']['rows'], '2026-10-09 21:05:00' );
 $html = render_configuration();
-check( RQE_Setup::diagnostics_complete() && strpos( $html, 'Setup override active' ) !== false && strpos( $html, 'rqe-configuration-failed-row' ) !== false && strpos( $html, 'runtime validation and safety checks are never bypassed' ) !== false, 'setup override records readiness only while the failed diagnostic row and runtime protections remain visible' );
+check( RQE_Setup::diagnostics_complete() && strpos( $html, 'Setup override active' ) !== false && strpos( $html, 'rqe-configuration-failed-row' ) !== false && strpos( $html, 'runtime validation, polling eligibility and import safety checks are never bypassed' ) !== false, 'setup override records readiness only while the failed diagnostic row and runtime protections remain visible' );
 RQE_Setup::set_setup_override( false, $GLOBALS['transients']['rqe_configuration_1']['rows'], '2026-10-09 21:05:00' );
 check( ! RQE_Setup::diagnostics_complete() && strpos( render_configuration(), 'rqe-configuration-failed" id="rqe-configuration" open' ) !== false, 'removing setup override restores failed readiness and expanded diagnostics' );
