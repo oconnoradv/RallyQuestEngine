@@ -4,6 +4,7 @@ define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
 define( 'RQE_VERSION', 'test' );
 define( 'RQE_FILE', __DIR__ . '/../rally-quest-engine/rally-quest-engine.php' );
+$GLOBALS['test_options'] = array();
 
 final class Event_Test_DB {
 	public $prefix = '';
