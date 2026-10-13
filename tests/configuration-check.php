@@ -169,6 +169,7 @@ $_SERVER['REQUEST_METHOD'] = 'GET';
 try { RQE_Admin::diagnostics_check(); throw new LogicException( 'GET mutation accepted.' ); }
 catch ( RuntimeException $exception ) { check( strpos( $exception->getMessage(), 'Only WordPress' ) !== false, 'check endpoint requires POST' ); }
 
+$GLOBALS['user_id'] = 1;
 $GLOBALS['transients']['rqe_configuration_1'] = array(
 	'checked_at' => '2026-10-09 21:00:00',
 	'rows' => array(
