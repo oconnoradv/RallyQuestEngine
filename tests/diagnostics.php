@@ -166,7 +166,7 @@ $audit_end = strpos( $html, '</details>', $audit_start );
 check( strpos( substr( $html, $audit_start, $audit_end - $audit_start ), 'Date/time (UTC)' ) !== false && $audit_end < strpos( $html, '<h3>Destructive operations' ), 'collapsed audit contains the existing history table without hiding destructive actions' );
 check( strpos( $html, 'Delete Virus Scan Audit Data' ) !== false && strpos( $html, 'reset remembered ClamAV overrides' ) !== false, 'audit deletion describes override reset and retained deletion record' );
 check( substr_count( $html, 'name="verification_hash"' ) === 6 && substr_count( $html, 'rqe-delete-verification' ) === 6, 'each action retains separate server verification and dialog content' );
-check( substr_count( $html, 'name="_wpnonce"' ) === 9, 'configuration check, exports and destructive operations retain nonce fields' );
+check( substr_count( $html, 'name="_wpnonce"' ) === 8, 'exports and destructive operations retain nonce fields' );
 check( false === strpos( $html, 'id="rqe-configuration"' ), 'environment checks are available on Initial Setup, not Diagnostics' );
 $operations = array( 'all', 'bikes', 'roster', 'bonus_points', 'rider', 'audit' );
 foreach ( $operations as $suffix ) {
