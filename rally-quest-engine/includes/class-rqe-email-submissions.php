@@ -210,7 +210,7 @@ final class RQE_Email_Submissions {
 		$locks = self::acquire_configuration_locks( $event_id ? array( 0, $event_id ) : array( 0 ) );
 		try {
 			$exists = $wpdb->get_var( $wpdb->prepare( 'SELECT event_id FROM ' . RQE::table( 'event_email_settings' ) . ' WHERE event_id=%d', $event_id ) );
-			$result = $exists ? $wpdb->update( RQE::table( 'event_email_settings' ), $data, array( 'event_id' => $event_id ) ) : $wpdb->insert( RQE::table( 'event_email_settings' ), array_merge( array( 'event_id' => $event_id ), $data ) );
+			$result = null !== $exists ? $wpdb->update( RQE::table( 'event_email_settings' ), $data, array( 'event_id' => $event_id ) ) : $wpdb->insert( RQE::table( 'event_email_settings' ), array_merge( array( 'event_id' => $event_id ), $data ) );
 			if ( false === $result ) {
 				throw new RuntimeException( 'The event email configuration could not be saved.' );
 			}
