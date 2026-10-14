@@ -16,11 +16,15 @@ final class RQE_Diagnostics_Deletion_Service {
 			RQE_Event_State::protect_deletion( $operation, $input );
 			switch ( $operation ) {
 				case 'diagnostics_delete_all':
+					$submission_rows = $wpdb->get_results( 'SELECT event_id,image_file FROM ' . RQE::table( 'bonus_submissions' ), ARRAY_A );
+					if ( ! is_array( $submission_rows ) || $wpdb->last_error ) { throw new RuntimeException( 'Submission proofs could not be read for deletion.' ); }
+					$private_rows = array_filter( $submission_rows, function ( $row ) { return 0 === strpos( (string) $row['image_file'], 'p-' ); } );
+					$staged_submission_files = RQE_Bonus::stage_submission_files( $private_rows );
 					$staged_gallery = RQE_Bonus::stage_all_storage_removal();
 					$all_galleries = true;
 					RQE_Admin::checked( $wpdb->query( 'DELETE FROM ' . RQE::table( 'bonus_submissions' ) ) );
 					RQE_Admin::checked( $wpdb->query( 'DELETE FROM ' . RQE::table( 'bonus_points' ) ) );
-					foreach ( array( 'certificate_mail', 'registrations', 'status_options', 'event_email_settings', 'event_scorers', 'rider_bikes', 'horses', 'event_admins', 'events', 'riders', 'bikes' ) as $table ) {
+					foreach ( array( 'certificate_history', 'participant_requests', 'participant_links', 'certificate_mail', 'registrations', 'status_options', 'event_email_settings', 'event_scorers', 'rider_bikes', 'horses', 'event_admins', 'events', 'riders', 'bikes' ) as $table ) {
 						RQE_Admin::checked( $wpdb->query( 'DELETE FROM ' . RQE::table( $table ) ) );
 					}
 					$message = 'All application data was deleted. Audit history and ClamAV overrides were retained.';
@@ -38,11 +42,17 @@ final class RQE_Diagnostics_Deletion_Service {
 					RQE_Admin::checked( $wpdb->delete( RQE::table( 'bonus_submissions' ), array( 'event_id' => $event_id ) ) );
 					RQE_Admin::checked( $wpdb->delete( RQE::table( 'registrations' ), array( 'event_id' => $event_id ) ) );
 					RQE_Admin::checked( $wpdb->delete( RQE::table( 'certificate_mail' ), array( 'event_id' => $event_id ) ) );
+					RQE_Admin::checked( $wpdb->delete( RQE::table( 'certificate_history' ), array( 'event_id' => $event_id ) ) );
+					RQE_Admin::checked( $wpdb->delete( RQE::table( 'participant_requests' ), array( 'event_id' => $event_id ) ) );
 					$message = 'The selected event roster and its participant bonus submissions were deleted.';
 					break;
 				case 'diagnostics_delete_bonus_points':
 					$event_id = RQE_Admin::integer( $input['event_id'] ?? '', 1 );
 					RQE_Admin::require_event( $event_id );
+					$submission_rows = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,image_file FROM ' . RQE::table( 'bonus_submissions' ) . ' WHERE event_id=%d', $event_id ), ARRAY_A );
+					if ( ! is_array( $submission_rows ) || $wpdb->last_error ) { throw new RuntimeException( 'Submission proofs could not be read for deletion.' ); }
+					$private_rows = array_filter( $submission_rows, function ( $row ) { return 0 === strpos( (string) $row['image_file'], 'p-' ); } );
+					$staged_submission_files = RQE_Bonus::stage_submission_files( $private_rows );
 					$staged_gallery = RQE_Bonus::stage_event_storage_removal( $event_id );
 					$gallery_event_id = $event_id;
 					RQE_Admin::checked( $wpdb->query( $wpdb->prepare(
@@ -61,6 +71,8 @@ final class RQE_Diagnostics_Deletion_Service {
 					}
 					$submission_rows = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,image_file FROM ' . RQE::table( 'bonus_submissions' ) . ' WHERE rider_id=%d', $rider_id ), ARRAY_A );
 					RQE_Admin::checked( $wpdb->delete( RQE::table( 'certificate_mail' ), array( 'rider_id' => $rider_id ) ) );
+					RQE_Admin::checked( $wpdb->delete( RQE::table( 'certificate_history' ), array( 'rider_id' => $rider_id ) ) );
+					RQE_Participants::unlink_rider( $rider_id );
 					$staged_submission_files = RQE_Bonus::stage_submission_files( $submission_rows ?: array() );
 					RQE_Admin::checked( $wpdb->delete( RQE::table( 'bonus_submissions' ), array( 'rider_id' => $rider_id ) ) );
 					RQE_Admin::checked( $wpdb->delete( RQE::table( 'registrations' ), array( 'rider_id' => $rider_id ) ) );
@@ -114,5 +126,5 @@ final class RQE_Diagnostics_Deletion_Service {
 		}
 		return $message;
 	}
-
+
 }

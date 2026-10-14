@@ -22,7 +22,7 @@ final class RQE_Views {
 		echo '<a href="' . esc_url( RQE_Admin::url( $tab, $extra ) ) . '">' . esc_html( (string) $label ) . '</a>';
 	}
 
-	private static function form( $op, $hidden = array(), $class = '', $id = '', $enctype = '' ) {
+	public static function form( $op, $hidden = array(), $class = '', $id = '', $enctype = '' ) {
 		$return_url = RQE_Admin::query( 'return_url' );
 		if ( $return_url && ! isset( $hidden['return_url'] ) ) {
 			$hidden['return_url'] = $return_url;
@@ -183,10 +183,14 @@ final class RQE_Views {
 			if ( ( ! $site_admin && in_array( $key, $shared, true ) ) || ( $scorer_only && ! in_array( $key, array( 'scoring', 'about' ), true ) ) ) {
 				continue;
 			}
-			$tone = in_array( $key, array( 'initial-setup', 'about' ), true ) ? 'green' : ( in_array( $key, array( 'events', 'rosters', 'scoring', 'results' ), true ) ? 'blue' : ( 'diagnostics' === $key ? 'orange' : '' ) );
+			$tone = 'initial-setup' === $key ? RQE_Setup::tab_status() : ( 'about' === $key ? 'green' : ( in_array( $key, array( 'events', 'rosters', 'scoring', 'results' ), true ) ? 'blue' : ( 'diagnostics' === $key ? 'orange' : '' ) ) );
 			echo '<a class="nav-tab' . ( $key === $tab ? ' nav-tab-active' : '' ) . ( $tone ? ' rqe-tab-' . esc_attr( $tone ) : '' ) . '"' . ( $key === $tab ? ' aria-current="page"' : '' ) . ' href="' . esc_url( RQE_Admin::url( $key ) ) . '">' . esc_html( $label ) . '</a>';
 		}
 		echo '</nav>';
+		if ( $site_admin ) {
+			$setup_labels = array( 'green' => 'Ready', 'orange' => 'Needs attention', 'red' => 'Critical prerequisite failed' );
+			echo '<p class="rqe-setup-status">Initial Setup: <strong>' . esc_html( $setup_labels[ RQE_Setup::tab_status() ] ) . '</strong></p>';
+		}
 		self::notice();
 		if ( $scorer_only ) {
 			echo '<p class="rqe-note">Event Scorer access: review submissions and view scoring data only for your assigned events.</p>';
@@ -796,6 +800,7 @@ final class RQE_Views {
 			}
 			self::public_results_embed( $event );
 			self::event_protection( $event, 'event-edit' );
+			RQE_Participant_Views::administration( $event );
 		}
 		echo '</div><div>';
 		if ( $id && RQE::site_access() ) {
@@ -1610,6 +1615,30 @@ final class RQE_Views {
 			echo '</td></tr>';
 		}
 		self::end_table();
+		self::certificate_history( $id );
+	}
+
+	private static function certificate_history( $event_id ) {
+		$page = RQE_Admin::query( 'history_page', '1' );
+		$history = RQE_Certificate_History::page( $event_id, RQE_Admin::integer( $page, 1 ) );
+		echo '<details class="rqe-panel" open><summary><h3>Certificate History</h3></summary><p>Print and PDF entries record generation, not confirmed physical printing. Email Sent means accepted by the mail system, not recipient delivery. History is retained independently of temporary email queues. Deletion does not change scores or allow duplicate email sends.</p>';
+		if ( ! $history['rows'] ) {
+			echo '<p>No certificate history recorded.</p>';
+		} else {
+			self::table( array( 'Time (UTC)', 'Participant', 'Operation', 'Outcome', 'Detail', 'Delete' ) );
+			foreach ( $history['rows'] as $row ) {
+				echo '<tr><td>' . esc_html( $row['created_at'] ) . '</td><td>' . esc_html( $row['participant_name'] ) . '</td><td>' . esc_html( $row['operation'] ) . '</td><td>' . esc_html( $row['outcome'] ) . '</td><td>' . esc_html( $row['detail'] ) . '</td><td>';
+				self::form( 'certificate_history_delete', array( 'event_id' => $event_id, 'id' => $row['id'] ) );
+				echo '<label><input type="checkbox" name="confirmed" value="1" required> Confirm deletion</label> <button class="button" data-confirm="Permanently delete this certificate history entry? Delivery records and scores will not change.">Delete history</button></form></td></tr>';
+			}
+			self::end_table();
+			echo '<p>Page ' . (int) $history['page'] . ' of ' . (int) $history['pages'] . ' (' . (int) $history['total'] . ' entries)';
+			foreach ( array( 'Previous' => $history['page'] - 1, 'Next' => $history['page'] + 1 ) as $label => $number ) {
+				if ( $number >= 1 && $number <= $history['pages'] ) { echo ' · <a href="' . esc_url( RQE_Admin::url( 'results', array( 'event_id' => $event_id, 'history_page' => $number ) ) ) . '">' . esc_html( $label ) . '</a>'; }
+			}
+			echo '</p>';
+		}
+		echo '</details>';
 	}
 
 	public static function render_rider_score() {
@@ -1656,13 +1685,13 @@ final class RQE_Views {
 		$riders = self::queries()->diagnostic_riders();
 		echo '<h2>Diagnostics</h2><p>Check the environment, acknowledge Manual Review items, export application data, create a restorable database backup, or permanently remove scoped plugin data. The same configuration checks are available on Initial Setup.</p>';
 		self::configuration_check();
-		echo '<div class="rqe-grid">';
+		echo '<details class="rqe-diagnostics-section"><summary><h3>Backup &amp; Export</h3></summary><div class="rqe-destructive-grid">';
 		foreach ( array( 'json' => array( 'Export Data', 'Download all plugin table data as JSON.' ), 'sql' => array( 'Database Backup', 'Download plugin table definitions and data as restorable SQL.' ) ) as $type => $details ) {
 			echo '<details class="rqe-panel rqe-diagnostics-section"><summary><h3>' . esc_html( $details[0] ) . '</h3></summary><p>' . esc_html( $details[1] ) . '</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="rqe_diagnostics_download"><input type="hidden" name="download_type" value="' . esc_attr( $type ) . '">';
 			wp_nonce_field( 'rqe_diagnostics_download' );
 			echo '<button class="button button-primary">Download ' . esc_html( strtoupper( $type ) ) . '</button></form></details>';
 		}
-		echo '</div><details class="rqe-administrative-audit"><summary><h3>Administrative Audit</h3></summary><p>Latest 100 records, with usernames and timestamps in UTC. Exports and database backups include the full audit table. Ordinary data deletions retain audit history and recorded bypass choices. Deleting virus-scan audit data resets all overrides and leaves a new deletion record.</p>';
+		echo '</div></details><details class="rqe-administrative-audit"><summary><h3>Administrative Audit</h3></summary><p>Latest 100 records, with usernames and timestamps in UTC. Exports and database backups include the full audit table. Ordinary data deletions retain audit history and recorded bypass choices. Deleting virus-scan audit data resets all overrides and leaves a new deletion record.</p>';
 		$audit_rows = self::queries()->recent_audit();
 		self::table( array( 'User ID', 'Username', 'Date/time (UTC)', 'Event ID', 'Action', 'Details' ) );
 		foreach ( $audit_rows as $audit_row ) {
@@ -1674,7 +1703,8 @@ final class RQE_Views {
 		}
 		self::end_table();
 		echo '</details>';
-		echo '<details class="rqe-diagnostics-section"><summary><h3>Destructive operations</h3></summary><div class="notice notice-error inline"><p>These operations cannot be undone. Download a database backup first. Each operation requires a randomized verification string and is recorded in the audit log.</p></div><div class="rqe-destructive-grid">';
+		echo '<details class="rqe-diagnostics-section"><summary><h3>Destructive Operations</h3></summary><div class="notice notice-error inline"><p>These operations cannot be undone. Download a database backup first. Each operation requires a randomized verification string and is recorded in the audit log.</p></div><div class="rqe-destructive-grid">';
+		self::diagnostics_delete_form( 'diagnostics_delete_certificate_history', 'Delete all event certificate history', 'Removes all retained print, PDF and email certificate history. Delivery queues, duplicate-send protection and scores are preserved.', '' );
 		self::diagnostics_delete_form( 'diagnostics_delete_all', 'Delete All Data', 'Delete application data, including administrator assignments. Import audit records and recorded bypass choices are retained.', array() );
 		self::diagnostics_delete_form( 'diagnostics_delete_bikes', 'Delete All Bike Data', 'Delete the motorcycle catalog and every rider-motorcycle assignment.', array() );
 		$event_options = '<option value="">Choose an event</option>';
@@ -1711,12 +1741,16 @@ final class RQE_Views {
 			}
 		}
 		$override = ! empty( $shared_state['setup_override'] );
+		$critical_failed = $has_report ? RQE_Setup::critical_failures( $report['rows'] ) : (int) ( $shared_state['critical_failed_count'] ?? 0 );
 		$overridden_count = $has_report ? RQE_Setup::overridden_count( $report['rows'], $ignored_reviews, $override ) : ( isset( $shared_state['overridden_count'] ) ? (int) $shared_state['overridden_count'] : null );
-		$display_state = $override ? 'passed' : $state;
+		$display_state = $critical_failed ? 'failed' : ( $override && RQE_Setup::diagnostics_complete() ? 'passed' : $state );
 		$review_count = 0;
 		$failed_count = 0;
 		if ( $has_report ) {
 			foreach ( $report['rows'] as $row ) {
+				if ( RQE_Setup::critical( $row ) && 'passed' !== $row['status'] ) {
+					echo '<p class="rqe-check-failed"><strong>' . esc_html( $row['name'] ) . ': critical safety prerequisite; cannot be overridden.</strong></p>';
+				}
 				$review_count += 'review' === $row['status'] ? 1 : 0;
 				$failed_count += 'failed' === $row['status'] ? 1 : 0;
 			}
@@ -1772,7 +1806,7 @@ final class RQE_Views {
 				echo '</td></tr>';
 			}
 			echo '</tbody></table></div>';
-			if ( ( $failed_count || $review_count ) && ! $override && 'initial-setup' === $context_tab ) {
+			if ( ( $failed_count || $review_count ) && ! $critical_failed && ! $override && 'initial-setup' === $context_tab ) {
 				echo '<div class="notice notice-warning inline"><p>Failed checks stay visible. A site administrator may acknowledge them for setup navigation only; this does not bypass runtime checks.</p></div>';
 				self::form( 'diagnostics_setup_override' );
 				echo '<label><input type="checkbox" name="setup_override_confirmation" value="1" required> I understand failed checks remain visible and all runtime validation and safety checks still apply.</label> ';

@@ -6,7 +6,7 @@ final class RQE {
 	/** Returns the prefixed RQE table name for an allow-listed table key; unknown keys throw. */
 	public static function table( $name ) {
 		global $wpdb;
-		$allowed = array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'certificate_mail', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
+		$allowed = array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'certificate_mail', 'certificate_history', 'participant_links', 'participant_requests', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
 		if ( ! in_array( $name, $allowed, true ) ) {
 			throw new InvalidArgumentException( 'Unknown RQE table.' );
 		}
@@ -41,6 +41,7 @@ final class RQE {
 		}
 		RQE_Email_Submissions::schedule();
 		RQE_Public_Results::init();
+		RQE_Participants::init();
 		add_filter( 'wp_privacy_personal_data_exporters', array( __CLASS__, 'exporters' ) );
 		add_filter( 'wp_privacy_personal_data_erasers', array( __CLASS__, 'erasers' ) );
 	}
@@ -155,6 +156,7 @@ final class RQE {
 			gold_finisher_points bigint(20) unsigned DEFAULT NULL,
 			public_results_enabled tinyint(1) unsigned NOT NULL DEFAULT 0,
 			public_bonus_details_enabled tinyint(1) unsigned NOT NULL DEFAULT 0,
+			self_registration_enabled tinyint(1) unsigned NOT NULL DEFAULT 0,
 			is_locked tinyint(1) unsigned NOT NULL DEFAULT 0,
 			is_archived tinyint(1) unsigned NOT NULL DEFAULT 0,
 			PRIMARY KEY  (id)
@@ -264,6 +266,48 @@ final class RQE {
 			KEY event_rider (event_id,rider_id),
 			KEY retention (updated_at)
 		) ENGINE=InnoDB $c;" );
+		$t = self::table( 'certificate_history' );
+		dbDelta( "CREATE TABLE $t (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			event_id bigint(20) unsigned NOT NULL,
+			rider_id bigint(20) unsigned NOT NULL,
+			user_id bigint(20) unsigned NOT NULL,
+			operation varchar(20) NOT NULL,
+			outcome varchar(20) NOT NULL,
+			design varchar(20) NOT NULL,
+			participant_name varchar(160) NOT NULL,
+			detail text NOT NULL,
+			source_key varchar(191) NOT NULL,
+			created_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY source_key (source_key),
+			KEY event_history (event_id,created_at,id),
+			KEY rider_id (rider_id)
+		) ENGINE=InnoDB $c;" );
+		$t = self::table( 'participant_links' );
+		dbDelta( "CREATE TABLE $t (
+			user_id bigint(20) unsigned NOT NULL,
+			rider_id bigint(20) unsigned NOT NULL,
+			PRIMARY KEY  (user_id),
+			UNIQUE KEY rider_id (rider_id)
+		) ENGINE=InnoDB $c;" );
+		$t = self::table( 'participant_requests' );
+		dbDelta( "CREATE TABLE $t (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			event_id bigint(20) unsigned NOT NULL,
+			user_id bigint(20) unsigned NOT NULL,
+			status varchar(20) NOT NULL,
+			payload text NOT NULL,
+			token_hash char(64) NOT NULL DEFAULT '',
+			expires_at datetime DEFAULT NULL,
+			approved_by bigint(20) unsigned NOT NULL DEFAULT 0,
+			created_at datetime NOT NULL,
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY event_user (event_id,user_id),
+			KEY user_status (user_id,status),
+			KEY event_status (event_id,status,id)
+		) ENGINE=InnoDB $c;" );
 		if ( (int) $previous_db_version < 10 ) {
 			RQE_Statuses::migrate();
 		}
@@ -305,6 +349,17 @@ final class RQE {
 			if ( ! is_array( $verified ) || $wpdb->last_error ) {
 				throw new RuntimeException( 'Public accepted bonus details schema upgrade failed. Check database permissions and retry.' );
 			}
+		}
+		if ( (int) $previous_db_version < 17 ) {
+			foreach ( array( 'events' => 'self_registration_enabled', 'certificate_history' => 'source_key', 'participant_links' => 'user_id,rider_id', 'participant_requests' => 'status,token_hash' ) as $table => $columns ) {
+				$verified = $wpdb->get_results( 'SELECT ' . $columns . ' FROM ' . self::table( $table ) . ' LIMIT 0', ARRAY_A );
+				if ( ! is_array( $verified ) || $wpdb->last_error ) {
+					throw new RuntimeException( 'Participant and certificate history schema upgrade failed. Check database permissions and retry.' );
+				}
+			}
+			RQE_Certificate_History::migration_backfill();
+			// Older blanket overrides did not classify critical failures. Require a fresh check.
+			RQE_Setup::clear();
 		}
 		update_option( 'rqe_db_version', RQE_DB_VERSION, false );
 	}
@@ -436,10 +491,19 @@ final class RQE {
 			foreach ( $deliveries as $delivery ) {
 				$fields[] = array( 'name' => 'Certificate delivery', 'value' => wp_json_encode( $delivery ) );
 			}
+			$history = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,operation,outcome,design,participant_name,detail,created_at FROM ' . self::table( 'certificate_history' ) . ' WHERE rider_id=%d ORDER BY id', $rider['id'] ), ARRAY_A );
+			if ( ! is_array( $history ) || $wpdb->last_error ) { throw new RuntimeException( 'Certificate history personal data could not be exported.' ); }
+			foreach ( $history as $entry ) { $fields[] = array( 'name' => 'Certificate history', 'value' => wp_json_encode( $entry ) ); }
 			$data[] = array( 'group_id' => 'rqe', 'group_label' => 'Rally registrations', 'item_id' => 'rqe-rider-' . $rider['id'], 'data' => $fields );
 		}
 		$user = get_user_by( 'email', $email );
 		if ( $user ) {
+			$requests = $wpdb->get_results( $wpdb->prepare( 'SELECT event_id,status,payload,created_at,updated_at FROM ' . self::table( 'participant_requests' ) . ' WHERE user_id=%d ORDER BY id', $user->ID ), ARRAY_A );
+			if ( ! is_array( $requests ) || $wpdb->last_error ) { throw new RuntimeException( 'Participant account requests could not be exported.' ); }
+			$participant_fields = array();
+			foreach ( $requests as $request ) { $participant_fields[] = array( 'name' => 'Participant registration request', 'value' => wp_json_encode( $request ) ); }
+			if ( get_user_meta( $user->ID, RQE_Participants::PENDING_META, true ) ) { $participant_fields[] = array( 'name' => 'New participant account awaiting approval', 'value' => 'Yes' ); }
+			if ( $participant_fields ) { $data[] = array( 'group_id' => 'rqe', 'group_label' => 'Participant account requests', 'item_id' => 'rqe-participant-' . $user->ID, 'data' => $participant_fields ); }
 			$admin_assignments = $wpdb->get_col( $wpdb->prepare( 'SELECT e.name FROM ' . self::table( 'event_admins' ) . ' a JOIN ' . self::table( 'events' ) . ' e ON e.id=a.event_id WHERE a.user_id=%d', $user->ID ) );
 			$scorer_assignments = $wpdb->get_col( $wpdb->prepare( 'SELECT e.name FROM ' . self::table( 'event_scorers' ) . ' s JOIN ' . self::table( 'events' ) . ' e ON e.id=s.event_id WHERE s.user_id=%d', $user->ID ) );
 			if ( $admin_assignments || $scorer_assignments ) {
@@ -476,6 +540,8 @@ final class RQE {
 				$staged_submission_files = RQE_Bonus::stage_submission_files( $submission_files ?: array() );
 				self::begin_transaction();
 				$success = false !== $wpdb->delete( self::table( 'certificate_mail' ), array( 'rider_id' => $id ) );
+				$success = false !== $wpdb->delete( self::table( 'certificate_history' ), array( 'rider_id' => $id ) ) && $success;
+				RQE_Participants::unlink_rider( $id );
 				$success = false !== $wpdb->update( self::table( 'riders' ), array( 'name' => 'Erased participant ' . $id, 'alias' => '', 'email' => 'erased-' . $id . '@example.invalid', 'phone' => '', 'emergency_name' => '', 'emergency_email' => '', 'emergency_phone' => '', 'insurance' => '', 'other' => '' ), array( 'id' => $id ) ) && $success;
 				$success = false !== $wpdb->delete( self::table( 'rider_bikes' ), array( 'rider_id' => $id ) ) && $success;
 				$success = false !== $wpdb->delete( self::table( 'horses' ), array( 'rider_id' => $id ) ) && $success;
@@ -510,6 +576,16 @@ final class RQE {
 		}
 		$user = get_user_by( 'email', $email );
 		if ( $user ) {
+			if ( false === $wpdb->delete( self::table( 'participant_requests' ), array( 'user_id' => $user->ID ) ) || false === $wpdb->delete( self::table( 'participant_links' ), array( 'user_id' => $user->ID ) ) ) {
+				$retained = true;
+				$messages[] = 'Participant account links or requests could not be erased; retry or contact the administrator.';
+			} else {
+				$removed = true;
+			}
+			if ( get_user_meta( $user->ID, RQE_Participants::PENDING_META, true ) ) {
+				$retained = true;
+				$messages[] = 'New-account login remains blocked for safety. A WordPress administrator must delete the pending account or explicitly resolve its approval. Plugin deactivation removes this login protection.';
+			}
 			$assigned = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'event_admins' ) . ' WHERE user_id=%d LIMIT 1', $user->ID ) );
 			$scorer = $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . self::table( 'event_scorers' ) . ' WHERE user_id=%d LIMIT 1', $user->ID ) );
 			if ( $assigned || $scorer ) {

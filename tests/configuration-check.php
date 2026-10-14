@@ -208,3 +208,16 @@ ob_start();
 invoke_method( 'RQE_Views', 'configuration_check', 'initial-setup' );
 $initial_configuration = ob_get_clean();
 check( strpos( $initial_configuration, 'id="rqe-configuration"><summary>' ) !== false && strpos( $initial_configuration, 'name="context_tab" value="initial-setup"' ) !== false, 'Initial Setup diagnostics starts minimized and its check returns to Initial Setup' );
+$critical_rows = array(
+	array( 'name' => 'RQE database schema', 'status' => 'failed', 'detail' => 'Mismatch.', 'remedy' => 'Upgrade.' ),
+	array( 'name' => 'Hosting policy', 'status' => 'review', 'detail' => 'Verify.', 'remedy' => 'Review.' ),
+);
+RQE_Setup::record_diagnostics( $critical_rows, '2026-10-13 12:00:00' );
+check( ! RQE_Setup::diagnostics_complete() && RQE_Setup::tab_status() === 'red', 'critical failure makes readiness red regardless of prior setup override' );
+check( RQE_Setup::overridden_count( $critical_rows, array(), true ) === 1, 'blanket acknowledgments never count critical failures as overridden' );
+try {
+	RQE_Setup::set_setup_override( true, $critical_rows, '2026-10-13 12:00:00' );
+	throw new LogicException( 'Critical failure was overridden.' );
+} catch ( RuntimeException $error ) {
+	check( strpos( $error->getMessage(), 'cannot be overridden' ) !== false, 'critical safety prerequisites reject blanket setup overrides' );
+}

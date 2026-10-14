@@ -4,13 +4,33 @@ Tags: rally, scavenger hunt, motorcycle, bicycle, geocache
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.4.2
+Stable tag: 0.5.0
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
 Produce and manage scavenger-hunt style rallies for motorcycle, bicycle, horseback and geocache participants.
 
 == Description ==
+
+Version 0.5.0 adds readiness-aware green/orange/red Initial Setup status, retained
+certificate generation/email history with confirmed deletion, and a shared
+Backup & Export diagnostics section. Database/schema, encryption and private
+storage safety failures cannot be overridden. Scheduled encrypted backups are deferred.
+
+Event Configuration can opt in to [rqe_register id="MC-7"] self-registration
+and [rqe_participant id="MC-7"] private submission/history shortcodes (copy the
+actual style-qualified Event ID). New Contributor accounts cannot log in until
+email verification and Event Administrator/site-administrator approval; existing
+accounts keep their roles/login but require event approval. Participants can
+submit and view their own bonuses, never edit/delete them. Website images use
+mandatory antivirus/raster checks and private authenticated serving.
+
+Configure a persistent private RQE_IMPORT_TEMP_DIR outside public roots for
+website proofs, and separately back up rqe-participants-{site-id}; database
+backups do not contain photo bytes. Use HTTPS and exclude embedding pages from
+page/CDN caching. Review/delete pending WordPress accounts before deactivating
+or uninstalling RQE: an inactive plugin cannot enforce pending-login restrictions.
+Plugin deletion does not delete WordPress users or change existing roles.
 
 Rally Quest Engine (formerly Motorcycle Rally Scoring Application) helps organizers
 produce and manage a high-quality scavenger-hunt style rally for Motorcyclists,
@@ -494,6 +514,14 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.5.0 =
+* Make Initial Setup green for complete/acknowledged readiness, orange for unresolved requirements, and red for non-overridable critical database, encryption or private-storage failures.
+* Retain paginated certificate print/PDF generation and email outcome history independently of expiring delivery queues; add confirmed individual deletion and Diagnostics bulk deletion.
+* Group manual exports and SQL backups under Backup & Export; standardize Destructive Operations. Scheduled encrypted filesystem backups are deferred.
+* Add opt-in participant registration and private submission/history shortcodes, email verification, pending Contributor login restrictions and event-scoped administrator approval.
+* Preserve existing WordPress roles/login, enforce participant ownership, and accept immutable scanned website proofs in authenticated private storage.
+* Upgrade to schema 17, include new data in lifecycle/privacy handling, and add account/history/multipart regressions.
 
 = 0.4.2 =
 * Consolidate event email into one Email Setup section with source-aware configure, test, pull-now and override removal actions; retain Initial Setup/email return paths.

@@ -1,0 +1,12 @@
+.rqe-participant { max-width: 70rem; margin-block: 1.5rem; }
+.rqe-participant form { max-width: 36rem; margin-block: 1rem 2rem; }
+.rqe-participant label { display: block; margin-block: 1rem; font-weight: 600; }
+.rqe-participant input:not([type="checkbox"]), .rqe-participant select, .rqe-participant textarea { display: block; box-sizing: border-box; width: 100%; margin-top: .4rem; min-height: 2.75rem; padding: .5rem; font: inherit; }
+.rqe-participant .rqe-consent { font-weight: 400; }
+.rqe-participant button { min-height: 2.75rem; padding: .6rem 1rem; font: inherit; cursor: pointer; }
+.rqe-participant :focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.rqe-participant .rqe-registration-trap { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.rqe-participant-scroll { overflow-x: auto; }
+.rqe-participant table { width: 100%; border-collapse: collapse; }
+.rqe-participant th, .rqe-participant td { padding: .65rem; text-align: left; border-bottom: 1px solid #b7b7b7; }
+.rqe-participant caption { text-align: left; margin-block: .5rem; }

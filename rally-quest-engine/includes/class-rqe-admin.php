@@ -509,6 +509,30 @@ final class RQE_Admin {
 					$tab = 'scoring';
 					$extra['score_tab'] = 'library';
 					break;
+				case 'participant_visibility':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					RQE_Participants::save_visibility( $extra['event_id'], '1' === self::posted( 'enabled' ) );
+					$tab = 'event-edit';
+					break;
+				case 'participant_decide':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					if ( ! in_array( self::posted( 'decision' ), array( 'approve', 'reject' ), true ) ) { throw new RuntimeException( 'Choose approval or rejection.' ); }
+					RQE_Participants::decide( $extra['event_id'], self::integer( self::posted( 'id' ), 1 ), 'approve' === self::posted( 'decision' ) );
+					$tab = 'event-edit';
+					break;
+				case 'certificate_history_delete':
+					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
+					RQE_Certificate_History::delete( $extra['event_id'], self::integer( self::posted( 'id' ), 1 ), '1' === self::posted( 'confirmed' ) );
+					$tab = 'results';
+					$message = 'Certificate history entry deleted. Delivery deduplication and scores are unchanged.';
+					break;
+				case 'diagnostics_delete_certificate_history':
+					self::require_site_admin();
+					self::verify_diagnostics( $op );
+					RQE_Certificate_History::delete_all( true );
+					$tab = 'diagnostics';
+					$message = 'All certificate history deleted. Certificate delivery queues and scores were not changed.';
+					break;
 				case 'diagnostics_delete_all':
 				case 'diagnostics_delete_bikes':
 				case 'diagnostics_delete_roster':
@@ -1054,7 +1078,7 @@ final class RQE_Admin {
 			wp_die( esc_html( 'Unsupported diagnostics download.' ), '', array( 'response' => 400 ) );
 		}
 		global $wpdb;
-		$tables = array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'certificate_mail', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
+		$tables = array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'certificate_mail', 'certificate_history', 'participant_links', 'participant_requests', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' );
 		$stamp = gmdate( 'Ymd-His' );
 		nocache_headers();
 		if ( 'json' === $type ) {

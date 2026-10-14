@@ -60,7 +60,7 @@ final class RQE_Bonus {
 		return trailingslashit( $uploads['baseurl'] ) . 'rqe-event-gallery/' . absint( $event_id ) . '/' . rawurlencode( $image_file );
 	}
 
-	public static function store_submission_image( $source_path, $original_name, $bonus_id, $event_id, $storage_key ) {
+	public static function store_submission_image( $source_path, $original_name, $bonus_id, $event_id, $storage_key, $private = false ) {
 		if ( ! self::valid_id( $bonus_id ) || ! preg_match( '/^[a-f0-9]{32}$/D', $storage_key ) ) {
 			throw new RuntimeException( 'The submission image identifier is invalid.' );
 		}
@@ -77,9 +77,9 @@ final class RQE_Bonus {
 		try {
 			self::stage_image( $source_path, $bonus_id . '.' . $extension, $stage_dir, $images, $total_size, new RQE_Scan_Session() );
 			$image = reset( $images );
-			$directory = trailingslashit( self::event_dir( $event_id ) ) . 'submissions';
+			$directory = $private ? self::participant_storage( $event_id ) : trailingslashit( self::event_dir( $event_id ) ) . 'submissions';
 			self::ensure_directory( $directory );
-			$file_name = $storage_key . '.' . pathinfo( $image['image_file'], PATHINFO_EXTENSION );
+			$file_name = ( $private ? 'p-' : '' ) . $storage_key . '.' . pathinfo( $image['image_file'], PATHINFO_EXTENSION );
 			$destination = trailingslashit( $directory ) . $file_name;
 			if ( ! self::filesystem()->move( $image['stage_path'], $destination ) ) {
 				throw new RuntimeException( 'The validated submission image could not be stored.' );
@@ -95,6 +95,9 @@ final class RQE_Bonus {
 	}
 
 	public static function submission_image_url( $event_id, $image_file ) {
+		if ( preg_match( '/^p-[a-f0-9]{32}\.(?:jpg|png|gif|webp)$/D', (string) $image_file ) ) {
+			return add_query_arg( array( 'action' => 'rqe_participant_image', 'event_id' => (int) $event_id, 'image_file' => $image_file ), admin_url( 'admin-post.php' ) );
+		}
 		if ( ! preg_match( '/^[a-f0-9]{32}\.(?:jpg|png|gif|webp)$/D', (string) $image_file ) ) {
 			return '';
 		}
@@ -505,7 +508,7 @@ final class RQE_Bonus {
 		}
 	}
 
-	private static function make_stage_dir() {
+	private static function private_root() {
 		$root = defined( 'RQE_IMPORT_TEMP_DIR' ) ? RQE_IMPORT_TEMP_DIR : get_temp_dir();
 		$root = realpath( $root );
 		if ( ! $root || ! is_writable( $root ) ) {
@@ -518,7 +521,40 @@ final class RQE_Bonus {
 				throw new RuntimeException( 'RQE_IMPORT_TEMP_DIR must be outside the web root and gallery uploads directory.' );
 			}
 		}
-		$stage_dir = trailingslashit( $root ) . 'rqe-bonus-' . wp_generate_password( 32, false, false );
+		return $root;
+	}
+
+	/** Permanent website proofs are outside every known public root, isolated per site and event. */
+	public static function participant_storage( $event_id ) {
+		if ( ! defined( 'RQE_IMPORT_TEMP_DIR' ) ) {
+			throw new RuntimeException( 'Configure a persistent private RQE_IMPORT_TEMP_DIR before enabling website submissions; the operating-system temporary directory is not durable storage.' );
+		}
+		$directory = trailingslashit( self::private_root() ) . 'rqe-participants-' . get_current_blog_id() . '/' . absint( $event_id );
+		if ( is_link( dirname( $directory ) ) || is_link( $directory ) ) {
+			throw new RuntimeException( 'Participant storage must not use symbolic links.' );
+		}
+		if ( ! is_dir( $directory ) && ! wp_mkdir_p( $directory ) ) {
+			throw new RuntimeException( 'Private participant storage could not be created.' );
+		}
+		if ( ! chmod( dirname( $directory ), 0700 ) || ! chmod( $directory, 0700 ) || ! is_writable( $directory ) ) {
+			throw new RuntimeException( 'Private participant storage permissions could not be secured.' );
+		}
+		return $directory;
+	}
+
+	public static function participant_image_path( $event_id, $image_file ) {
+		if ( ! preg_match( '/^p-[a-f0-9]{32}\.(?:jpg|png|gif|webp)$/D', (string) $image_file ) ) {
+			throw new RuntimeException( 'Invalid private participant image.' );
+		}
+		$path = trailingslashit( self::participant_storage( $event_id ) ) . $image_file;
+		if ( is_link( $path ) ) {
+			throw new RuntimeException( 'Private participant images must not use symbolic links.' );
+		}
+		return $path;
+	}
+
+	private static function make_stage_dir() {
+		$stage_dir = trailingslashit( self::private_root() ) . 'rqe-bonus-' . wp_generate_password( 32, false, false );
 		if ( ! self::filesystem()->make_directory( $stage_dir, 0700 ) ) {
 			throw new RuntimeException( 'A temporary image staging directory could not be created.' );
 		}
@@ -1105,28 +1141,34 @@ final class RQE_Bonus {
 	}
 
 	public static function stage_submission_files( array $rows ) {
-		$staged_root = trailingslashit( self::storage_root() ) . '.submission-deleting-' . wp_generate_password( 12, false, false );
+		$private = (bool) array_filter( $rows, function ( $row ) { return 0 === strpos( (string) ( $row['image_file'] ?? '' ), 'p-' ); } );
+		$staged_root = $private ? self::create_stage_directory() : trailingslashit( self::storage_root() ) . '.submission-deleting-' . wp_generate_password( 12, false, false );
 		$moved = array();
-		foreach ( $rows as $row ) {
-			$event_id = absint( $row['event_id'] ?? 0 );
-			$image_file = (string) ( $row['image_file'] ?? '' );
-			if ( ! $event_id || ! preg_match( '/^[a-f0-9]{32}\.(?:jpg|png|gif|webp)$/D', $image_file ) ) {
-				continue;
+		try {
+			foreach ( $rows as $row ) {
+				$event_id = absint( $row['event_id'] ?? 0 );
+				$image_file = (string) ( $row['image_file'] ?? '' );
+				if ( ! $event_id || ! preg_match( '/^(?:p-)?[a-f0-9]{32}\.(?:jpg|png|gif|webp)$/D', $image_file ) ) {
+					continue;
+				}
+				$source = 0 === strpos( $image_file, 'p-' ) ? self::participant_image_path( $event_id, $image_file ) : trailingslashit( self::event_dir( $event_id ) ) . 'submissions/' . $image_file;
+				if ( ! self::filesystem()->is_file( $source ) ) {
+					continue;
+				}
+				$directory = trailingslashit( $staged_root ) . $event_id;
+				self::ensure_directory( $directory );
+				$destination = trailingslashit( $directory ) . $image_file;
+				if ( ! self::filesystem()->move( $source, $destination ) ) {
+					throw new RuntimeException( 'A participant submission image could not be safely staged for deletion.' );
+				}
+				$moved[] = array( 'source' => $source, 'staged' => $destination );
 			}
-			$source = trailingslashit( self::event_dir( $event_id ) ) . 'submissions/' . $image_file;
-			if ( ! self::filesystem()->is_file( $source ) ) {
-				continue;
-			}
-			$directory = trailingslashit( $staged_root ) . $event_id;
-			self::ensure_directory( $directory );
-			$destination = trailingslashit( $directory ) . $image_file;
-			if ( ! self::filesystem()->move( $source, $destination ) ) {
-				self::restore_submission_files( array( 'root' => $staged_root, 'files' => $moved ) );
-				throw new RuntimeException( 'A participant submission image could not be safely staged for deletion.' );
-			}
-			$moved[] = array( 'source' => $source, 'staged' => $destination );
+			if ( $private && ! $moved ) { self::remove_directory( $staged_root ); }
+			return array( 'root' => $moved ? $staged_root : '', 'files' => $moved );
+		} catch ( RuntimeException $error ) {
+			self::restore_submission_files( array( 'root' => $staged_root, 'files' => $moved ) );
+			throw $error;
 		}
-		return array( 'root' => $moved ? $staged_root : '', 'files' => $moved );
 	}
 
 	public static function restore_submission_files( array $staged ) {
@@ -1188,5 +1230,12 @@ final class RQE_Bonus {
 	public static function remove_all_storage() {
 		$root = self::storage_root();
 		self::remove_directory( $root );
+	}
+
+	public static function remove_participant_storage() {
+		if ( ! defined( 'RQE_IMPORT_TEMP_DIR' ) ) { return; }
+		$directory = trailingslashit( self::private_root() ) . 'rqe-participants-' . get_current_blog_id();
+		if ( is_link( $directory ) ) { throw new RuntimeException( 'Refusing to delete a symbolic-link participant storage directory.' ); }
+		if ( is_dir( $directory ) ) { self::remove_directory( $directory ); }
 	}
 }

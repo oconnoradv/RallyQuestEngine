@@ -63,7 +63,7 @@ $GLOBALS['preferences'] = array();
 function is_user_logged_in() { return $GLOBALS['actor'] > 0; }
 function current_user_can( $capability ) { return 1 === $GLOBALS['actor']; }
 function get_current_user_id() { return $GLOBALS['actor']; }
-function wp_get_current_user() { return (object) array( 'ID' => get_current_user_id(), 'user_login' => 'fixture-admin' ); }
+function wp_get_current_user() { return $GLOBALS['participant_users'][ get_current_user_id() ] ?? (object) array( 'ID' => get_current_user_id(), 'user_login' => 'fixture-admin', 'user_email' => 'user@example.test' ); }
 function get_user_option( $key, $id ) {
 	if ( isset( $GLOBALS['preference_cache'][ $GLOBALS['site'] ][ $id ][ $key ] ) ) {
 		return $GLOBALS['preference_cache'][ $GLOBALS['site'] ][ $id ][ $key ];
@@ -133,7 +133,7 @@ function plugins_url( $path, $file ) { return 'https://example.test/plugins/rqe/
 function shortcode_atts( $defaults, $attributes, $tag = '' ) {
 	return array_merge( $defaults, array_intersect_key( (array) $attributes, $defaults ) );
 }
-function get_users( $args ) { return array(); }
+function get_users( $args ) { return isset( $GLOBALS['participant_users'] ) && ( $args['fields'] ?? '' ) === 'ID' ? array( 1 ) : array(); }
 if ( ! function_exists( 'get_transient' ) ) {
 	function get_transient( $key ) { return false; }
 }
@@ -146,14 +146,25 @@ if ( ! function_exists( 'is_plugin_active' ) ) {
 if ( ! function_exists( 'self_admin_url' ) ) {
 	function self_admin_url( $path = '' ) { return admin_url( $path ); }
 }
-function get_user_by( $key, $id ) { return (object) array( 'ID' => $id, 'user_login' => 'user-' . $id, 'user_email' => 'user@example.test', 'display_name' => 'User ' . $id ); }
-function get_user_meta( $id, $key, $single ) { return ''; }
+function get_user_by( $key, $id ) {
+	if ( isset( $GLOBALS['participant_users'] ) ) {
+		foreach ( $GLOBALS['participant_users'] as $user ) {
+			if ( ( 'email' === $key && $user->user_email === $id ) || ( 'id' === strtolower( $key ) && (int) $user->ID === (int) $id ) ) { return $user; }
+		}
+		return false;
+	}
+	return (object) array( 'ID' => $id, 'user_login' => 'user-' . $id, 'user_email' => 'user@example.test', 'display_name' => 'User ' . $id );
+}
+function get_user_meta( $id, $key, $single ) { return $GLOBALS['participant_meta'][ $id ][ $key ] ?? ''; }
 function wp_salt( $scheme ) { return 'fixture-salt'; }
 function wp_json_encode( $data ) { return json_encode( $data ); }
 function wp_die( $message, $title = '', $args = array() ) { throw new RuntimeException( ( $args['response'] ?? 500 ) . ': ' . $message ); }
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-event-state.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-certificates.php';
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-certificate-history.php';
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-participants.php';
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-participant-views.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-import-audit.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-admin.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-statuses.php';
@@ -202,6 +213,9 @@ foreach ( array(
 	'registrations' => "id INTEGER PRIMARY KEY,event_id INTEGER,rider_id INTEGER,bib INTEGER,pillion TEXT DEFAULT '',registration_status TEXT DEFAULT 'Initial Registration',status TEXT DEFAULT 'Registered',status_manual INTEGER DEFAULT 0,score INTEGER DEFAULT 0,placing INTEGER",
 	'status_options' => 'id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER,kind TEXT,label TEXT COLLATE NOCASE,enabled INTEGER,sort_order INTEGER DEFAULT 0,certificate_eligible INTEGER DEFAULT 0,UNIQUE(event_id,kind,label)',
 	'certificate_mail' => "id INTEGER PRIMARY KEY AUTOINCREMENT,batch TEXT,event_id INTEGER,rider_id INTEGER,user_id INTEGER,snapshot TEXT,fingerprint TEXT,subject TEXT,message TEXT,state TEXT,detail TEXT,created_at TEXT,updated_at TEXT,UNIQUE(batch,rider_id)",
+	'certificate_history' => "id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER,rider_id INTEGER,user_id INTEGER,operation TEXT,outcome TEXT,design TEXT,participant_name TEXT,detail TEXT,source_key TEXT UNIQUE NOT NULL,created_at TEXT",
+	'participant_links' => "user_id INTEGER PRIMARY KEY,rider_id INTEGER UNIQUE",
+	'participant_requests' => "id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER,user_id INTEGER,status TEXT,payload TEXT,token_hash TEXT DEFAULT '',expires_at TEXT,approved_by INTEGER DEFAULT 0,created_at TEXT,updated_at TEXT,UNIQUE(event_id,user_id)",
 	'import_audit' => 'id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER,user_id INTEGER,username TEXT,occurred_at TEXT,action TEXT,detail TEXT',
 	'event_admins' => 'event_id INTEGER,user_id INTEGER',
 	'event_scorers' => 'event_id INTEGER,user_id INTEGER',
@@ -539,11 +553,11 @@ check( '' === RQE_Styles::saved_primary() && 'motorcycle' === RQE_Styles::primar
 check( ! RQE_Setup::welcome_complete() && ! RQE_Setup::inbox_complete(), 'Welcome and global inbox readiness remain incomplete before credentials are configured and verified' );
 request( array( 'page' => 'rqe' ) );
 $initial_html = render( 'render' );
-check( strpos( $initial_html, 'nav-tab nav-tab-active rqe-tab-green" aria-current="page" href="https://example.test/wp-admin/admin.php?page=rqe&amp;tab=initial-setup"' ) !== false && strpos( $initial_html, 'Welcome to Rally Quest Engine' ) > strpos( $initial_html, '</nav>' ), 'incomplete setup lands on the leftmost green Initial Setup tab with Welcome below navigation' );
+check( strpos( $initial_html, 'nav-tab nav-tab-active rqe-tab-orange" aria-current="page" href="https://example.test/wp-admin/admin.php?page=rqe&amp;tab=initial-setup"' ) !== false && strpos( $initial_html, 'Welcome to Rally Quest Engine' ) > strpos( $initial_html, '</nav>' ), 'incomplete setup lands on the leftmost orange Initial Setup tab with Welcome below navigation' );
 preg_match( '/<nav class="nav-tab-wrapper"[^>]*>(.*?)<\/nav>/s', $initial_html, $navigation );
 preg_match_all( '/>([^<]+)<\/a>/', $navigation[1], $tab_labels );
 check( $tab_labels[1] === array( 'Initial Setup', 'Events', 'Rosters', 'Scoring', 'Results', 'Participants', 'Bikes', 'Diagnostics', 'About' ), 'main navigation follows the requested workflow-first order' );
-check( substr_count( $navigation[1], 'rqe-tab-green' ) === 2 && substr_count( $navigation[1], 'rqe-tab-blue' ) === 4 && substr_count( $navigation[1], 'rqe-tab-orange' ) === 1, 'tab category colors are independent of completion and include exactly the requested tabs' );
+check( substr_count( $navigation[1], 'rqe-tab-green' ) === 1 && substr_count( $navigation[1], 'rqe-tab-blue' ) === 4 && substr_count( $navigation[1], 'rqe-tab-orange' ) === 2, 'workflow category colors remain fixed while Initial Setup reflects readiness' );
 request( array( 'page' => 'rqe', 'tab' => 'events' ) );
 check( strpos( render( 'render' ), 'Welcome to Rally Quest Engine' ) === false, 'explicit Events navigation is honored while setup is incomplete and does not repeat Welcome' );
 $welcome = render( 'welcome' );
@@ -562,10 +576,16 @@ rejects( function () { RQE_Styles::save_primary( 'skateboard' ); }, 'primary sca
 RQE_Styles::save_primary( 'horse' );
 $style_section = render( 'primary_style_setup' );
 check( strpos( $style_section, 'rqe-complete"><summary>' ) !== false && strpos( $style_section, 'Horseback saved' ) !== false && false === strpos( $style_section, ' open><summary>' ), 'explicitly saved primary style becomes green and collapsed' );
-update_option( RQE_Setup::OPTION, array( 'diagnostics_state' => 'passed' ), false );
+update_option( RQE_Setup::OPTION, array( 'diagnostics_state' => 'passed', 'critical_failed_count' => 0 ), false );
 request( array( 'page' => 'rqe' ) );
 $complete_html = render( 'render' );
 check( RQE_Setup::readiness()['complete'] && strpos( $complete_html, 'nav-tab nav-tab-active rqe-tab-blue" aria-current="page" href="https://example.test/wp-admin/admin.php?page=rqe&amp;tab=events"' ) !== false && strpos( $complete_html, 'Welcome to Rally Quest Engine' ) === false, 'all green setup sections default plugin entry to Events without relocating the leftmost setup tab' );
+check( RQE_Setup::tab_status() === 'green', 'all passed setup requirements give the Initial Setup tab a green status' );
+update_option( RQE_Setup::OPTION, array( 'diagnostics_state' => 'passed' ), false );
+check( RQE_Setup::tab_status() === 'orange' && ! RQE_Setup::diagnostics_complete(), 'legacy diagnostic summaries require rerunning critical checks rather than silently passing' );
+update_option( RQE_Setup::OPTION, array( 'diagnostics_state' => 'failed', 'setup_override' => 1, 'critical_failed_count' => 1 ), false );
+request( array( 'page' => 'rqe', 'tab' => 'initial-setup' ) );
+check( RQE_Setup::tab_status() === 'red' && strpos( render( 'render' ), 'rqe-tab-red' ) !== false && ! RQE_Setup::diagnostics_complete(), 'critical safety failure overrides stale acknowledgments and shows a red tab with a textual status' );
 delete_option( RQE_Setup::OPTION );
 rejects( function () { RQE_Horses::data( array( 'name' => '' ) ); }, 'required text field' );
 rejects( function () { RQE_Horses::data( array( 'name' => 'Ace', 'sex' => 'Unicorn' ) ); }, 'horse sex' );

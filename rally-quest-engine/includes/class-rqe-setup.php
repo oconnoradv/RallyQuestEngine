@@ -35,7 +35,24 @@ final class RQE_Setup {
 
 	public static function diagnostics_complete() {
 		$state = self::diagnostics_state();
-		return 'passed' === ( $state['diagnostics_state'] ?? '' ) || ! empty( $state['setup_override'] );
+		return isset( $state['critical_failed_count'] ) && empty( $state['critical_failed_count'] ) && ( 'passed' === ( $state['diagnostics_state'] ?? '' ) || ! empty( $state['setup_override'] ) );
+	}
+
+	/** Only named safety prerequisites are non-overridable; this never relaxes runtime validation. */
+	public static function critical( array $row ) {
+		return in_array( $row['name'] ?? '', array( 'RQE database tables', 'RQE database schema', 'OpenSSL credential encryption', 'OpenSSL credential decryption', 'Private import staging', 'Participant private storage' ), true );
+	}
+
+	public static function critical_failures( array $rows ) {
+		return count( array_filter( $rows, function ( $row ) { return self::critical( $row ) && 'failed' === $row['status']; } ) );
+	}
+
+	public static function tab_status() {
+		$state = self::diagnostics_state();
+		if ( ! empty( $state['critical_failed_count'] ) ) {
+			return 'red';
+		}
+		return self::readiness()['complete'] ? 'green' : 'orange';
 	}
 
 	public static function readiness() {
@@ -57,7 +74,7 @@ final class RQE_Setup {
 		RQE_Diagnostic_Report::state( $rows );
 		$count = 0;
 		foreach ( $rows as $row ) {
-			if ( 'passed' !== $row['status'] && ( $setup_override || ( 'review' === $row['status'] && ! empty( $ignored_reviews[ $row['name'] ] ) ) ) ) {
+			if ( ! self::critical( $row ) && 'passed' !== $row['status'] && ( $setup_override || ( 'review' === $row['status'] && ! empty( $ignored_reviews[ $row['name'] ] ) ) ) ) {
 				++$count;
 			}
 		}
@@ -81,6 +98,7 @@ final class RQE_Setup {
 			'setup_override' => $clear_override ? 0 : ( ! empty( $state['setup_override'] ) ? 1 : 0 ),
 			'failed_count' => $failed_count,
 			'review_count' => $review_count,
+			'critical_failed_count' => self::critical_failures( $rows ),
 			'overridden_count' => self::overridden_count( $rows, $ignored, ! $clear_override && ! empty( $state['setup_override'] ) ),
 			'reset' => 0,
 		);
@@ -91,7 +109,7 @@ final class RQE_Setup {
 	public static function set_review_ignored( $name, $ignored, array $rows, $checked_at ) {
 		$found = false;
 		foreach ( $rows as $row ) {
-			if ( isset( $row['name'], $row['status'] ) && $row['name'] === $name && 'review' === $row['status'] ) {
+			if ( isset( $row['name'], $row['status'] ) && $row['name'] === $name && 'review' === $row['status'] && ! self::critical( $row ) ) {
 				$found = true;
 				break;
 			}
@@ -114,6 +132,9 @@ final class RQE_Setup {
 
 	public static function set_setup_override( $enabled, array $rows, $checked_at ) {
 		if ( $enabled ) {
+			if ( self::critical_failures( $rows ) ) {
+				throw new RuntimeException( 'Critical safety prerequisites cannot be overridden. Correct them and rerun diagnostics.' );
+			}
 			$incomplete = false;
 			foreach ( $rows as $row ) {
 				$incomplete = $incomplete || 'passed' !== ( $row['status'] ?? '' );

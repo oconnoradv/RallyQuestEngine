@@ -49,6 +49,7 @@ final class Diagnostics_Test_DB {
 	public function prepare( $sql, ...$args ) { return array_merge( array( $sql ), $args ); }
 	public function get_var( $args ) {
 		if ( 'SELECT VERSION()' === $args ) { return $this->database_version; }
+		if ( is_array( $args ) && strpos( $args[0], 'FROM participant_links' ) !== false ) { return null; }
 		if ( is_array( $args ) ) { array_shift( $args ); }
 		foreach ( array_reverse( $this->tables['import_audit'] ) as $row ) {
 			if ( $row['user_id'] === $args[0] && in_array( $row['action'], array( 'bypass_enabled', 'bypass_disabled' ), true ) ) {
@@ -126,6 +127,7 @@ require __DIR__ . '/../rally-quest-engine/includes/class-rqe-views.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-diagnostics.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-setup.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-diagnostics-deletion-service.php';
+require __DIR__ . '/../rally-quest-engine/includes/class-rqe-participants.php';
 function invoke_method( $class, $name, ...$args ) {
 	$method = new ReflectionMethod( $class, $name );
 	if ( PHP_VERSION_ID < 80100 ) { $method->setAccessible( true ); }
@@ -150,28 +152,29 @@ if ( in_array( '--preview', $argv ?? array(), true ) ) {
 	echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="admin.css"><title>Diagnostics preview</title></head><body><main class="rqe">' . $html . '</main><script src="admin.js"></script></body></html>';
 	exit;
 }
-check( strpos( $html, 'rqe-destructive-grid' ) !== false && substr_count( $html, 'rqe-destructive-action' ) === 6, 'six destructive actions share a compact grid' );
-check( substr_count( $html, 'rqe-diagnostics-section' ) === 10, 'configuration, exports, destructive group and individual actions can all collapse' );
-check( strpos( $html, '<details class="rqe-diagnostics-section"><summary><h3>Destructive operations</h3></summary>' ) !== false, 'Destructive operations defaults to collapsed' );
+check( strpos( $html, 'rqe-destructive-grid' ) !== false && substr_count( $html, 'rqe-destructive-action' ) === 7, 'seven destructive actions share a compact grid' );
+check( substr_count( $html, 'rqe-diagnostics-section' ) === 12, 'configuration, backup/export group, exports, destructive group and individual actions can all collapse' );
+check( preg_match( '/<details class="rqe-diagnostics-section"><summary>\s*<h3>Destructive Operations<\/h3><\/summary>/', $html ), 'Destructive Operations defaults to collapsed' );
+check( strpos( $html, '<summary><h3>Backup &amp; Export</h3></summary>' ) !== false, 'backup and export share a common collapsible section' );
 foreach ( array( 'Export Data', 'Database Backup' ) as $heading ) {
 	check( strpos( $html, '<details class="rqe-panel rqe-diagnostics-section"><summary><h3>' . $heading ) !== false, $heading . ' defaults to collapsed' );
 }
-foreach ( array( 'Export Data', 'Database Backup', 'Destructive operations' ) as $heading ) {
+foreach ( array( 'Export Data', 'Database Backup', 'Destructive Operations' ) as $heading ) {
 	check( strpos( $html, '<summary><h3>' . $heading . '</h3>' ) !== false, 'native collapse control wraps ' . $heading );
 }
-check( substr_count( $html, 'rqe-destructive-action rqe-diagnostics-section" open><summary><h4>' ) === 6, 'all destructive cards retain initially visible controls with individual collapse buttons' );
+check( substr_count( $html, 'rqe-destructive-action rqe-diagnostics-section" open><summary><h4>' ) === 7, 'all destructive cards retain initially visible controls with individual collapse buttons' );
 check( strpos( $html, '<details class="rqe-administrative-audit"><summary><h3>Administrative Audit</h3></summary>' ) !== false, 'Administrative Audit uses a native expand control and defaults to collapsed' );
 $audit_start = strpos( $html, '<details class="rqe-administrative-audit">' );
 $audit_end = strpos( $html, '</details>', $audit_start );
-check( strpos( substr( $html, $audit_start, $audit_end - $audit_start ), 'Date/time (UTC)' ) !== false && $audit_end < strpos( $html, '<h3>Destructive operations' ), 'collapsed audit contains the existing history table without hiding destructive actions' );
+check( strpos( substr( $html, $audit_start, $audit_end - $audit_start ), 'Date/time (UTC)' ) !== false && $audit_end < strpos( $html, '<h3>Destructive Operations' ), 'collapsed audit contains the existing history table without hiding destructive actions' );
 check( strpos( $html, 'Delete Virus Scan Audit Data' ) !== false && strpos( $html, 'reset remembered ClamAV overrides' ) !== false, 'audit deletion describes override reset and retained deletion record' );
-check( substr_count( $html, 'name="verification_hash"' ) === 6 && substr_count( $html, 'rqe-delete-verification' ) === 6, 'each action retains separate server verification and dialog content' );
-check( substr_count( $html, 'name="_wpnonce"' ) === 9, 'configuration, exports and destructive operations retain nonce fields' );
+check( substr_count( $html, 'name="verification_hash"' ) === 7 && substr_count( $html, 'rqe-delete-verification' ) === 7, 'each action retains separate server verification and dialog content' );
+check( substr_count( $html, 'name="_wpnonce"' ) === 10, 'configuration, exports and destructive operations retain nonce fields' );
 check( false !== strpos( $html, 'id="rqe-configuration"' ), 'environment checks remain available on Diagnostics as well as Initial Setup' );
 $operations = array( 'all', 'bikes', 'roster', 'bonus_points', 'rider', 'audit' );
 foreach ( $operations as $suffix ) {
 	$operation = 'diagnostics_delete_' . $suffix;
-	$wpdb->tables = array_fill_keys( array( 'certificate_mail', 'registrations', 'status_options', 'rider_bikes', 'horses', 'event_admins', 'event_scorers', 'event_email_settings', 'events', 'riders', 'bikes', 'bonus_points', 'bonus_submissions' ), array( array( 'id' => 9, 'event_id' => 7, 'rider_id' => 9, 'image_file' => '' ) ) );
+	$wpdb->tables = array_fill_keys( array( 'certificate_mail', 'certificate_history', 'participant_links', 'participant_requests', 'registrations', 'status_options', 'rider_bikes', 'horses', 'event_admins', 'event_scorers', 'event_email_settings', 'events', 'riders', 'bikes', 'bonus_points', 'bonus_submissions' ), array( array( 'id' => 9, 'event_id' => 7, 'rider_id' => 9, 'image_file' => '' ) ) );
 	$wpdb->tables['import_audit'] = array(
 		array( 'user_id' => 1, 'action' => 'bypass_enabled' ),
 		array( 'user_id' => 2, 'action' => 'bypass_enabled' ),

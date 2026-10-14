@@ -35,6 +35,16 @@ final class RQE_Import_Audit {
 		) );
 	}
 
+	/** Trusted public-intake/verification audit; never authorizes administrative actions or scan overrides. */
+	public function record_service( $event_id, $action, $detail ) {
+		if ( false === $this->database->insert( RQE::table( 'import_audit' ), array(
+			'user_id' => 0, 'username' => 'RQE participant service', 'occurred_at' => gmdate( 'Y-m-d H:i:s' ),
+			'event_id' => $event_id, 'action' => $action, 'detail' => $detail,
+		) ) ) {
+			throw new RuntimeException( 'The participant service audit could not be saved. The request was not committed.' );
+		}
+	}
+
 	public function enable_bypass( $event_id, $confirmed ) {
 		if ( ! $confirmed ) {
 			throw new RuntimeException( 'Confirm the risk of importing without antivirus scanning before enabling the override.' );
