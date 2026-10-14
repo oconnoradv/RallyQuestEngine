@@ -21,12 +21,15 @@ final class RQE_Participants {
 		add_filter( 'authenticate', array( __CLASS__, 'authenticate' ), 99 );
 		add_filter( 'determine_current_user', array( __CLASS__, 'current_user' ), 99 );
 		global $current_user;
-		if ( $current_user instanceof WP_User && get_user_meta( $current_user->ID, self::PENDING_META, true ) ) {
+		if ( $current_user instanceof WP_User && RQE_Participant_Accounts::blocked( $current_user->ID ) ) {
 			wp_set_current_user( 0 );
 		}
 	}
 
 	public static function authenticate( $user ) {
+		if ( $user instanceof WP_User && RQE_Participant_Accounts::locked( $user->ID ) ) {
+			return new WP_Error( 'rqe_account_locked', 'This participant account was locked after its registration request was declined. Contact the event administrator.' );
+		}
 		if ( $user instanceof WP_User && get_user_meta( $user->ID, self::PENDING_META, true ) ) {
 			return new WP_Error( 'rqe_approval_pending', 'Your participant account requires email verification and event administrator approval before login.' );
 		}
@@ -34,7 +37,7 @@ final class RQE_Participants {
 	}
 
 	public static function current_user( $id ) {
-		return $id && get_user_meta( $id, self::PENDING_META, true ) ? 0 : $id;
+		return RQE_Participant_Accounts::blocked( $id ) ? 0 : $id;
 	}
 
 	/** Private pages must bypass full-page caches; anonymous forms also use a per-browser CSRF token. */
@@ -194,9 +197,10 @@ final class RQE_Participants {
 				}
 				return 'If you already have an account, sign in to request event access. For a new pending account, check your email for verification instructions.';
 			}
+			RQE_Participant_Role::ensure();
 			$id = wp_insert_user( array(
 				'user_login' => 'rqe-' . bin2hex( random_bytes( 10 ) ), 'user_email' => $email, 'display_name' => $name,
-				'user_pass' => wp_generate_password( 40, true, true ), 'role' => 'contributor',
+				'user_pass' => wp_generate_password( 40, true, true ), 'role' => RQE_Participant_Role::ROLE,
 				'meta_input' => array( self::PENDING_META => 1 ),
 			) );
 			if ( is_wp_error( $id ) ) {
@@ -341,10 +345,16 @@ final class RQE_Participants {
 			RQE::rollback_transaction();
 			throw $error;
 		}
+		if ( $approve ) {
+			RQE_Participant_Accounts::unlock( $user->ID );
+		}
 		if ( $approve && get_user_meta( $user->ID, self::PENDING_META, true ) ) {
 			delete_user_meta( $user->ID, self::PENDING_META );
 			if ( get_user_meta( $user->ID, self::PENDING_META, true ) ) { throw new RuntimeException( 'Enrollment approved, but account activation failed. Contact the site administrator.' ); }
 			wp_new_user_notification( $user->ID, null, 'user' );
+		}
+		if ( ! $approve ) {
+			RQE_Participant_Accounts::lock( $user );
 		}
 		if ( ! wp_mail( $user->user_email, 'Rally Quest registration decision', $approve ? 'Your event registration was approved. Sign in using your WordPress account; use the WordPress lost-password page if needed.' : 'Your event registration request was declined. Contact the event administrator.' ) ) {
 			throw new RuntimeException( 'The decision was saved but participant notification failed.' );

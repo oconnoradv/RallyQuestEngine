@@ -17,7 +17,9 @@ final class RQE_Admin {
 
 	public static function menu() {
 		if ( RQE::access() ) {
-			add_menu_page( 'Rally Quest Engine', 'Rally Quest', 'read', 'rqe', array( 'RQE_Views', 'render' ), 'dashicons-location-alt', 58 );
+			$alert_count = RQE_Alerts::count();
+			$menu_title = 'Rally Quest' . ( $alert_count ? ' <span class="awaiting-mod count-' . (int) $alert_count . '" title="Required action pending"><span class="pending-count" aria-hidden="true">' . (int) $alert_count . '</span><span class="screen-reader-text">' . (int) $alert_count . ' required action(s) pending</span></span>' : '' );
+			add_menu_page( 'Rally Quest Engine', $menu_title, 'read', 'rqe', array( 'RQE_Views', 'render' ), 'dashicons-location-alt', 58 );
 			add_submenu_page( null, 'Event Scoring', 'Event Scoring', 'read', 'rqe-scoring', array( 'RQE_Views', 'render_scoring' ) );
 			add_submenu_page( null, 'Edit Participant', 'Edit Participant', 'read', 'rqe-rider-edit', array( 'RQE_Views', 'render_rider_edit' ) );
 			add_submenu_page( null, 'Edit Event', 'Edit Event', 'read', 'rqe-event-edit', array( 'RQE_Views', 'render_event_edit' ) );
@@ -35,6 +37,10 @@ final class RQE_Admin {
 			return;
 		}
 		wp_add_inline_style( 'dashicons', '#adminmenu .toplevel_page_rqe .wp-menu-image::before,#adminmenu .toplevel_page_rqe:hover .wp-menu-image::before,#adminmenu .toplevel_page_rqe.current .wp-menu-image::before{color:#ff0800}' );
+		if ( RQE_Alerts::count() ) {
+			// Pending-action dot on the Rally Quest menu logo.
+			wp_add_inline_style( 'dashicons', '#adminmenu .toplevel_page_rqe .wp-menu-image{position:relative}#adminmenu .toplevel_page_rqe .wp-menu-image::after{content:"";position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#d63638;box-shadow:0 0 0 2px #1d2327}' );
+		}
 		if ( ! in_array( $hook, array( 'toplevel_page_rqe', 'admin_page_rqe-scoring', 'admin_page_rqe-rider-edit', 'admin_page_rqe-event-edit', 'admin_page_rqe-event-email', 'admin_page_rqe-event-roster', 'admin_page_rqe-event-enroll', 'admin_page_rqe-roster-import', 'admin_page_rqe-rider-score', 'admin_page_rqe-bonus-edit' ), true ) ) {
 			return;
 		}
@@ -518,7 +524,8 @@ final class RQE_Admin {
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );
 					if ( ! in_array( self::posted( 'decision' ), array( 'approve', 'reject' ), true ) ) { throw new RuntimeException( 'Choose approval or rejection.' ); }
 					RQE_Participants::decide( $extra['event_id'], self::integer( self::posted( 'id' ), 1 ), 'approve' === self::posted( 'decision' ) );
-					$tab = 'event-edit';
+					$tab = 'riders' === self::posted( 'context_tab' ) ? 'riders' : 'event-edit';
+					$message = 'approve' === self::posted( 'decision' ) ? 'Participant request approved and recorded in the Administrative Audit.' : 'Participant request rejected and recorded in the Administrative Audit.';
 					break;
 				case 'certificate_history_delete':
 					$extra['event_id'] = self::integer( self::posted( 'event_id' ), 1 );

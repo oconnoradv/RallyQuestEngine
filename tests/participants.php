@@ -18,7 +18,16 @@ class WP_User {
 		$this->ID = $id; $this->user_login = 'user-' . $id; $this->user_email = $email;
 		$this->display_name = 'Participant ' . $id; $this->roles = array( $role );
 	}
+	public function set_role( $role ) { $this->roles = array( $role ); }
 }
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-participant-role.php';
+$GLOBALS['test_roles'] = array();
+function get_role( $role ) { return $GLOBALS['test_roles'][ $role ] ?? null; }
+function add_role( $role, $name, $caps ) { $GLOBALS['test_roles'][ $role ] = (object) array( 'name' => $name, 'capabilities' => $caps ); }
+function home_url( $path = '' ) { return 'https://example.test' . $path; }
+function wp_doing_ajax() { return false; }
+function is_multisite() { return false; }
+function update_user_meta( $id, $key, $value ) { $GLOBALS['participant_meta'][ $id ][ $key ] = $value; return true; }
 class WP_Error {
 	private $code;
 	public function __construct( $code, $message ) { $this->code = $code; }
@@ -114,7 +123,8 @@ try {
 		RQE_Participants::register_request( 7, $input );
 		$request = $wpdb->get_row( 'SELECT * FROM ' . RQE::table( 'participant_requests' ), ARRAY_A );
 		$user = get_user_by( 'id', $request['user_id'] );
-		check( 'pending' === $request['status'] && array( 'contributor' ) === $user->roles && get_user_meta( $user->ID, RQE_Participants::PENDING_META, true ), 'new Contributor account is pending before any login' );
+		check( 'pending' === $request['status'] && array( RQE_Participant_Role::ROLE ) === $user->roles && get_user_meta( $user->ID, RQE_Participants::PENDING_META, true ), 'new account uses the participant role and is pending before any login' );
+		check( array() === get_role( RQE_Participant_Role::ROLE )->capabilities, 'participant role grants no WordPress capabilities, not even read' );
 		check( RQE_Participants::authenticate( $user ) instanceof WP_Error && 0 === RQE_Participants::current_user( $user->ID ), 'password authentication and cookie/REST identity reject pending accounts' );
 		rejects( function () use ( $input ) { RQE_Participants::register_request( 7, $input ); }, 'wait' );
 		preg_match( '/token=([a-f0-9]{64})/', $GLOBALS['participant_mail'][0][2], $matches );
@@ -122,14 +132,40 @@ try {
 		RQE_Participants::verify( $request['id'], $matches[1] );
 		check( RQE_Participants::authenticate( $user ) instanceof WP_Error && 'verified' === RQE::row( 'participant_requests', $request['id'] )['status'], 'email verification alone does not unlock login' );
 		rejects( function () use ( $request, $matches ) { RQE_Participants::verify( $request['id'], $matches[1] ); }, 'already used' );
+		$GLOBALS['actor'] = 1;
+		request( array( 'page' => 'rqe-riders', 'event_id' => '7' ) );
+		RQE_Alerts::reset();
+		$alerts = RQE_Alerts::all();
+		$participant_alerts = array_values( array_filter( $alerts, function ( $alert ) { return 'participants' === $alert['type']; } ) );
+		check( 1 === count( $participant_alerts ) && strpos( $participant_alerts[0]['url'], 'rqe-event-edit' ) !== false && strpos( $participant_alerts[0]['url'], '#rqe-participant-access' ) !== false, 'pending participant requests raise a header alert linking to event participant access' );
+		$header = render( 'header' );
+		check( strpos( $header, 'id="rqe-action-alerts"' ) !== false && strpos( $header, 'rqe-logo-badge' ) !== false && strpos( $header, 'rqe-action-required' ) !== false && strpos( $header, 'Review requests' ) !== false, 'header shows pending-action alerts and a Rally Quest logo indicator' );
+		$riders = render( 'rider_setup' );
+		$panel = strpos( $riders, 'id="rqe-participant-approvals" open' );
+		check( false !== $panel && strpos( $riders, 'Approve and enroll' ) !== false && strpos( $riders, 'name="context_tab" value="riders"' ) !== false, 'Participants tab shows an expanded approve/reject panel while requests are pending' );
+		check( false !== $panel && $panel < 300, 'approval panel is at the top of the Participants tab' );
+		check( strpos( $riders, '#rqe-administrative-audit' ) !== false, 'Participants approval panel links site administrators to the Administrative Audit' );
+		request( array( 'page' => 'rqe-event-edit', 'event_id' => '7' ) );
+		$edit = render( 'render_event_edit' );
+		$access = strpos( $edit, 'id="rqe-participant-access" open' );
+		check( false !== $access && false !== strpos( $edit, 'Embed this Event' ) && $access < strpos( $edit, 'Embed this Event' ), 'event edit expands participant access above the embed section while requests are pending' );
+		check( strpos( $edit, 'name="context_tab" value="event-edit"' ) !== false && strpos( $edit, '#rqe-administrative-audit' ) !== false, 'event participant decisions return to event edit and link to the audit' );
 		$GLOBALS['actor'] = 3;
 		rejects( function () use ( $request ) { RQE_Participants::decide( 7, $request['id'], true ); }, 'not assigned' );
 		$GLOBALS['actor'] = 1;
 		RQE_Participants::decide( 7, $request['id'], true );
 		check( ! get_user_meta( $user->ID, RQE_Participants::PENDING_META, true ) && RQE_Participants::authenticate( $user ) === $user && in_array( $user->ID, $GLOBALS['password_notifications'], true ), 'administrator approval unlocks login and sends password setup notification' );
+		RQE_Alerts::reset();
+		check( 0 === RQE_Alerts::pending_request_total() && ! array_filter( RQE_Alerts::all(), function ( $alert ) { return 'participants' === $alert['type']; } ), 'participant alert clears once no requests are pending' );
+		request( array( 'page' => 'rqe-riders', 'event_id' => '7' ) );
+		$riders = render( 'rider_setup' );
+		check( strpos( $riders, 'id="rqe-participant-approvals" open' ) === false && strpos( $riders, 'No pending requests' ) !== false && strpos( $riders, '<td>Approved</td>' ) !== false, 'approval panel collapses when empty and shows audited decisions' );
 		$GLOBALS['actor'] = $user->ID;
 		$registration = RQE_Participants::enrollment( 7 );
-		check( (int) $registration['bib'] > 0 && 0 === (int) $registration['score'] && ! RQE::access() && ! RQE::scoring_access( 7 ), 'approved Contributor receives Bib but no RQE administrative/scoring access' );
+		check( (int) $registration['bib'] > 0 && 0 === (int) $registration['score'] && ! RQE::access() && ! RQE::scoring_access( 7 ), 'approved participant receives Bib but no RQE administrative/scoring access' );
+		check( RQE_Participant_Role::restricted() && false === RQE_Participant_Role::admin_bar( true ) && false === RQE_Participant_Role::application_passwords( true, $user ), 'participant role hides the toolbar and disables application passwords' );
+		check( 'https://example.test/' === RQE_Participant_Role::login_redirect( admin_url(), admin_url(), $user ) && 'https://example.test/portal' === RQE_Participant_Role::login_redirect( 'https://example.test/portal', 'https://example.test/portal', $user ), 'participant login avoids wp-admin but keeps front-end portal redirects' );
+		check( ! RQE_Participant_Role::restricted( get_user_by( 'id', 2 ) ) && ! RQE_Participant_Role::restricted( get_user_by( 'id', 1 ) ), 'existing users with other roles are not restricted' );
 		$portal = RQE_Participant_Views::portal( array( 'id' => 'MC-7' ) );
 		check( strpos( $portal, 'Submit a bonus' ) !== false && strpos( $portal, 'submission_token' ) !== false && strpos( $portal, 'cannot be edited' ) !== false, 'private portal includes append-only submit form and history' );
 		$foreign_file = 'p-' . str_repeat( 'a', 32 ) . '.jpg';
@@ -186,6 +222,62 @@ try {
 		$GLOBALS['bad_participant_nonce'] = true;
 		rejects( function () use ( $guard ) { $guard->invoke( null, 'rqe_participant_register', true ); }, 'Invalid nonce' );
 		unset( $GLOBALS['bad_participant_nonce'] );
+		@$wpdb->posts = 'test_posts';
+		RQE_Admin::checked( $wpdb->query( 'CREATE TABLE test_posts (ID INTEGER PRIMARY KEY, post_author INTEGER, post_type TEXT)' ) );
+		foreach ( array( 50 => 'rqe-' . str_repeat( 'a', 20 ), 51 => 'rqe-' . str_repeat( 'b', 20 ) ) as $legacy_id => $legacy_login ) {
+			$GLOBALS['participant_users'][ $legacy_id ] = new WP_User( $legacy_id, $legacy_id . '@example.test' );
+			$GLOBALS['participant_users'][ $legacy_id ]->user_login = $legacy_login;
+			participant_request( $legacy_id, 'approved' );
+		}
+		$wpdb->insert( 'test_posts', array( 'post_author' => 51, 'post_type' => 'post' ) );
+		check( 1 === RQE_Participant_Role::migrate() && array( RQE_Participant_Role::ROLE ) === get_user_by( 'id', 50 )->roles, 'upgrade moves RQE-created Contributor participant accounts to the locked-down role' );
+		check( array( 'contributor' ) === get_user_by( 'id', 51 )->roles && array( 'contributor' ) === get_user_by( 'id', 3 )->roles && array( 'editor' ) === get_user_by( 'id', 2 )->roles, 'upgrade leaves authored, non-RQE and existing-role accounts unchanged' );
+		$GLOBALS['actor'] = 1;
+		$new_account = function ( $id ) {
+			$GLOBALS['participant_users'][ $id ] = new WP_User( $id, $id . '@example.test', RQE_Participant_Role::ROLE );
+			$GLOBALS['participant_users'][ $id ]->user_login = 'rqe-' . str_repeat( dechex( $id % 16 ), 20 );
+			$GLOBALS['participant_meta'][ $id ] = array( RQE_Participants::PENDING_META => 1 );
+		};
+		$new_account( 60 );
+		RQE_Participants::decide( 7, participant_request( 60, 'pending' ), false );
+		check( RQE_Participant_Accounts::locked( 60 ) && 'rqe_account_locked' === RQE_Participants::authenticate( get_user_by( 'id', 60 ) )->get_error_code(), 'rejecting a never-activated self-registered account locks it and login reports the lock' );
+		check( 0 === RQE_Participants::current_user( 60 ) && false === RQE_Participant_Accounts::allow_password_reset( true, 60 ), 'locked accounts have no session identity and cannot reset a password' );
+		check( ! RQE_Participant_Accounts::locked( 2 ) && RQE_Participants::current_user( 2 ) === 2, 'rejecting an existing or activated account never locks it' );
+		check( RQE_Participant_Accounts::unused( 60 ) && strpos( RQE_Participant_Accounts::column( '', RQE_Participant_Accounts::FILTER, 60 ), 'Safe to bulk delete' ) !== false, 'locked account with no link, active request or content is flagged unused on the Users screen' );
+		$new_account( 61 );
+		participant_request( 61, 'rejected', 8 );
+		RQE_Participant_Accounts::lock( get_user_by( 'id', 61 ) );
+		$other = participant_request( 61, 'verified' );
+		check( RQE_Participant_Accounts::locked( 61 ) && ! RQE_Participant_Accounts::unused( 61 ) && strpos( RQE_Participant_Accounts::column( '', RQE_Participant_Accounts::FILTER, 61 ), 'kept' ) !== false, 'locked account with another active request is not flagged for deletion' );
+		RQE_Participants::save_visibility( 7, true );
+		RQE_Participants::decide( 7, $other, true );
+		check( ! RQE_Participant_Accounts::locked( 61 ) && RQE_Participants::current_user( 61 ) === 61, 'an authorized approval unlocks and activates the account' );
+		$new_account( 62 );
+		participant_request( 62, 'rejected' );
+		check( 1 === RQE_Participant_Accounts::migrate() && RQE_Participant_Accounts::locked( 62 ) && ! RQE_Participant_Accounts::locked( 2 ), 'upgrade locks never-activated RQE accounts whose requests were all rejected' );
+		$_GET = array( RQE_Participant_Accounts::FILTER => 'locked' );
+		$args = RQE_Participant_Accounts::filter_query( array( 'number' => 20 ) );
+		check( RQE_Participant_Accounts::LOCKED_META === ( $args['meta_key'] ?? '' ) && 20 === $args['number'], 'Users list table filter lists locked RQE participant accounts' );
+		$_GET = array();
+		check( ! isset( RQE_Participant_Accounts::filter_query( array() )['meta_key'] ), 'Users list is unfiltered unless the locked view is selected' );
+		$GLOBALS['bad_participant_nonce'] = true;
+		rejects( function () { RQE_Participant_Accounts::handle_bulk( 'users.php', RQE_Participant_Accounts::BULK_ACTION, array( 60 ) ); }, 'Invalid nonce' );
+		unset( $GLOBALS['bad_participant_nonce'] );
+		check( isset( RQE_Participant_Accounts::bulk_actions( array() )[ RQE_Participant_Accounts::BULK_ACTION ] ), 'site administrators get the bulk delete action' );
+		$GLOBALS['actor'] = 3;
+		check( array() === RQE_Participant_Accounts::bulk_actions( array() ), 'users without delete capability get no bulk action' );
+		rejects( function () { RQE_Participant_Accounts::handle_bulk( 'users.php', RQE_Participant_Accounts::BULK_ACTION, array( 60 ) ); }, '403:' );
+		$GLOBALS['actor'] = 1;
+		check( 'users.php' === RQE_Participant_Accounts::handle_bulk( 'users.php', 'delete', array( 60 ) ) && get_user_by( 'id', 60 ), 'other bulk actions are untouched' );
+		$redirect = RQE_Participant_Accounts::handle_bulk( 'users.php', RQE_Participant_Accounts::BULK_ACTION, array( 60, 61, 62, 2, 1 ) );
+		check( ! get_user_by( 'id', 60 ) && ! get_user_by( 'id', 62 ) && get_user_by( 'id', 61 ) && get_user_by( 'id', 2 ) && get_user_by( 'id', 1 ), 'bulk delete removes only unused locked accounts, never active, existing or current accounts' );
+		check( strpos( $redirect, 'rqe_accounts_deleted=2' ) !== false && strpos( $redirect, 'rqe_accounts_skipped=3' ) !== false, 'bulk delete reports removed and kept counts' );
+		check( (bool) $wpdb->get_var( 'SELECT id FROM ' . RQE::table( 'import_audit' ) . " WHERE action='participant_accounts_deleted' AND detail LIKE '%#60, #62%'" ), 'bulk deletion is recorded in the Administrative Audit' );
+		$GLOBALS['pagenow'] = 'users.php';
+		$_GET = array( 'rqe_accounts_deleted' => '2', 'rqe_accounts_skipped' => '3' );
+		ob_start();
+		RQE_Participant_Accounts::notice();
+		check( strpos( ob_get_clean(), '2 unused Rally Quest participant account(s) removed. 3 selected' ) !== false, 'Users screen shows the bulk result' );
 		echo 'Participant account and portal tests passed.' . PHP_EOL;
 	}
 } catch ( RuntimeException $error ) {

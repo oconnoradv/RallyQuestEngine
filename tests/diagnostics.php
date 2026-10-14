@@ -124,6 +124,7 @@ require __DIR__ . '/../rally-quest-engine/includes/class-rqe-import-audit.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-import-adapters.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-bonus.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-views.php';
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-alerts.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-diagnostics.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-setup.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-diagnostics-deletion-service.php';
@@ -163,8 +164,8 @@ foreach ( array( 'Export Data', 'Database Backup', 'Destructive Operations' ) as
 	check( strpos( $html, '<summary><h3>' . $heading . '</h3>' ) !== false, 'native collapse control wraps ' . $heading );
 }
 check( substr_count( $html, 'rqe-destructive-action rqe-diagnostics-section" open><summary><h4>' ) === 7, 'all destructive cards retain initially visible controls with individual collapse buttons' );
-check( strpos( $html, '<details class="rqe-administrative-audit"><summary><h3>Administrative Audit</h3></summary>' ) !== false, 'Administrative Audit uses a native expand control and defaults to collapsed' );
-$audit_start = strpos( $html, '<details class="rqe-administrative-audit">' );
+check( strpos( $html, '<details class="rqe-administrative-audit" id="rqe-administrative-audit"><summary><h3>Administrative Audit</h3></summary>' ) !== false, 'Administrative Audit uses a native expand control and defaults to collapsed' );
+$audit_start = strpos( $html, '<details class="rqe-administrative-audit" id="rqe-administrative-audit">' );
 $audit_end = strpos( $html, '</details>', $audit_start );
 check( strpos( substr( $html, $audit_start, $audit_end - $audit_start ), 'Date/time (UTC)' ) !== false && $audit_end < strpos( $html, '<h3>Destructive Operations' ), 'collapsed audit contains the existing history table without hiding destructive actions' );
 check( strpos( $html, 'Delete Virus Scan Audit Data' ) !== false && strpos( $html, 'reset remembered ClamAV overrides' ) !== false, 'audit deletion describes override reset and retained deletion record' );

@@ -12,12 +12,17 @@ final class RQE_Event_State {
 	public static function writable( $id ) {}
 	public static function show_archived() { return false; }
 }
+// Header alerts are covered by the SQL-backed suites; this fixture has no shared diagnostics state.
+final class RQE_Setup {
+	public static function diagnostics_state() { return array( 'reset' => true ); }
+}
 define( 'RQE_VERSION', 'test' );
 define( 'RQE_FILE', __DIR__ . '/../rally-quest-engine/rally-quest-engine.php' );
 final class RQE {
 	public static $site_admin = true;
 	public static function site_access() { return self::$site_admin; }
 	public static function event_access( $id ) { return 7 === $id; }
+	public static function event_ids() { return array(); }
 	public static function scoring_access( $id ) { return self::event_access( $id ); }
 	public static function row( $table, $id ) { return 7 === $id ? array( 'id' => 7, 'name' => 'Test Rally' ) : null; }
 	public static function table( $name ) { return $name; }
@@ -77,6 +82,7 @@ function wp_nonce_field( $action ) { echo '<input name="_wpnonce" value="test">'
 function wp_list_pluck( $rows, $key ) { return array_column( $rows, $key ); }
 function selected( $first, $second ) { if ( (string) $first === (string) $second ) { echo ' selected'; } }
 function get_current_user_id() { return 1; }
+function is_user_logged_in() { return true; }
 function get_user_option( $key, $user_id ) { return $GLOBALS['selected_event'] ?? 0; }
 function update_user_option( $user_id, $key, $value, $global = false ) { $GLOBALS['selected_event'] = $value; return true; }
 function wp_die( $message, $title = '', $args = array() ) { throw new RuntimeException( $args['response'] . ': ' . $message ); }
@@ -197,6 +203,7 @@ if ( ! function_exists( 'get_option' ) ) {
 require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-styles.php';
 require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-horses.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-views.php';
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-alerts.php';
 $_GET = array( 'event_id' => '7' );
 $wpdb->view_mode = true;
 $rosters = new ReflectionMethod( 'RQE_Views', 'event_rosters' );

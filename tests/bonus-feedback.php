@@ -35,6 +35,7 @@ function wp_nonce_field( $action ) { echo '<input name="_wpnonce" value="test">'
 function get_current_user_id() { return 1; }
 function get_transient( $key ) { return $GLOBALS['transients'][ $key ] ?? false; }
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-views.php';
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-alerts.php';
 $wpdb = new class {
 	public function prepare( $sql, ...$args ) { return $sql; }
 	public function get_results( $sql, $format ) { return array(); }
@@ -100,6 +101,10 @@ $GLOBALS['scanner_ready'] = true;
 $html = render_library();
 check( false !== strpos( $html, '<details class="rqe-clamav-enabled"><summary>ClamAV Enabled</summary>' ) && false === strpos( $html, '<details class="rqe-clamav-enabled" open' ), 'working scanner collapses Step 0 to the green enabled summary by default' );
 check( false !== strpos( $html, 'Check ClamAV Connection' ), 'collapsed setup retains expandable connection controls' );
+foreach ( array( 'Docker / Docker Compose (optional)', 'clamav/clamav:stable', 'LocalSocket /run/clamav/clamd.sock', 'AlertExceedsMax yes', 'type: tmpfs', 'uid=100,gid=33,mode=0750', 'do not publish port 3310', 'unix:///run/clamav/clamd.sock' ) as $docker_help ) {
+	check( false !== strpos( $html, esc_html( $docker_help ) ), 'Step 0 Docker ClamAV guidance includes ' . $docker_help );
+}
+check( false === strpos( $html, 'oconnoradv' ) && false === strpos( $html, '/share/DockerApps' ), 'Docker ClamAV guidance contains no site-specific configuration' );
 $GLOBALS['bypassed'] = true;
 check( false !== strpos( render_library(), 'ClamAV Manually Disabled' ), 'remembered bypass remains visibly orange even when daemon is available' );
 $GLOBALS['scanner_ready'] = false;

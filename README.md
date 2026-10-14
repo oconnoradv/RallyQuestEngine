@@ -4,11 +4,11 @@
 
 # Rally Quest Engine
 
-**Current release: [v0.5.0](https://github.com/oconnoradv/RallyQuestEngine/releases/tag/v0.5.0)**
+**Current release: [v0.6.0](https://github.com/oconnoradv/RallyQuestEngine/releases/tag/v0.6.0)**
 
 Rally Quest Engine is a WordPress plugin that helps organizers produce and manage a high-quality scavenger-hunt style rally for **Motorcyclists, Bicyclists, Geocachers, or Horseback participants**. Efficient setup guides each event through its required details, focused administration keeps participants, conveyances, rosters, and event roles in one place, and near-real-time results update as email or website bonus submissions are reviewed. Requires WordPress 6.2+, PHP 7.4+, MySQL 8.0+ or MariaDB 10.6+ with InnoDB, and the installed/active [Action Scheduler plugin](https://wordpress.org/plugins/action-scheduler/). Licensed under the GNU General Public License v3 or later (see [LICENSE](LICENSE)).
 
-> **Version status:** v0.5.0 provides readiness-aware setup, event administration, encrypted global/event inboxes (Gmail API/IMAP/Microsoft 365), approved participant self-registration, private website bonus submission and history, administrator/scorer review, overall rankings, retained certificate history, public results embeds, and manual exports/backups.
+> **Version status:** v0.6.0 provides readiness-aware setup, event administration, encrypted global/event inboxes (Gmail API/IMAP/Microsoft 365), approved participant self-registration with a locked-down participant role, pending-action header alerts, private website bonus submission and history, administrator/scorer review, overall rankings, retained certificate history, public results embeds, and manual exports/backups.
 >
 > **Future Enhancements:** Scheduled encrypted filesystem backups (deferred), contested-submission handling, phone applications, and beautification of standings pages.
 
@@ -22,6 +22,15 @@ Rally Quest Engine is a WordPress plugin that helps organizers produce and manag
 
 The plugin supports individual WordPress sites. On multisite, activate and manage it separately on each site; network activation is not supported.
 
+### What's new in v0.6.0
+
+- **Locked-down participant accounts:** RQE-created accounts use the capability-free **Rally Quest Participant** role, with no wp-admin, toolbar or application-password access. Rejected never-activated accounts are locked, and **Users** offers an audited bulk action to remove unused locked accounts.
+- **Approvals where you work:** pending requests open automatically at the top of **Participants** and in **Events > Configure** (now above the embed section), with recent decisions and links to the Administrative Audit.
+- **Required-action alerts:** the RQE header lists pending requests, failed required setup checks and inbox errors with direct remediation links; the Rally Quest logo and admin menu show a count badge.
+- **Setup references:** Diagnostics explains persistent private storage (`RQE_IMPORT_TEMP_DIR`), and Bonus Point Library help includes an optional Docker Compose ClamAV setup.
+
+**Upgrade preparation:** back up the database and private participant proofs. Schema 18 creates the participant role, moves RQE-created Contributor accounts to it and locks never-activated accounts whose requests were all rejected; scores are unchanged.
+
 ### What's new in v0.5.0
 
 - **Setup readiness:** Initial Setup turns green when complete or appropriately acknowledged, orange when unresolved, and red for critical database, encryption or private-storage failures that cannot be overridden.
@@ -33,7 +42,7 @@ The plugin supports individual WordPress sites. On multisite, activate and manag
 
 ## Current administration design
 
-The plugin is administrator-operated, with optional public results and opt-in participant registration and private submission portals. New participant accounts use the WordPress Contributor role; existing users retain their roles. The **Rally Quest** screen opens at **Initial Setup** until Welcome, Default Email Inbox Setup, Primary Scavenger Hunt Style, and Required Plugins and Configuration readiness are complete; afterward, Events becomes the default. Detailed diagnostics are private to the checking administrator and expire after 15 minutes. Manual reviews and noncritical failures can be acknowledged for readiness only; database integrity/schema, credential encryption/decryption and private storage failures **cannot be overridden**. Acknowledgments never bypass runtime protections. Both setup and diagnostics show applicable override counts, counting overlaps once and excluding passed, removed and critical checks. Expired counts are labeled **last check**. Upgrading to schema 17 resets the legacy readiness summary so the critical prerequisites must be checked again. Override requests are audited; only the minimal summary is shared site-wide.
+The plugin is administrator-operated, with optional public results and opt-in participant registration and private submission portals. New participant accounts use the locked-down **Rally Quest Participant** (`rqe_participant`) role, which has no WordPress capabilities; existing users retain their roles. The **Rally Quest** screen opens at **Initial Setup** until Welcome, Default Email Inbox Setup, Primary Scavenger Hunt Style, and Required Plugins and Configuration readiness are complete; afterward, Events becomes the default. Detailed diagnostics are private to the checking administrator and expire after 15 minutes. Manual reviews and noncritical failures can be acknowledged for readiness only; database integrity/schema, credential encryption/decryption and private storage failures **cannot be overridden**. Acknowledgments never bypass runtime protections. Both setup and diagnostics show applicable override counts, counting overlaps once and excluding passed, removed and critical checks. Expired counts are labeled **last check**. Upgrading to schema 17 resets the legacy readiness summary so the critical prerequisites must be checked again. Override requests are audited; only the minimal summary is shared site-wide.
 
 Site-administrator tabs appear in this order: **Initial Setup**, **Events**, **Rosters**, **Scoring**, **Results**, **Participants**, **Bikes**, **Diagnostics**, **About**. Horseback uses **Horses** in place of Bikes; GeoCache omits that tab. Initial Setup is **green** when complete, **orange** when requirements remain unresolved, and **red** after a critical non-overridable diagnostic failure. A textual status accompanies the color. About remains green, Events/Rosters/Scoring/Results blue, and Diagnostics orange. The active tab has bold underlined text and a current-page accessibility marker. Event roles retain their restricted navigation.
 
@@ -71,9 +80,30 @@ The Primary Style section's saved style sets the default style for new events an
 
 In **Events > Configure > Participant Website Access & Registration**, enable website access and copy `[rqe_register id="MC-7"]` into a WordPress Shortcode block for **Add a Participant**, and `[rqe_participant id="MC-7"]` for private bonus submission/history. Use the actual style-qualified Event ID (`MC`, `BC`, `HB` or `GC`). Access is off by default. Registration and approvals require the configured registration window and an unlocked/unarchived event; website bonus submission also requires the event start/end window. Disable website access to stop both shortcodes and participant-owned proof access.
 
-Anonymous new participants receive a Contributor account with a random password, blocked from password and cookie/application-password/REST authentication until **both email verification and scoped administrator approval**. Verification links expire after 24 hours and are single-use; resubmitting after the rate-limit interval resends verification for an existing pending request. Only site administrators or that event's assigned Event Administrators can approve/reject requests. Approval confirms account identity, links a participant with the same verified email or creates a new participant, rechecks capacity and assigns a free Bib. Scorers cannot approve. Existing users must sign in before requesting access; their roles and login are unchanged, but event approval remains required. Anonymous email matching never attaches an existing account. Approved new accounts receive WordPress password-setup notification. Rejected new accounts remain blocked; administrators can delete them through WordPress Users.
+Anonymous new participants receive a Rally Quest Participant account with a random password, blocked from password and cookie/application-password/REST authentication until **both email verification and scoped administrator approval**. Verification links expire after 24 hours and are single-use; resubmitting after the rate-limit interval resends verification for an existing pending request. Only site administrators or that event's assigned Event Administrators can approve/reject requests. Approval confirms account identity, links a participant with the same verified email or creates a new participant, rechecks capacity and assigns a free Bib. Scorers cannot approve. Existing users must sign in before requesting access; their roles and login are unchanged, but event approval remains required. Anonymous email matching never attaches an existing account. Approved new accounts receive WordPress password-setup notification. Rejected new accounts are blocked from logging in; administrators can delete them through WordPress Users using the unused-account bulk action.
 
-The private portal requires an approved account-to-participant link and current noncancelled event enrollment, not merely a Contributor role. Participants can append one JPEG, PNG, GIF or WebP proof up to 10 MB for a library bonus, and view their own submission decisions, awarded points and total score. They cannot edit/delete submissions or access RQE administration. Pending/accepted duplicates and replayed forms are blocked. Existing scorer review awards points transactionally; rejection permits a new submission using a fresh form. Every website upload uses the mandatory ClamAV and raster/executable-content policies, with **no antivirus bypass**.
+The private portal requires an approved account-to-participant link and current noncancelled event enrollment, not merely a WordPress role. Participants can append one JPEG, PNG, GIF or WebP proof up to 10 MB for a library bonus, and view their own submission decisions, awarded points and total score. They cannot edit/delete submissions or access RQE administration. Pending/accepted duplicates and replayed forms are blocked. Existing scorer review awards points transactionally; rejection permits a new submission using a fresh form. Every website upload uses the mandatory ClamAV and raster/executable-content policies, with **no antivirus bypass**.
+
+**Participant WordPress role.** RQE-created participant accounts use the **Rally Quest Participant** (`rqe_participant`) role, which grants no WordPress capabilities at all (not even `read`). Registration, login, the private portal and proof uploads work through front-end pages and `admin-post.php`, so no capability is needed. For accounts whose only role is `rqe_participant`, wp-admin redirects to the home page (`admin-post.php` and `admin-ajax.php` stay available), the toolbar is hidden, application passwords are disabled and logins that would land in wp-admin go to the home page. Participants change passwords with the standard WordPress lost-password link. Schema 18 creates the role and moves existing accounts that RQE created as Contributors (random `rqe-` login, participant request, no authored content) to it. Accounts with other or additional roles, existing users and any account that has authored content are unchanged. Administrators can still assign another role manually, which removes these restrictions. Opt-in uninstall removes the role only if no user still holds it. Do not use Contributor or Customer for participants.
+
+Rejected new accounts are **locked**: they cannot sign in, keep a session, use REST/application passwords or reset their password, and login shows a "declined" message. Existing WordPress users and accounts already activated by an earlier approval are never locked by a rejection. An authorized approval of another event request for the same account unlocks it. Schema 18 also locks earlier never-activated RQE accounts whose requests were all rejected.
+
+**Cleaning up unused accounts.** In **Users**, a **Rally Quest Account** column shows each account's state, and the **Locked RQE participants** view lists locked accounts. An account is flagged **Locked — rejected, unused** only when it was created by RQE, holds only the participant role, is locked, has no participant link, no pending/verified/approved request and no authored content. Select accounts and choose the bulk action **Delete unused RQE participant accounts** (on multisite, **Remove…**, which removes them from the current site only). Every selected account is rechecked; anything not unused, and your own account, is kept and counted in the result notice. Removals require the WordPress delete-users (multisite: remove-users) capability and are recorded in the Administrative Audit as `participant_accounts_deleted`.
+
+**Approving requests and pending-action alerts.** Pending (unverified) and verified requests appear in two places, each expanded with a pending count while any request waits:
+
+- **Participants** tab: **Approve or Reject Self-Registered Participants** is at the top of the page and lists requests for every event you administer. Decisions return to the Participants tab.
+- **Events > Configure**: **Participant Website Access & Registration** is placed above **Embed this Event on a Post or Page**. Decisions return to the event.
+
+Only verified requests can be approved; unverified requests can be rejected. Every approval and rejection is recorded in the **Administrative Audit** as `participant_approved` or `participant_rejected` (with username and UTC time). Both places show the latest 20 decisions for their events, and site administrators get a link to the full audit in **Diagnostics > Administrative Audit**.
+
+Whenever an RQE page loads, a header alert list with direct remediation links appears for:
+
+- participant requests awaiting a decision (Event Administrators see only their events);
+- failed required setup checks from the last shared Diagnostics run (site administrators; noncritical failures are hidden once their setup override is recorded);
+- global or event inbox polling or test errors (site administrators).
+
+The Rally Quest logo shows a count badge and the WordPress menu shows a count bubble while alerts are open. Alerts clear automatically when requests are decided, Diagnostics pass or the inbox's next successful poll/test clears its error; there is no separate acknowledgement. Links ending in a section anchor open and scroll to that collapsed section.
 
 **Host setup:** configure `RQE_IMPORT_TEMP_DIR` to a **persistent, private** directory outside the web root, WordPress, wp-content and uploads. The operating-system temporary directory is not durable website-proof storage. Restrict the `rqe-participants-{site-id}` subdirectory to the PHP service account (0700 on Unix; equivalent host-managed Windows ACLs). Website proofs are served only through an authenticated ownership/scorer endpoint and remain private even when accepted public bonus details are enabled. Back up this private subdirectory separately; JSON/SQL backups include database records, not image bytes. Preserve the configured path during host migration.
 
@@ -139,6 +169,8 @@ Public detail requests recheck event publication, the additional photo/detail op
 
 ### Release engineering and design review
 
+The v0.6.0 review applied the same WordPress and SOLID checks to the new code. Responsibilities stay separated: `RQE_Participant_Role` owns the capability-free role and its wp-admin/toolbar/application-password restrictions; `RQE_Participant_Accounts` owns account locking and Users-screen cleanup; `RQE_Alerts` is a read-only alert query service that views only render; and `RQE_Participants` keeps enrollment decisions. WordPress practices applied: the Users bulk action verifies the core `bulk-users` nonce plus delete/remove capabilities and rechecks every account server-side; the locked-account view filters only the Users list table (`users_list_table_query_args`) rather than every user query; output is escaped and event IDs are integer-cast before SQL; alerts are capability-scoped (site-only alerts for site administrators); and deletions and decisions are audited. Accounts with authored content, other roles or active links are never removed, and on multisite the action only removes users from the current site.
+
 The v0.5.0 scope separates account/enrollment/intake rules (`RQE_Participants`), shortcode/admin presentation (`RQE_Participant_Views`), certificate-history persistence (`RQE_Certificate_History`), and shared setup policy (`RQE_Setup`). Existing event locks, scorer review, scanner/raster policy and gallery staging are reused rather than bypassed. The focused SOLID check covers these responsibility boundaries; the larger pre-existing admin/view classes are not claimed to satisfy every SOLID principle. New regressions cover pending-account authentication, event ownership and approval, capacity/window/protection failures, replay prevention, private multipart storage/recovery, readiness colors and critical override exclusions, and independent history retention/deletion. Multipart tests use a deterministic **loopback protocol fixture**, not a real antivirus certification. Real WordPress/provider/host staging acceptance remains required.
 
 The v0.4.1 review uses [WordPress security guidance](https://developer.wordpress.org/apis/security/) and [Plugin Directory guidelines](https://developer.wordpress.org/plugins/wordpress-org/detailed-plugin-guidelines/) as references: validate inputs, prepare database values, escape at output, enforce capabilities and nonces on mutations, use WordPress APIs and keep setup acknowledgements separate from runtime validation. `RQE_Setup` owns the minimal shared readiness summary while detailed diagnostic reports remain in per-administrator transients; `RQE_Email_Submissions` retains provider access, encryption, ingestion and review boundaries, with narrowly scoped lock helpers coordinating mutations and polls. The focused SOLID review found these responsibilities aligned with single-purpose helper/service boundaries and dependency direction; broader existing admin/view classes are not claimed to satisfy every SOLID principle, and this release does not undertake an unrelated architecture rewrite.
@@ -186,6 +218,28 @@ Under **Rosters**, WordPress administrators can choose **Import Participants** b
 
 ### Configuration readiness
 
+#### Private storage setup reference
+
+Configure this on the **WordPress hosting server**, not in plugin settings. Despite its name, `RQE_IMPORT_TEMP_DIR` holds permanent participant proof images as well as temporary staging files. **Do not use an operating-system temporary directory or any location that is periodically emptied.**
+
+1. **Create an existing private directory.** Choose an absolute path outside every website document root, the WordPress installation, `wp-content` and uploads. Do not expose it through a web-server alias or symbolic link. An `.htaccess` denial inside public uploads is not a substitute.
+2. **Restrict access to the PHP service account.** On Linux, have the host create a directory such as `/srv/rqe-private`, owned by the actual PHP worker account, with mode **0700** (not 0777). On Windows/IIS, an example is `D:\RQEPrivate`: in **Properties > Security > Advanced**, disable inherited permissions, remove unrelated entries, and grant the actual PHP/application-pool identity **Modify** for this folder, subfolders and files. Do not grant `Everyone`, `Users` or unrelated application pools access. Retain necessary operating-system administration and authorized backup access according to hosting policy.
+3. **Define the path in `wp-config.php`.** Before the "stop editing" line, add one definition using the actual path:
+
+   Linux example:
+   ```php
+   define( 'RQE_IMPORT_TEMP_DIR', '/srv/rqe-private' );
+   ```
+
+   Windows example:
+   ```php
+   define( 'RQE_IMPORT_TEMP_DIR', 'D:\\RQEPrivate' );
+   ```
+
+   PHP must be able to create, read, write and delete files there. If PHP `open_basedir` is enabled, the host must allow this location. Check disk space and applicable filesystem restrictions too.
+4. **Back up permanent proofs privately.** Preserve every `rqe-participants-{site-id}` subdirectory recursively, including its event subdirectories and proof files, alongside the WordPress database. JSON/SQL exports do not contain the image bytes. Restrict backup access, preserve permissions on restore, and exclude these directories from temporary-file cleanup. When moving the configured path, securely copy the existing participant subdirectories before switching the constant and retain the originals until verification is complete.
+5. **Rerun Diagnostics.** Open **RQE > Diagnostics > Required Plugins and Configuration** and run the check. Both **Participant private storage** and **Private import staging** should pass. If not, follow the specific error to check ownership/ACLs, PHP restrictions and whether the path is inside a public root. **The critical private-storage check cannot be overridden.**
+
 Above Diagnostics exports/backups, **Required Plugins and Configuration** provides an on-demand, nonce-protected check for WordPress administrators. It reports Action Scheduler installation/activation and polling API availability, OpenSSL and optional IMAP support, WordPress/PHP versions and import functions, database version, all twelve InnoDB tables and schema version, effective upload/PHP limits, writable gallery storage, private staging, and a live harmless-file ClamAV scan. Reports are private to the administrator and expire after 15 minutes. Missing Action Scheduler offers **Install Action Scheduler**; an installed inactive copy offers **Activate Action Scheduler**, only with the appropriate WordPress capabilities. These use WordPress's standard installer/activation flow, including compatibility and filesystem checks. Rerun diagnostics afterwards. The plugin dependency header is enforced by WordPress 6.5+; on older supported WordPress versions, install and activate Action Scheduler manually. Action Scheduler remains required; Gallery for SpotWalla remains optional. The checker does not install PHP extensions or ClamAV or edit server settings.
 
 Each Diagnostics section can be minimized using its heading's expand/collapse control, including configuration checks, exports, backups, the destructive-operations group, and each deletion action. Destructive operations and Administrative Audit default to collapsed. Configuration results with failures use a red outline, stay expanded and highlight failed rows red; without failures, manual-review results use an orange outline and all-passed results a green outline, both collapsed initially. The summary names the result even when collapsed. After results expire, the last outcome's border color and expanded/minimized default remain, with **Last check** and **Results expired** labels. Only the last outcome is retained per administrator/site; expired report details are not retained or presented as current. Before any check, configuration stays neutral and expanded. Other sections initially remain expanded. Collapsing a section does not change its form values or verification requirements.
@@ -225,6 +279,71 @@ The import screen includes **Step 0: Set up or verify ClamAV**, with expandable 
 Bonus imports normally require a **local ClamAV daemon (`clamd`)** with current signatures maintained by `freshclam`. The default endpoint is `unix:///var/run/clamav/clamd.ctl`. If needed, set `RQE_CLAMAV_SOCKET` in `wp-config.php` to your local Unix socket or `tcp://127.0.0.1:3310` (loopback only). Give the WordPress PHP process permission to access the socket. Never expose clamd's unauthenticated TCP listener to the network.
 
 Enable archive, PE/ELF, and Office scanning in clamd, and set `AlertExceedsMax yes` so scan-limit violations are blocked rather than reported clean. Configure `StreamMaxLength` and `MaxFileSize` to at least 60 MB, and `MaxScanSize` to at least 200 MB for the supported archives. Host administrators must keep the engine and signatures updated; this plugin does not install or configure ClamAV. Timeouts, permission/configuration errors, and scanner errors block approval.
+
+#### Optional: ClamAV with Docker Compose
+
+When WordPress runs in a container, run the official `clamav/clamav` image as a separate service and share only its Unix socket. ClamAV does not need the WordPress files because uploads are streamed to it. Put the socket in a `tmpfs` volume created with fixed ownership so permissions are identical after every restart, with no manual `chmod`. This uses stock images with no `build:` steps, which some stack managers (such as Portainer) cannot run.
+
+Create `clamd.conf` on the Docker host (for example `/path/to/clamav/clamd.conf`):
+
+```conf
+DatabaseDirectory /var/lib/clamav
+User clamav
+LogTime yes
+LocalSocket /run/clamav/clamd.sock
+LocalSocketMode 666
+FixStaleSocket yes
+TCPSocket 3310
+TCPAddr 127.0.0.1
+ScanArchive yes
+ScanPE yes
+ScanELF yes
+ScanOLE2 yes
+AlertExceedsMax yes
+StreamMaxLength 60M
+MaxFileSize 60M
+MaxScanSize 200M
+```
+
+Add or adapt these Compose entries, keeping your existing WordPress settings:
+
+```yaml
+services:
+  wordpress:
+    # ...existing WordPress settings...
+    depends_on:
+      - clamav
+    volumes:
+      # ...existing volumes...
+      - clamav_socket:/run/clamav
+
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    volumes:
+      - clamav_socket:/run/clamav
+      - /path/to/clamav/db:/var/lib/clamav
+      - /path/to/clamav/clamd.conf:/etc/clamav/clamd.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "echo PING | nc 127.0.0.1 3310 | grep -q PONG"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 6m
+
+volumes:
+  clamav_socket:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "uid=100,gid=33,mode=0750,size=1m"
+```
+
+- The socket directory belongs to the image's `clamav` user (UID 100) and the PHP account's group (GID 33 is `www-data` in the official Debian-based WordPress images) with mode `0750`, so only those accounts can reach the socket; the directory enforces access, not the socket mode. Confirm IDs with `docker exec <container> id clamav` / `id www-data` and adjust if different.
+- Docker applies `driver_opts` only when it creates a volume: remove an existing socket volume or use a new name.
+- The `127.0.0.1:3310` listener exists only inside the ClamAV container for its health check; never publish port 3310.
+- Add `define( 'RQE_CLAMAV_SOCKET', 'unix:///run/clamav/clamd.sock' );` to `wp-config.php`, redeploy, wait for the first signature download, then use **Check ClamAV Connection** and rerun Diagnostics. To troubleshoot, run `docker exec <wordpress-container> ls -la /run/clamav`.
 
 If the local socket is missing or the daemon refuses the connection, bulk imports show **Not scanned** results and require explicit **Confirm Bypass and Import** consent before saving. This cannot distinguish an uninstalled daemon from a stopped daemon. Consent is remembered only for that administrator on that site. Subsequent validated bulk listing/image imports while ClamAV is unavailable proceed without another approval prompt; each post-import notice warns that no antivirus security scan was performed. Available ClamAV is still used and its scan report still requires approval. Malware detections are excluded/blocked, scanner errors block the batch, and format, executable-content, size, and fingerprint checks remain mandatory. Manual editor replacement images do not use this bypass.
 

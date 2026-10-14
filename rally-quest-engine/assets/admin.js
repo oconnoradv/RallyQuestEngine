@@ -553,4 +553,16 @@
 		const scoring = root.querySelector('#rqe-scoring');
 		if (scoring) scoring.scrollIntoView({block: 'start'});
 	}
+	// Alert and audit links target collapsed sections; expand the target and its parent sections.
+	const openHashTarget = () => {
+		if (!/^#[A-Za-z][\w-]*$/.test(window.location.hash)) return;
+		const target = root.querySelector(window.location.hash);
+		if (!target) return;
+		for (let node = target; node && node !== root; node = node.parentElement) {
+			if (node.tagName === 'DETAILS') node.open = true;
+		}
+		target.scrollIntoView({block: 'start'});
+	};
+	window.addEventListener('hashchange', openHashTarget);
+	openHashTarget();
 }());
