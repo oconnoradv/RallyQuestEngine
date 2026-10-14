@@ -42,6 +42,8 @@ final class RQE {
 		RQE_Email_Submissions::schedule();
 		RQE_Public_Results::init();
 		RQE_Participants::init();
+		RQE_Participant_Role::init();
+		RQE_Participant_Accounts::init();
 		add_filter( 'wp_privacy_personal_data_exporters', array( __CLASS__, 'exporters' ) );
 		add_filter( 'wp_privacy_personal_data_erasers', array( __CLASS__, 'erasers' ) );
 	}
@@ -360,6 +362,11 @@ final class RQE {
 			RQE_Certificate_History::migration_backfill();
 			// Older blanket overrides did not classify critical failures. Require a fresh check.
 			RQE_Setup::clear();
+		}
+		RQE_Participant_Role::ensure();
+		if ( (int) $previous_db_version < 18 ) {
+			RQE_Participant_Role::migrate();
+			RQE_Participant_Accounts::migrate();
 		}
 		update_option( 'rqe_db_version', RQE_DB_VERSION, false );
 	}

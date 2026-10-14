@@ -17,6 +17,9 @@ function row_named( $report, $name ) {
 }
 $GLOBALS['can_manage_plugins'] = true;
 $html = render_configuration();
+foreach ( array( 'id="rqe-private-storage-help"', 'RQE_IMPORT_TEMP_DIR', '/srv/rqe-private', 'D:\\\\RQEPrivate', '0700', 'open_basedir', 'rqe-participants-{site-id}', 'JSON/SQL exports do not contain image bytes', 'critical private-storage check cannot be overridden' ) as $guidance ) {
+	check( strpos( $html, $guidance ) !== false, 'persistent private storage help includes ' . $guidance );
+}
 check( strpos( $html, 'Install Action Scheduler' ) !== false && strpos( $html, 'install-plugin_action-scheduler' ) !== false, 'missing dependency has a nonce-protected WordPress install link' );
 check( empty( $GLOBALS['scan_checks'] ), 'rendering configuration does not run background scans' );
 $GLOBALS['can_manage_plugins'] = false;

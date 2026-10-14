@@ -103,28 +103,80 @@ final class RQE_Participant_Views {
 	}
 
 	public static function administration( array $event ) {
-		global $wpdb;
 		$id = (int) $event['id'];
 		$code = RQE_Styles::event_code( $event );
-		echo '<details class="rqe-diagnostics-section"><summary><h3>Participant Website Access &amp; Registration</h3></summary><p>Enable participant website access, then copy these shortcodes into a WordPress Shortcode block. Registration uses the event registration window; submissions use its start/end window. New Contributor accounts remain unable to log in until email verification and approval.</p>';
+		$rows = self::pending_rows( $id );
+		echo '<details class="rqe-diagnostics-section rqe-participant-access' . ( $rows ? ' rqe-has-pending' : '' ) . '" id="rqe-participant-access"' . ( $rows ? ' open' : '' ) . '><summary><h3>Participant Website Access &amp; Registration</h3>' . ( $rows ? ' <strong class="rqe-pending-count">' . esc_html( count( $rows ) . ' pending request(s)' ) . '</strong>' : '' ) . '</summary><p>Enable participant website access, then copy these shortcodes into a WordPress Shortcode block. Registration uses the event registration window; submissions use its start/end window. New participant accounts remain unable to log in until email verification and approval.</p>';
 		RQE_Views::form( 'participant_visibility', array( 'event_id' => $id ) );
 		echo '<label><input type="checkbox" name="enabled" value="1"' . checked( ! empty( $event['self_registration_enabled'] ), true, false ) . '> Enable self-registration and private participant portal</label> ';
 		echo '<button class="button">Save Participant Website Access</button>';
 		echo '</form><p><code>' . esc_html( '[rqe_register id="' . $code . '"]' ) . '</code> — Add a Participant</p><p><code>' . esc_html( '[rqe_participant id="' . $code . '"]' ) . '</code> — Submit bonuses and view private history</p><p>Exclude both embedding pages from page/CDN caching. Proof images submitted on the website are private and are not exposed in public results.</p>';
-		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'participant_requests' ) . " WHERE event_id=%d AND status IN ('pending','verified') ORDER BY id LIMIT 100", $id ), ARRAY_A );
-		if ( ! is_array( $rows ) || $wpdb->last_error ) { throw new RuntimeException( 'Participant approval requests could not be read.' ); }
 		echo '<h4>Pending registration requests</h4>';
+		self::requests( $id, $rows, 'event-edit' );
+		self::decision_history( array( $id ), 'rqe-participant-decisions-' . $id );
+		echo '</details>';
+	}
+
+	/** Participants tab: pending approvals across every event the user administers; expanded while requests wait. */
+	public static function approvals_panel() {
+		$groups = array();
+		foreach ( RQE_Alerts::pending_requests() as $pending ) {
+			$rows = self::pending_rows( $pending['event_id'] );
+			if ( $rows ) {
+				$groups[] = array( 'event' => $pending, 'rows' => $rows );
+			}
+		}
+		$total = array_sum( array_map( function ( $group ) { return count( $group['rows'] ); }, $groups ) );
+		echo '<details class="rqe-panel rqe-participant-approvals' . ( $total ? ' rqe-has-pending' : '' ) . '" id="rqe-participant-approvals"' . ( $total ? ' open' : '' ) . '><summary><h3>Approve or Reject Self-Registered Participants</h3> <strong class="rqe-pending-count">' . esc_html( $total ? $total . ' pending request(s)' : 'No pending requests' ) . '</strong></summary>';
+		if ( ! $groups ) {
+			echo '<p>No requests awaiting approval.</p>';
+		}
+		foreach ( $groups as $group ) {
+			echo '<h4>' . esc_html( $group['event']['name'] ) . ' <a href="' . esc_url( RQE_Admin::url( 'event-edit', array( 'event_id' => $group['event']['event_id'] ) ) . '#rqe-participant-access' ) . '">Event participant access</a></h4>';
+			self::requests( $group['event']['event_id'], $group['rows'], 'riders' );
+		}
+		self::decision_history( RQE::event_ids(), 'rqe-participant-decisions' );
+		echo '</details>';
+	}
+
+	private static function pending_rows( $event_id ) {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'participant_requests' ) . " WHERE event_id=%d AND status IN ('pending','verified') ORDER BY id LIMIT 100", $event_id ), ARRAY_A );
+		if ( ! is_array( $rows ) || $wpdb->last_error ) { throw new RuntimeException( 'Participant approval requests could not be read.' ); }
+		return $rows;
+	}
+
+	private static function requests( $id, array $rows, $context_tab ) {
 		if ( ! $rows ) { echo '<p>No requests awaiting approval.</p>'; }
 		foreach ( $rows as $row ) {
 			$user = get_user_by( 'id', $row['user_id'] );
 			$payload = json_decode( $row['payload'], true );
 			echo '<div class="rqe-participant-request"><p><strong>' . esc_html( $payload['name'] ?? 'Unknown participant' ) . '</strong> — ' . esc_html( $user ? $user->user_email : 'Account deleted' ) . ' · ' . esc_html( $row['status'] ) . '</p><p>Approval links this verified account to an existing participant with the same email, or creates a participant and assigns the next available event Bib. Confirm the identity before approving.</p>';
-			RQE_Views::form( 'participant_decide', array( 'event_id' => $id ) );
+			RQE_Views::form( 'participant_decide', array( 'event_id' => $id, 'context_tab' => $context_tab ) );
 			echo '<input type="hidden" name="id" value="' . (int) $row['id'] . '">';
 			if ( 'verified' === $row['status'] && $user ) { echo '<button class="button button-primary" name="decision" value="approve">Approve and enroll</button> '; }
-			echo '<button class="button" name="decision" value="reject" data-confirm="Reject this registration request? New accounts will remain unable to log in.">Reject request</button></form></div>';
+			echo '<button class="button" name="decision" value="reject" data-confirm="Reject this registration request? A new, never-activated account will be locked.">Reject request</button></form></div>';
 		}
 		if ( 100 === count( $rows ) ) { echo '<p>Showing the first 100 requests. Review these to see additional requests.</p>'; }
+	}
+
+	/** Recent approvals/rejections from the Administrative Audit, linked to the full audit for site administrators. */
+	private static function decision_history( array $event_ids, $anchor ) {
+		$rows = RQE_Alerts::participant_decisions( $event_ids );
+		echo '<details class="rqe-participant-decisions" id="' . esc_attr( $anchor ) . '"><summary>Participant approval/rejection audit (latest 20)</summary><p>Every approval and rejection is retained in the Administrative Audit.';
+		if ( RQE::site_access() ) {
+			echo ' <a href="' . esc_url( RQE_Admin::url( 'diagnostics' ) . '#rqe-administrative-audit' ) . '">Open the full Administrative Audit</a>';
+		}
+		echo '</p>';
+		if ( ! $rows ) {
+			echo '<p>No participant decisions recorded yet.</p>';
+		} else {
+			echo '<table class="widefat striped"><thead><tr><th scope="col">Date/time (UTC)</th><th scope="col">Username</th><th scope="col">Event ID</th><th scope="col">Decision</th><th scope="col">Details</th></tr></thead><tbody>';
+			foreach ( $rows as $row ) {
+				echo '<tr><td>' . esc_html( $row['occurred_at'] ) . '</td><td>' . esc_html( $row['username'] ) . '</td><td>' . esc_html( $row['event_id'] ) . '</td><td>' . esc_html( 'participant_approved' === $row['action'] ? 'Approved' : 'Rejected' ) . '</td><td>' . esc_html( $row['detail'] ) . '</td></tr>';
+			}
+			echo '</tbody></table>';
+		}
 		echo '</details>';
 	}
 }

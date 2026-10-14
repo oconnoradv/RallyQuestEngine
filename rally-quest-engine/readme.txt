@@ -4,7 +4,7 @@ Tags: rally, scavenger hunt, motorcycle, bicycle, geocache
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.5.0
+Stable tag: 0.6.0
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -19,11 +19,24 @@ storage safety failures cannot be overridden. Scheduled encrypted backups are de
 
 Event Configuration can opt in to [rqe_register id="MC-7"] self-registration
 and [rqe_participant id="MC-7"] private submission/history shortcodes (copy the
-actual style-qualified Event ID). New Contributor accounts cannot log in until
+actual style-qualified Event ID). New participant accounts cannot log in until
 email verification and Event Administrator/site-administrator approval; existing
 accounts keep their roles/login but require event approval. Participants can
 submit and view their own bonuses, never edit/delete them. Website images use
 mandatory antivirus/raster checks and private authenticated serving.
+
+Pending registration requests appear, expanded, at the top of the Participants
+tab and in the event's Participant Website Access & Registration section (now
+above the embed section). Approvals and rejections are kept in the
+Administrative Audit, with the latest decisions and an audit link shown where
+decisions are made. RQE pages show header alerts with remediation links for
+pending requests, failed required setup checks and inbox errors, and a count
+badge on the Rally Quest logo and admin menu.
+
+Rejecting a never-activated self-registered account locks it (no login,
+session or password reset). Users > "Locked RQE participants" lists them, and
+the "Delete unused RQE participant accounts" bulk action removes only locked,
+unlinked accounts with no active request or content; removals are audited.
 
 Configure a persistent private RQE_IMPORT_TEMP_DIR outside public roots for
 website proofs, and separately back up rqe-participants-{site-id}; database
@@ -514,6 +527,14 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.6.0 =
+* Give RQE-created participant accounts a capability-free Rally Quest Participant role: no wp-admin, toolbar or application passwords; schema 18 migrates RQE-created Contributor accounts.
+* Lock never-activated self-registered accounts when their request is rejected (no login, session or password reset); approval elsewhere unlocks.
+* Add a Users-screen account column, a Locked RQE participants view and an audited bulk action that removes only unused locked accounts.
+* Show pending participant approvals expanded at the top of Participants and in event configuration above the embed section, with recent decisions and Administrative Audit links.
+* Add header alerts with remediation links and a logo/menu count badge for pending requests, failed required setup checks and inbox errors.
+* Add private-storage and Docker Compose ClamAV setup references to Diagnostics and Bonus Point Library help.
 
 = 0.5.0 =
 * Make Initial Setup green for complete/acknowledged readiness, orange for unresolved requirements, and red for non-overridable critical database, encryption or private-storage failures.

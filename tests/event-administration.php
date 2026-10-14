@@ -164,6 +164,8 @@ require __DIR__ . '/../rally-quest-engine/includes/class-rqe-event-state.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-certificates.php';
 require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-certificate-history.php';
 require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-participants.php';
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-participant-role.php';
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-participant-accounts.php';
 require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-participant-views.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-import-audit.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-admin.php';
@@ -181,6 +183,7 @@ require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-horses.php';
 require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-diagnostics.php';
 require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-setup.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-views.php';
+require_once __DIR__ . '/../rally-quest-engine/includes/class-rqe-alerts.php';
 require __DIR__ . '/../rally-quest-engine/includes/class-rqe-public-results.php';
 
 function check( $ok, $label ) { if ( ! $ok ) { throw new RuntimeException( 'FAIL: ' . $label ); } echo 'PASS: ' . $label . PHP_EOL; }
@@ -372,6 +375,14 @@ check( strpos( $html, 'name="status_kind" value="registration"' ) !== false && s
 $wpdb->update( RQE::table( 'event_email_settings' ), array( 'last_test_error' => 'Fixture connection error' ), array( 'event_id' => 7 ) );
 $failed_html = render( 'render_event_edit' );
 check( strpos( $failed_html, 'rqe-email-connection-failed" open' ) !== false && strpos( $failed_html, 'Fixture connection error' ) !== false, 'failed inbox test remains expanded and prominent' );
+RQE_Alerts::reset();
+$inbox_alerts = array_values( array_filter( RQE_Alerts::all(), function ( $alert ) { return 'inbox' === $alert['type']; } ) );
+check( $inbox_alerts && strpos( $inbox_alerts[0]['url'], 'rqe-event-email' ) !== false && strpos( render( 'header' ), 'event inbox reported an error' ) !== false, 'inbox errors raise a header alert with a link to remediate' );
+$GLOBALS['actor'] = 3;
+RQE_Alerts::reset();
+check( ! array_filter( RQE_Alerts::all(), function ( $alert ) { return 'participants' !== $alert['type']; } ), 'setup and inbox alerts are limited to site administrators' );
+$GLOBALS['actor'] = 1;
+RQE_Alerts::reset();
 check( strpos( $html, '<summary><h2>Embed this Event on a Post or Page</h2></summary>' ) !== false && strpos( $html, '[rqe_results id=&quot;MC-7&quot;]' ) !== false && strpos( $html, 'name="rqe_embed_event_id" value="MC-7" readonly="readonly"' ) !== false, 'event edit provides a collapsed embed section, explicit read-only event ID and copyable shortcode' );
 check( strpos( $html, 'name="op" value="public_results"' ) !== false && strpos( $html, 'name="public_results_enabled" value="1" checked' ) === false && strpos( $html, 'purge WordPress/CDN' ) !== false, 'public results control is off by default with cache-purge guidance' );
 

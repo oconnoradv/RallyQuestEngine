@@ -61,7 +61,9 @@ final class RQE_Views {
 		$events = array_values( array_filter( $events, function ( $event ) use ( $show_archived, $id ) {
 			return $show_archived || empty( $event['is_archived'] ) || (int) $event['id'] === $id;
 		} ) );
-		echo '<div class="rqe-header"><span class="dashicons dashicons-location-alt" aria-hidden="true"></span><div><h1>Rally Quest Engine</h1><p>an O&rsquo;ConnorADV project <span>v' . esc_html( RQE_VERSION ) . '</span></p></div>';
+		$alerts = RQE_Alerts::all();
+		$alert_count = count( $alerts );
+		echo '<div class="rqe-header"><span class="rqe-header-logo' . ( $alert_count ? ' rqe-action-required' : '' ) . '"><span class="dashicons dashicons-location-alt" aria-hidden="true"></span>' . ( $alert_count ? '<span class="rqe-logo-badge" title="Required action pending"><span aria-hidden="true">' . esc_html( (string) $alert_count ) . '</span><span class="screen-reader-text">' . esc_html( $alert_count . ' required action(s) pending' ) . '</span></span>' : '' ) . '</span><div><h1>Rally Quest Engine</h1><p>an O&rsquo;ConnorADV project <span>v' . esc_html( RQE_VERSION ) . '</span></p></div>';
 		if ( $events ) {
 			$tab = RQE_Admin::query( 'tab', $current_tab );
 			$page = RQE_Admin::query( 'page' );
@@ -95,6 +97,13 @@ final class RQE_Views {
 		self::button( 'Apply Visibility' );
 		echo '</form>';
 		echo '</div><hr class="wp-header-end">';
+		if ( $alerts ) {
+			echo '<div class="notice notice-warning rqe-action-alerts" id="rqe-action-alerts" role="region" aria-label="Required actions"><p><strong>Required action pending</strong></p><ul>';
+			foreach ( $alerts as $alert ) {
+				echo '<li class="rqe-action-alert rqe-action-' . esc_attr( $alert['severity'] ) . '">' . esc_html( $alert['message'] ) . ' <a href="' . esc_url( $alert['url'] ) . '">' . esc_html( $alert['label'] ) . '</a></li>';
+			}
+			echo '</ul></div>';
+		}
 		$selected = $id ? RQE::row( 'events', $id ) : null;
 		if ( $selected && ( ! empty( $selected['is_locked'] ) || ! empty( $selected['is_archived'] ) ) ) {
 			echo '<div class="notice notice-info"><p>This event is ' . esc_html( ! empty( $selected['is_archived'] ) ? 'archived and locked' : 'locked' ) . '. Results are read-only. Certificates and enabled public embeds remain available. Only a site administrator can unlock it.</p></div>';
@@ -445,6 +454,7 @@ final class RQE_Views {
 		self::end_table();
 	}
 	private static function rider_setup() {
+		RQE_Participant_Views::approvals_panel();
 		echo '<h2>Registered participants</h2>';
 		$id = absint( RQE_Admin::query( 'rider_id', '0' ) );
 		$site_admin = RQE::site_access();
@@ -798,9 +808,9 @@ final class RQE_Views {
 			if ( RQE::site_access() ) {
 				self::event_roles( $event );
 			}
+			RQE_Participant_Views::administration( $event );
 			self::public_results_embed( $event );
 			self::event_protection( $event, 'event-edit' );
-			RQE_Participant_Views::administration( $event );
 		}
 		echo '</div><div>';
 		if ( $id && RQE::site_access() ) {
@@ -1469,6 +1479,12 @@ final class RQE_Views {
 		echo '<pre class="rqe-setup-commands"><code>' . esc_html( "ScanArchive yes\nScanPE yes\nScanELF yes\nScanOLE2 yes\nAlertExceedsMax yes\nStreamMaxLength 60M\nMaxFileSize 60M\nMaxScanSize 200M" ) . '</code></pre>';
 		echo '<p>Give the PHP service account access to the local clamd socket through its socket group and permissions. Do not make the socket world-writable. If group membership changes, restart the relevant PHP-FPM or web-server service using your host&rsquo;s instructions. Then start or restart the daemon:</p>';
 		echo '<pre class="rqe-setup-commands"><code>' . esc_html( "sudo systemctl enable --now clamav-daemon\nsudo systemctl restart clamav-daemon\nsudo systemctl status clamav-daemon clamav-freshclam" ) . '</code></pre>';
+		echo '<h5>Docker / Docker Compose (optional)</h5><p>When WordPress runs in a container, you can run the official <code>clamav/clamav</code> image as a separate service and share only its Unix socket with the WordPress container. ClamAV does not need access to WordPress files because files are streamed to it. Keep the socket in a <code>tmpfs</code> volume created with fixed ownership, so the same permissions apply after every container restart without manual <code>chmod</code> commands. This setup uses stock images and does not require <code>build:</code> steps, which some stack managers (such as Portainer) do not support.</p>';
+		echo '<p>Save the following file on the Docker host, for example as <code>/path/to/clamav/clamd.conf</code>:</p>';
+		echo '<pre class="rqe-setup-commands"><code>' . esc_html( "DatabaseDirectory /var/lib/clamav\nUser clamav\nLogTime yes\nLocalSocket /run/clamav/clamd.sock\nLocalSocketMode 666\nFixStaleSocket yes\nTCPSocket 3310\nTCPAddr 127.0.0.1\nScanArchive yes\nScanPE yes\nScanELF yes\nScanOLE2 yes\nAlertExceedsMax yes\nStreamMaxLength 60M\nMaxFileSize 60M\nMaxScanSize 200M" ) . '</code></pre>';
+		echo '<p>Add or adapt these Compose entries. Keep your existing WordPress image, ports, environment, and other volumes; add only the socket volume and dependency:</p>';
+		echo '<pre class="rqe-setup-commands"><code>' . esc_html( "services:\n  wordpress:\n    # ...existing WordPress settings...\n    depends_on:\n      - clamav\n    volumes:\n      # ...existing volumes...\n      - clamav_socket:/run/clamav\n\n  clamav:\n    image: clamav/clamav:stable\n    restart: unless-stopped\n    volumes:\n      - clamav_socket:/run/clamav\n      - /path/to/clamav/db:/var/lib/clamav\n      - /path/to/clamav/clamd.conf:/etc/clamav/clamd.conf:ro\n    healthcheck:\n      test: [\"CMD-SHELL\", \"echo PING | nc 127.0.0.1 3310 | grep -q PONG\"]\n      interval: 60s\n      timeout: 10s\n      retries: 3\n      start_period: 6m\n\nvolumes:\n  clamav_socket:\n    driver: local\n    driver_opts:\n      type: tmpfs\n      device: tmpfs\n      o: \"uid=100,gid=33,mode=0750,size=1m\"" ) . '</code></pre>';
+		echo '<p>The socket directory is owned by the image&rsquo;s <code>clamav</code> user (UID 100) and the PHP account&rsquo;s group (GID 33 is <code>www-data</code> in the official Debian-based WordPress images), with mode <code>0750</code>. Only those two accounts can reach the socket; the directory, not the socket mode, enforces access. Verify the IDs with <code>docker exec &lt;container&gt; id clamav</code> and <code>docker exec &lt;container&gt; id www-data</code>, and adjust the <code>uid</code>/<code>gid</code> values if they differ. If you replace an existing socket volume, remove it or use a new volume name; Docker applies <code>driver_opts</code> only when it creates the volume. The <code>TCPAddr 127.0.0.1</code> listener exists only inside the ClamAV container for its health check; do not publish port 3310. Then set <code>RQE_CLAMAV_SOCKET</code> to <code>unix:///run/clamav/clamd.sock</code>, redeploy, wait for the first signature download, and use Check ClamAV Connection. If the connection fails, inspect the directory with <code>docker exec &lt;wordpress-container&gt; ls -la /run/clamav</code>.</p>';
 		echo '<h5>Other Linux distributions, Windows, or managed hosting</h5><p>Use your distribution&rsquo;s ClamAV packages or the <a href="https://docs.clamav.net/manual/Installing.html" target="_blank" rel="noopener noreferrer">official ClamAV installation guide<span class="screen-reader-text"> (opens in a new tab)</span></a>. Configure clamd and freshclam with equivalent scan settings above. Service names and configuration paths vary. On managed hosting, ask the provider to enable a local clamd endpoint for your PHP process; installing a WordPress plugin alone cannot install the server daemon.</p>';
 		echo '<h5>Connect WordPress</h5><p>The default endpoint is <code>unix:///var/run/clamav/clamd.ctl</code>. If your server uses a different local socket, add <code>RQE_CLAMAV_SOCKET</code> to <code>wp-config.php</code> before the stop-editing line. Choose one endpoint only:</p>';
 		echo '<pre class="rqe-setup-commands"><code>' . esc_html( "define( 'RQE_CLAMAV_SOCKET', 'unix:///var/run/clamav/clamd.ctl' );\n// Alternatively, for a loopback-only clamd TCP listener:\n// define( 'RQE_CLAMAV_SOCKET', 'tcp://127.0.0.1:3310' );" ) . '</code></pre>';
@@ -1691,7 +1707,7 @@ final class RQE_Views {
 			wp_nonce_field( 'rqe_diagnostics_download' );
 			echo '<button class="button button-primary">Download ' . esc_html( strtoupper( $type ) ) . '</button></form></details>';
 		}
-		echo '</div></details><details class="rqe-administrative-audit"><summary><h3>Administrative Audit</h3></summary><p>Latest 100 records, with usernames and timestamps in UTC. Exports and database backups include the full audit table. Ordinary data deletions retain audit history and recorded bypass choices. Deleting virus-scan audit data resets all overrides and leaves a new deletion record.</p>';
+		echo '</div></details><details class="rqe-administrative-audit" id="rqe-administrative-audit"><summary><h3>Administrative Audit</h3></summary><p>Latest 100 records, with usernames and timestamps in UTC. Participant registration approvals and rejections are recorded as <code>participant_approved</code> and <code>participant_rejected</code>. Exports and database backups include the full audit table. Ordinary data deletions retain audit history and recorded bypass choices. Deleting virus-scan audit data resets all overrides and leaves a new deletion record.</p>';
 		$audit_rows = self::queries()->recent_audit();
 		self::table( array( 'User ID', 'Username', 'Date/time (UTC)', 'Event ID', 'Action', 'Details' ) );
 		foreach ( $audit_rows as $audit_row ) {
@@ -1776,6 +1792,15 @@ final class RQE_Views {
 		echo '<details class="rqe-panel rqe-diagnostics-section' . ( $display_state ? ' rqe-configuration-' . esc_attr( $display_state ) : '' ) . '" id="rqe-configuration"' . ( $expanded ? ' open' : '' ) . '><summary><h3>Required Plugins and Configuration</h3>' . ( $status_label ? ' <strong class="rqe-check-' . esc_attr( $display_state ) . '">' . esc_html( $status_label ) . '</strong>' : '' ) . '</summary><p>Check the current WordPress/PHP environment, RQE database, local ClamAV scanner, storage, and import settings. Action Scheduler is required; Gallery for SpotWalla remains optional.</p><p>Manual-review choices and setup overrides affect only this readiness summary. Failed results remain visible and runtime validation, polling eligibility and import safety checks are never bypassed.</p><p><strong>RQE limits:</strong> spreadsheets and individual images: 10 MB; remote downloads/ZIP archives: 50 MB; accepted images per queue: 100 MB / 200 images; spreadsheet rows: 5,000. Server settings are checked against these existing safety limits. Sequential image uploads need at least 11 MB post capacity including overhead for each 10 MB file.</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="rqe_diagnostics_check"><input type="hidden" name="context_tab" value="' . esc_attr( $context_tab ) . '">';
 		wp_nonce_field( 'rqe_diagnostics_check' );
 		echo '<button type="submit" class="button button-primary">Check Required Plugins and Configuration</button></form>';
+		echo '<details class="rqe-private-storage-reference" id="rqe-private-storage-help"><summary>Help: configure persistent private storage</summary>';
+		echo '<p>Configure storage on the WordPress hosting server, not in plugin settings. Despite its name, <code>RQE_IMPORT_TEMP_DIR</code> stores permanent participant proof images as well as temporary staging files. Do not use an operating-system temporary directory or a location that is periodically emptied.</p>';
+		echo '<ol><li><strong>Create a private directory:</strong> choose an existing absolute path outside every website document root, WordPress, <code>wp-content</code> and uploads. Do not expose it through a web-server alias or symbolic link. An <code>.htaccess</code> denial inside public uploads is not a substitute.</li>';
+		echo '<li><strong>Restrict filesystem access:</strong> on Linux, have the host create a directory such as <code>/srv/rqe-private</code>, owned by the actual PHP worker account, with mode <code>0700</code>, never <code>0777</code>. On Windows/IIS, an example is <code>D:\RQEPrivate</code>. In <strong>Properties &gt; Security &gt; Advanced</strong>, disable inherited permissions, remove unrelated entries, and grant the actual PHP/application-pool identity <strong>Modify</strong> for this folder, subfolders and files. Do not grant Everyone, Users or unrelated application pools access. Retain necessary operating-system administration and authorized backup access according to hosting policy.</li>';
+		echo '<li><strong>Configure WordPress:</strong> before the &ldquo;stop editing&rdquo; line in <code>wp-config.php</code>, add one definition using your actual path. Linux example:</li></ol>';
+		echo '<pre><code>' . esc_html( "define( 'RQE_IMPORT_TEMP_DIR', '/srv/rqe-private' );" ) . '</code></pre><p>Windows example:</p><pre><code>' . esc_html( "define( 'RQE_IMPORT_TEMP_DIR', 'D:\\\\RQEPrivate' );" ) . '</code></pre>';
+		echo '<p>PHP must be able to create, read, write and delete files there. If <code>open_basedir</code> is enabled, have the host allow this location. Check disk space and applicable filesystem restrictions.</p>';
+		echo '<p><strong>Private backups:</strong> preserve every <code>rqe-participants-{site-id}</code> subdirectory recursively, including event folders and proof files, alongside the database. JSON/SQL exports do not contain image bytes. Restrict backup access, preserve permissions on restore, and exclude participant storage from temporary-file cleanup. When changing the path, securely copy existing participant subdirectories before switching the constant and retain originals until verification is complete.</p>';
+		echo '<p><strong>Verify:</strong> rerun <strong>Check Required Plugins and Configuration</strong> above. Both <strong>Participant private storage</strong> and <strong>Private import staging</strong> should pass. Follow the specific error to check ownership/ACLs, PHP restrictions and public-root placement. <strong>The critical private-storage check cannot be overridden.</strong></p></details>';
 		$plugin = RQE_Diagnostics::action_scheduler();
 		if ( ! $plugin['installed'] && current_user_can( 'install_plugins' ) ) {
 			echo '<p><a class="button" href="' . esc_url( wp_nonce_url( self_admin_url( 'update.php?action=install-plugin&plugin=action-scheduler' ), 'install-plugin_action-scheduler' ) ) . '">Install Action Scheduler</a></p>';
@@ -1796,6 +1821,9 @@ final class RQE_Views {
 				echo '</td><td>' . esc_html( $row['detail'] );
 				if ( 'passed' !== $row['status'] ) {
 					echo '<details class="rqe-configuration-help"' . ( 'failed' === $row['status'] ? ' open' : '' ) . '><summary>' . esc_html( 'failed' === $row['status'] ? 'How to fix this requirement' : 'How to verify this requirement' ) . '</summary><p>' . esc_html( $row['remedy'] ) . '</p></details>';
+					if ( in_array( $row['name'], array( 'Participant private storage', 'Private import staging' ), true ) ) {
+						echo '<p><a href="#rqe-private-storage-help">Private storage setup reference (Linux and Windows)</a></p>';
+					}
 				}
 				if ( 'review' === $row['status'] ) {
 					echo '<p>' . ( $is_ignored ? 'This manual review remains unverified; it is ignored only when calculating setup readiness.' : 'This check still needs a manual review to qualify as ready.' ) . '</p>';

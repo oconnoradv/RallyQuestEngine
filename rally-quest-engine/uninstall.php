@@ -5,6 +5,7 @@ defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 global $wpdb;
 require_once __DIR__ . '/includes/class-rqe-bonus.php';
 require_once __DIR__ . '/includes/class-rqe-import-adapters.php';
+require_once __DIR__ . '/includes/class-rqe-participant-role.php';
 if ( function_exists( 'as_unschedule_all_actions' ) ) {
 	as_unschedule_all_actions( 'rqe_process_submission_inboxes', array(), 'rqe' );
 }
@@ -28,6 +29,7 @@ $cleanup = static function () use ( $wpdb ) {
 	delete_metadata( 'user', 0, $wpdb->prefix . 'rqe_selected_event', '', true );
 	delete_metadata( 'user', 0, $wpdb->prefix . 'rqe_show_archived', '', true );
 	delete_metadata( 'user', 0, $wpdb->prefix . 'rqe_configuration_last_state', '', true );
+	RQE_Participant_Role::remove_if_unused();
 };
 if ( is_multisite() ) {
 	$offset = 0;
