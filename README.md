@@ -4,11 +4,11 @@
 
 # Rally Quest Engine
 
-**Current release: [v0.6.0](https://github.com/oconnoradv/RallyQuestEngine/releases/tag/v0.6.0)**
+**Current release: [v0.6.1](https://github.com/oconnoradv/RallyQuestEngine/releases/tag/v0.6.1)**
 
 Rally Quest Engine is a WordPress plugin that helps organizers produce and manage a high-quality scavenger-hunt style rally for **Motorcyclists, Bicyclists, Geocachers, or Horseback participants**. Efficient setup guides each event through its required details, focused administration keeps participants, conveyances, rosters, and event roles in one place, and near-real-time results update as email or website bonus submissions are reviewed. Requires WordPress 6.2+, PHP 7.4+, MySQL 8.0+ or MariaDB 10.6+ with InnoDB, and the installed/active [Action Scheduler plugin](https://wordpress.org/plugins/action-scheduler/). Licensed under the GNU General Public License v3 or later (see [LICENSE](LICENSE)).
 
-> **Version status:** v0.6.0 provides readiness-aware setup, event administration, encrypted global/event inboxes (Gmail API/IMAP/Microsoft 365), approved participant self-registration with a locked-down participant role, pending-action header alerts, private website bonus submission and history, administrator/scorer review, overall rankings, retained certificate history, public results embeds, and manual exports/backups.
+> **Version status:** v0.6.1 provides readiness-aware setup, event administration, encrypted global/event inboxes (Gmail API/IMAP/Microsoft 365), approved participant self-registration with a locked-down participant role, pending-action header alerts, private website bonus submission and history, administrator/scorer review, overall rankings, retained certificate history, public results embeds, and manual exports/backups.
 >
 > **Future Enhancements:** Scheduled encrypted filesystem backups (deferred), contested-submission handling, phone applications, and beautification of standings pages.
 
