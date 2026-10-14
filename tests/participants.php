@@ -168,6 +168,19 @@ try {
 		check( ! RQE_Participant_Role::restricted( get_user_by( 'id', 2 ) ) && ! RQE_Participant_Role::restricted( get_user_by( 'id', 1 ) ), 'existing users with other roles are not restricted' );
 		$portal = RQE_Participant_Views::portal( array( 'id' => 'MC-7' ) );
 		check( strpos( $portal, 'Submit a bonus' ) !== false && strpos( $portal, 'submission_token' ) !== false && strpos( $portal, 'cannot be edited' ) !== false, 'private portal includes append-only submit form and history' );
+		$GLOBALS['actor'] = 1;
+		RQE_Admin::checked( $wpdb->insert( RQE::table( 'bonus_submissions' ), array(
+			'event_id' => 7, 'rider_id' => $registration['rider_id'], 'bib' => $registration['bib'], 'registration_id' => $registration['id'],
+			'bonus_id' => 'ALERT1', 'status' => 'pending', 'submitted_at' => '2026-10-13 12:00:00',
+		) ) );
+		RQE_Alerts::reset();
+		$bonus_alerts = array_values( array_filter( RQE_Alerts::all(), function ( $alert ) { return 'bonus_review' === $alert['type']; } ) );
+		check( 1 === count( $bonus_alerts ) && false !== strpos( $bonus_alerts[0]['url'], 'score_tab=pending' ) && false !== strpos( $bonus_alerts[0]['url'], 'event_id=7' ), 'pending bonus review raises a header alert linking directly to that event pending-review tab' );
+		$header = render( 'header' );
+		check( false !== strpos( $header, 'Review bonuses' ) && false !== strpos( $header, 'rqe-logo-badge' ), 'pending bonus review appears in the header and activates the Rally Quest logo indicator' );
+		$wpdb->delete( RQE::table( 'bonus_submissions' ), array( 'event_id' => 7, 'bonus_id' => 'ALERT1' ) );
+		RQE_Alerts::reset();
+		$GLOBALS['actor'] = $user->ID;
 		$foreign_file = 'p-' . str_repeat( 'a', 32 ) . '.jpg';
 		$wpdb->insert( RQE::table( 'bonus_submissions' ), array( 'event_id' => 7, 'rider_id' => 10, 'image_file' => $foreign_file, 'bonus_id' => 'OTHER', 'status' => 'pending' ) );
 		$_GET = array( 'event_id' => '7', 'image_file' => $foreign_file );

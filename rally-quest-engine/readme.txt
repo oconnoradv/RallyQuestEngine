@@ -4,7 +4,7 @@ Tags: rally, scavenger hunt, motorcycle, bicycle, geocache
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.6.1
+Stable tag: 0.6.2
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -527,6 +527,9 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.6.2 =
+* Add event-scoped header and Rally Quest menu/logo alerts for pending bonus reviews, linking directly to the event's Pending Review tab for assigned administrators and scorers.
 
 = 0.6.1 =
 * Align both CodeQL workflow steps on the same pinned github/codeql-action release; no plugin code changes.
