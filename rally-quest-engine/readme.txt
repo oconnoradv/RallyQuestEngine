@@ -4,13 +4,33 @@ Tags: rally, scavenger hunt, motorcycle, bicycle, geocache
 Requires at least: 6.2
 Requires PHP: 7.4
 Requires Plugins: action-scheduler
-Stable tag: 0.3.0
+Stable tag: 0.5.0
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
 Produce and manage scavenger-hunt style rallies for motorcycle, bicycle, horseback and geocache participants.
 
 == Description ==
+
+Version 0.5.0 adds readiness-aware green/orange/red Initial Setup status, retained
+certificate generation/email history with confirmed deletion, and a shared
+Backup & Export diagnostics section. Database/schema, encryption and private
+storage safety failures cannot be overridden. Scheduled encrypted backups are deferred.
+
+Event Configuration can opt in to [rqe_register id="MC-7"] self-registration
+and [rqe_participant id="MC-7"] private submission/history shortcodes (copy the
+actual style-qualified Event ID). New Contributor accounts cannot log in until
+email verification and Event Administrator/site-administrator approval; existing
+accounts keep their roles/login but require event approval. Participants can
+submit and view their own bonuses, never edit/delete them. Website images use
+mandatory antivirus/raster checks and private authenticated serving.
+
+Configure a persistent private RQE_IMPORT_TEMP_DIR outside public roots for
+website proofs, and separately back up rqe-participants-{site-id}; database
+backups do not contain photo bytes. Use HTTPS and exclude embedding pages from
+page/CDN caching. Review/delete pending WordPress accounts before deactivating
+or uninstalling RQE: an inactive plugin cannot enforce pending-login restrictions.
+Plugin deletion does not delete WordPress users or change existing roles.
 
 Rally Quest Engine (formerly Motorcycle Rally Scoring Application) helps organizers
 produce and manage a high-quality scavenger-hunt style rally for Motorcyclists,
@@ -19,10 +39,11 @@ event through its required details, focused administration keeps participants,
 conveyances, rosters and roles in one place, and near-real-time results update
 as emailed bonus submissions are reviewed.
 
-A Welcome section explains how to use the application and where to get help,
-and stores the primary scavenger hunt style: Motorcycle (MC), Bicycle (BC),
-Horseback (HB) or GeoCache (GC). The primary style sets the default style for
-new events and the conveyance tab: Bikes for Motorcycle and Bicycle (Bicycle
+A leftmost Initial Setup tab explains how to use the application and where to
+get help, configures one encrypted global submission inbox, and stores the
+primary scavenger hunt style: Motorcycle (MC), Bicycle (BC), Horseback (HB) or
+GeoCache (GC). The primary style sets the default style for new events and the
+conveyance tab: Bikes for Motorcycle and Bicycle (Bicycle
 hides the NHTSA import, renames Manual Bicycle Entry and greys out fuel
 capacity), Horses for Horseback (Name, Breed, Sex, Age, Color), and none for
 GeoCache. Event IDs combine the event style code and numeric ID, such as MC-7.
@@ -52,15 +73,16 @@ not analyze PHP; PHP remains covered by Semgrep.
 
 Rally Quest Engine provides administrative tabs for:
 
+* Initial Setup: Welcome guidance, an explicitly assigned shared inbox, a separately saved primary style, and Required Plugins and Configuration readiness. The default entry changes to Events only when all four setup sections are complete.
 * Participants: participant details, conveyances for the primary style (make/model-filtered motorcycles or bicycles with optional manually entered four-digit years, or horses), emergency contacts, insurance information, and registered events.
-* Events: style-coded Event IDs, required event details including a description, separate per-event Administrator and Scorer assignments, encrypted event inbox configuration, and Roster links.
+* Events: style-coded Event IDs, required event details including a description, separate per-event Administrator and Scorer assignments, a read-only global inbox summary, encrypted event inbox overrides, independent status catalogs, and Roster links.
 * Rosters: persistent header event context and a roster table with rider ID, bib ID, editable Registration Status, name, email, score, and overall placing. Rider IDs open rider details/editing, bibs open event scoring, and enrollment remains a separate screen.
 * Scoring: event-specific Bonus Point Library, CSV/XLSX listing import, local-folder and public-URL image import, email submission review, required rejection reasons, and transactional point awards.
 * Results: score ordering, computed overall placing, accepted/rejected submission counts, editable independent Event Status, and rider score sheets with submission history.
 * Horses (Horseback style): Name, Breed, Sex, Age and Color records assignable to participants.
 * Bikes (Motorcycle and Bicycle styles): side-by-side manual entry and motorcycle make/model import on wide screens, stacked on narrow screens, plus transactional bulk deletion of unassigned catalog rows.
 * Rosters: Import Participants beside Add Participant opens a separate selected-event CSV/XLSX import screen for existing participants by Participant ID (or legacy Rider ID) or Email, with a downloadable sample CSV and a Back to Rosters link. Optional Bib ID, Registration Status (legacy Status accepted) and Pillion columns; statuses must be enabled for the event and blank bibs receive the next available number. WordPress administrators only, maximum 10 MB / 5,000 rows. ClamAV is required; invalid or conflicting rows reject the whole batch.
-* Diagnostics: on-demand required-plugin/environment checks with native WordPress install/activate controls for required Action Scheduler; Gallery for SpotWalla remains optional. PHP, database/InnoDB/schema, ClamAV, private staging/storage and upload capacity are checked against current RQE limits (10 MB spreadsheets/images, 50 MB ZIP/download, 100 MB / 200 images per batch). Unverifiable hosting and scanner policies are labeled Manual review. JSON export, restorable SQL backup, and verification-string-protected scoped deletion are also available. Gallery image files are stored separately and are not included in database exports or backups.
+* Diagnostics: on-demand required-plugin/environment checks with native WordPress install/activate controls for required Action Scheduler; Gallery for SpotWalla remains optional. PHP, database/InnoDB/schema, ClamAV, private staging/storage and upload capacity are checked against current RQE limits (10 MB spreadsheets/images, 50 MB ZIP/download, 100 MB / 200 images per batch). Unverifiable hosting and scanner policies are labeled Manual review. Individual manual reviews may be ignored for setup readiness; a site administrator may separately acknowledge failed checks for setup navigation. Neither action hides failures or bypasses runtime checks. Detailed reports are private to the checking administrator and expire after 15 minutes; only a minimal readiness summary is shared site-wide. JSON export, restorable SQL backup, and verification-string-protected scoped deletion are also available. Gallery image files are stored separately and are not included in database exports or backups.
 * About: version, licensing, attribution, scope, and an optional Gallery for SpotWalla recommendation with documentation and download links.
 
 The Bonus Point Library stores event-specific bonus IDs, descriptions,
@@ -153,8 +175,14 @@ Error reports are private to the importing administrator and expire after
 a larger overlay preview; Close image, Escape, or clicking outside the preview
 returns to the listing. Re-importing an ID updates its
 listing without removing other event listings. Images are stored in a dedicated
-event folder and are not registered in the WordPress media library. Each event
-may poll an encrypted IMAP, Gmail API, or Microsoft 365 inbox configuration.
+event folder and are not registered in the WordPress media library. The global
+Inbox setup can poll one encrypted IMAP, Gmail API, or Microsoft 365 mailbox
+assigned explicitly to one active event at a time. Assignment does not follow
+the page-header selection. Existing event mailboxes remain explicit overrides,
+take precedence for their event, and can be removed by a site administrator to
+restore use of an assigned global inbox. A disabled saved override still takes
+precedence until removed. Global and event inbox configuration, connection
+testing and manual polling are restricted to WordPress site administrators.
 Unread messages are accepted only when the sender matches one registered rider,
 the subject contains exactly one existing Bonus ID, and exactly one supported
 image passes format, executable-content, and ClamAV checks. Pending Review shows
@@ -184,13 +212,22 @@ events, diagnostics, or role assignments. Event Scorers can access only Scoring
 and About for their assigned events.
 
 Only WordPress site administrators can configure inboxes, test connections or
-manually poll. Event Administrators and Scorers retain assigned submission review.
-Changing the IMAP host, port, encryption or username requires a newly entered
-password; blank passwords retain the old secret only for an unchanged account.
-Use trusted mailbox servers and encrypted transport.
+manually poll. Event Administrators and Scorers retain assigned submission
+review. Global polling pauses when its assigned event is locked, archived or
+unavailable; event overrides are checked before global mail is read. Polls,
+connection tests, saves, assignment changes and override removal share
+per-source locks to avoid concurrent credential changes or message-assignment
+races. Provider messages are marked processed only after their database record
+commits. Changing the IMAP host, port, encryption or username requires a newly
+entered password; blank passwords retain the old secret only for an unchanged
+account. Use trusted mailbox servers and encrypted transport.
 
-Event inbox secrets are encrypted with AES-256-GCM using the WordPress
-authentication salts. IMAP requires the PHP IMAP extension. Gmail requires a
+Global and event inbox secrets are encrypted with AES-256-GCM using the
+WordPress authentication salts. The global inbox uses row 0 in the existing
+encrypted mailbox-settings table and is included in diagnostics JSON/SQL
+backups; backups must still be protected as sensitive data. Saving credentials
+or changing the assignment invalidates connection verification. IMAP requires
+the PHP IMAP extension. Gmail requires a
 refresh token authorized for gmail.modify; selecting Gmail API displays a
 Help? hover/focus panel with Google Cloud project, Gmail API, OAuth consent,
 credential, scope, and refresh-token setup steps. Microsoft 365 requires delegated
@@ -209,7 +246,11 @@ collisions between sites. No WordPress core tables or users are replaced.
 2. Upload rally-quest-engine-vX.Y.Z.zip through Plugins > Add New > Upload Plugin.
 3. Activate Rally Quest Engine.
 4. Open Rally Quest in the administration menu as a WordPress administrator.
-5. In Welcome, save the primary scavenger hunt style.
+5. In Initial Setup, save the primary scavenger hunt style and configure a
+   shared inbox when needed. Required Plugins and Configuration becomes ready
+   after checks pass, all manual reviews are explicitly ignored for setup, or
+   a site administrator records a setup-only override. Runtime safeguards
+   remain in force.
 6. Populate Bikes or Horses, add participants, and configure events.
 7. Enroll participants in an event using an unused bib number.
 
@@ -271,15 +312,78 @@ copies cannot be revoked by turning the listing off.
 Administrative Results and Reviewed Bibs open an accepted-bonus section while
 the participant's complete submission history remains available below it.
 
+The leftmost Initial Setup tab contains Welcome, Default Email Inbox Setup,
+Primary Scavenger Hunt Style,
+and Required Plugins and Configuration. Welcome becomes green and collapses
+after global email is configured and at least one participant and event exist.
+Default Email Inbox Setup becomes green and collapses after the provider
+connection is verified. Polling additionally requires enabling it and assigning
+an unlocked/unarchived event. Changing an existing assignment requires
+acknowledging that unread messages for the previous event have been handled.
+Primary Scavenger Hunt Style becomes green only after an explicit save. Events is
+the default entry only when all four sections are green. Setup readiness does
+not grant permissions or relax runtime validation.
+
+Required Plugins and Configuration reports detailed results only to the
+administrator who ran the check, for 15 minutes. Each Manual review result has
+an individual Ignore action for setup readiness. Failed checks remain visible;
+a separate confirmation may acknowledge them for setup navigation only.
+Neither choice bypasses event state, polling, import, or other runtime
+safeguards. A new check clears any failed-check setup override.
+Both setup and diagnostics summaries show the count of applicable overridden
+checks, without double-counting overlapping overrides or including passed
+checks. Expired private reports retain a labeled last-check count; older
+summaries without that count require rerunning the check.
+
+Successful global inbox saves and all global connection tests return to Initial
+Setup. Event inbox saves and tests return to Event Configuration. Failed saves
+return to their configuration screen with a correction notice.
+Main tabs are ordered Initial Setup, Events, Rosters, Scoring, Results,
+Participants, Bikes/Horses, Diagnostics, About; GeoCache omits conveyances.
+Green Initial Setup/About, blue workflow tabs, and orange Diagnostics headers
+are categories, not readiness indicators. Role-based visibility is unchanged.
+
 Choose a scavenger hunt style (defaulting to the primary style), then one of
 its events in the header and press Set Event; this event persists per user
 and site across Rosters, Scoring and Results until changed. Changing the
 header event clears record filters; already-open forms keep their own event.
-Two-column event configuration places separate status catalogs on the left
-and email settings plus role assignments on the right, stacking on small
-screens. Complete inbox configuration is green and minimized; expand it to
-test connectivity. Configured does not imply Connection verified, and failed
-tests remain expanded.
+Two-column event configuration places Event Details and Event Administrator /
+Scorer assignments on the left. The right side shows one Email Setup section
+identifying Global Email or Event Specific Email, followed immediately by Event
+Status and Registration Status customization. Columns stack on small screens.
+A saved event override takes precedence over the global inbox, including when
+its polling is disabled, until a site administrator removes it. Configure,
+test or remove an override from Event Configuration. Configured does not imply
+Connection verified, and failed tests remain expanded.
+When the effective inbox is verified and enabled, Email Setup becomes
+green and minimized, identifying Global Email or Event Specific Email use. Global
+email also requires assignment to this active event.
+Event Protection and Certificates appears expanded below the event embed
+section and on Results, sharing the same saved state and certificate actions.
+Its summary shows Active (green), Locked (yellow), or Locked & Archived (blue).
+Changes return to the invoking screen and appear in both places; existing
+lock, unlock and archive permissions are retained.
+Email Setup provides Configure Event Specific Email, Test Event Email,
+Pull Email Now and Remove Event Inbox Override actions when applicable.
+Testing/pulling resolve the effective global or event-specific source; removal
+deletes only the event override. Actions return to Event Configuration.
+Each inbox independently accepts a polling interval of 5 to 1440 whole minutes
+(1 day). Global-email events inherit the global interval. Legacy inboxes default
+to five minutes. The five-minute dispatcher polls only due sources, rechecking
+under the source lock. Actual timing depends on site cron. Successful and failed
+pulls restart the interval; manual pulls bypass timing but not disabled inbox,
+event protection, mailbox conflict or ingestion safety checks.
+
+The global inbox can be assigned to one unlocked, unarchived event at a time;
+this assignment is independent of the page-header event selector. Event inbox
+settings are independent explicit overrides, including legacy configurations.
+Connection tests authenticate without reading messages. Saving credentials or
+changing assignment invalidates verification. Polling, testing, assignment
+changes and override changes are guarded against concurrent inbox operations;
+provider messages are marked processed only after their database record commits.
+Global credentials use row 0 in the existing encrypted mailbox settings table,
+so existing JSON/SQL backups and data deletion include them without a schema
+migration. Backups contain encrypted ciphertext and remain sensitive.
 Event-local statuses can be added, disabled/re-enabled, and deleted only
 when unused. Disabled assigned values are retained, but cannot be newly
 assigned. Keep one registration value enabled for enrollment; automatic
@@ -410,6 +514,40 @@ No. The current version provides administrator-operated registration.
 No. Rider and pillion prices are event configuration values only.
 
 == Changelog ==
+
+= 0.5.0 =
+* Make Initial Setup green for complete/acknowledged readiness, orange for unresolved requirements, and red for non-overridable critical database, encryption or private-storage failures.
+* Retain paginated certificate print/PDF generation and email outcome history independently of expiring delivery queues; add confirmed individual deletion and Diagnostics bulk deletion.
+* Group manual exports and SQL backups under Backup & Export; standardize Destructive Operations. Scheduled encrypted filesystem backups are deferred.
+* Add opt-in participant registration and private submission/history shortcodes, email verification, pending Contributor login restrictions and event-scoped administrator approval.
+* Preserve existing WordPress roles/login, enforce participant ownership, and accept immutable scanned website proofs in authenticated private storage.
+* Upgrade to schema 17, include new data in lifecycle/privacy handling, and add account/history/multipart regressions.
+
+= 0.4.2 =
+* Consolidate event email into one Email Setup section with source-aware configure, test, pull-now and override removal actions; retain Initial Setup/email return paths.
+* Minimize and shade the single verified enabled email section green, identifying Global Email or Event Specific Email without exposing credentials to event roles.
+* Default shared Event Protection and Certificates to expanded and rename Open to Active, retaining existing state colors and permissions.
+* Add independent 5-to-1440-minute polling intervals stored with encrypted inbox settings; global-email events inherit the global interval and legacy inboxes default to five minutes.
+* Gate automatic polling by elapsed time under the source lock while retaining manual pulling and all runtime safeguards; add scheduling and navigation regressions without a schema migration.
+
+= 0.4.1 =
+* Display the number of applicable overridden checks on Initial Setup and Diagnostics, including a labeled last-check count after private reports expire.
+* Return global inbox saves and connection tests to Initial Setup; return event inbox saves and tests to the originating event. Failed saves retain the configuration screen for correction.
+* Minimize verified global setup and verified enabled effective event inbox sections, shade them green, and identify Global or Event-specific inbox use.
+* Share Event Protection and Certificates controls between Results and Event Configuration below the embed section; default minimized with Open (green), Locked (yellow), or Locked & Archived (blue) status.
+* Order tabs as Initial Setup, Events, Rosters, Scoring, Results, Participants, Bikes/Horses, Diagnostics, About; use green, blue and orange category colors without changing role or style visibility.
+* Preserve mailbox encryption, authorization, nonce checks, audited event-state mutations and runtime safeguards without a schema migration.
+
+= 0.4.0 =
+* Add a leftmost Initial Setup flow for Welcome, global inbox assignment, explicitly saved primary style, and shared Required Plugins and Configuration readiness.
+* Assign one encrypted global inbox to one active event at a time, independently of the header selector; preserve event inboxes as explicit overrides and let site administrators remove an override.
+* Add per-review setup-only ignore controls and an explicitly confirmed failed-check setup override; detailed reports remain private and runtime safety checks are unchanged.
+* Show a read-only global inbox summary in Event Configuration, place both status catalogs immediately below Email Setup, and move administrator/scorer assignments below Event Details.
+* Add an explicit event inbox override toggle, Event Status Customization and Registration Status Customization headings, initially minimized setup diagnostics, and audited readiness override requests.
+* Require acknowledgment of unread messages before changing a global inbox assignment; connection verification alone completes the default email setup section.
+* Synchronize polling, connection tests and inbox configuration changes with source locks to protect unread messages and verification state during concurrent operations.
+* Keep global credentials in the existing encrypted mailbox table so backups/export and data deletion retain their established lifecycle; clear shared setup state on Delete All Data and uninstall.
+* Upgrade plugin version to 0.4.0 without a database-schema migration.
 
 = 0.3.0 =
 * Add opt-in public accepted-bonus details linked from participant Bibs, with submitted proof photos alongside bonus descriptions and awarded points.

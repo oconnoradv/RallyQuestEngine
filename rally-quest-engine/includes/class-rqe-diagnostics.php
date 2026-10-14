@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class RQE_Diagnostic_Report {
-	public static function state( array $rows ) {
+	public static function state( array $rows, array $ignored_reviews = array() ) {
 		if ( ! $rows ) {
 			throw new RuntimeException( 'A diagnostic report must contain at least one check.' );
 		}
@@ -12,7 +12,9 @@ final class RQE_Diagnostic_Report {
 			if ( ! is_array( $row ) || ! isset( $row['name'], $row['status'], $row['detail'], $row['remedy'] ) || ! in_array( $row['status'], array( 'passed', 'failed', 'review' ), true ) ) {
 				throw new RuntimeException( 'A diagnostic check returned an invalid result.' );
 			}
-			$statuses[] = $row['status'];
+			if ( 'review' !== $row['status'] || empty( $ignored_reviews[ $row['name'] ] ) ) {
+				$statuses[] = $row['status'];
+			}
 		}
 		return in_array( 'failed', $statuses, true ) ? 'failed' : ( in_array( 'review', $statuses, true ) ? 'review' : 'passed' );
 	}
@@ -115,7 +117,7 @@ final class RQE_Diagnostics {
 		$version = $wpdb->get_var( 'SELECT VERSION()' );
 		$rows[] = array( 'name' => 'Database server', 'status' => ! $wpdb->last_error && is_string( $version ) && self::database_version_supported( $version ) ? 'passed' : 'failed', 'detail' => $wpdb->last_error ? 'Database version query failed.' : 'Current: ' . (string) $version . '. Requires MySQL 8.0+ or MariaDB 10.6+.', 'remedy' => 'If the query failed, ask the host to verify DB_HOST, DB_NAME, DB_USER and DB_PASSWORD in wp-config.php and database connectivity/permissions; do not share credentials in support screenshots. For an old server, back up and test a host-managed migration to a supported MySQL 8.0+ or MariaDB 10.6+ release. Rerun the check after reconnecting.' );
 		$invalid = array();
-		foreach ( array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'certificate_mail', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' ) as $table ) {
+		foreach ( array( 'event_admins', 'event_scorers', 'event_email_settings', 'status_options', 'certificate_mail', 'certificate_history', 'participant_links', 'participant_requests', 'bikes', 'horses', 'riders', 'rider_bikes', 'events', 'registrations', 'bonus_points', 'bonus_submissions', 'import_audit' ) as $table ) {
 			$row = $wpdb->get_row( $wpdb->prepare( 'SHOW TABLE STATUS WHERE Name = %s', RQE::table( $table ) ), ARRAY_A );
 			if ( $wpdb->last_error || ! $row || 'innodb' !== strtolower( $row['Engine'] ?? '' ) ) {
 				$invalid[] = $table;
@@ -146,6 +148,13 @@ final class RQE_Diagnostics {
 		}
 		$rows[] = array( 'name' => 'Event gallery storage', 'status' => $gallery ? 'passed' : 'failed', 'detail' => $gallery ? 'Uploads and existing gallery root are writable.' : 'Uploads or the event gallery root are unavailable/unwritable.', 'remedy' => 'Ask the host to locate the configured uploads directory and its rqe-event-gallery subdirectory. Give only the PHP service account/appropriate group write and directory traversal permissions; check disk quota, free space, read-only mounts and SELinux/AppArmor restrictions. Do not use world-writable 0777 permissions. Preserve/back up existing event images, then rerun the check.' );
 		$staging = RQE_Bonus::check_staging();
+		try {
+			RQE_Bonus::participant_storage( 0 );
+			$private_storage = array( 'passed' => true, 'message' => 'Persistent private participant storage is secured outside public roots.' );
+		} catch ( RuntimeException $error ) {
+			$private_storage = array( 'passed' => false, 'message' => $error->getMessage() );
+		}
+		$rows[] = array( 'name' => 'Participant private storage', 'status' => $private_storage['passed'] ? 'passed' : 'failed', 'detail' => $private_storage['message'], 'remedy' => 'Configure RQE_IMPORT_TEMP_DIR as a persistent private directory outside public roots, with exclusive PHP-service-account access. Preserve its rqe-participants-{site-id} subdirectory in private backups. Correct permissions and rerun Diagnostics; this critical check cannot be overridden.' );
 		$rows[] = array( 'name' => 'Private import staging', 'status' => $staging['passed'] ? 'passed' : 'failed', 'detail' => $staging['message'], 'remedy' => 'Have the host create a private directory outside the document root, WordPress, wp-content and uploads, owned by the PHP service account (0700 on Unix). Before the stop-editing line in wp-config.php, add define( \'RQE_IMPORT_TEMP_DIR\', \'/absolute/private/path/rqe-imports\' ); replacing the example with the actual private path (use a valid Windows path on Windows). Check PHP open_basedir policy, disk space and write permissions. Never stage files in public uploads. Rerun the check.' );
 		return $rows;
 	}

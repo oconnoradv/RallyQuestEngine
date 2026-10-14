@@ -64,7 +64,16 @@ final class Email_Submission_Test_DB {
 		return null;
 	}
 	public function get_col( $query ) {
+		if ( is_string( $query ) && strpos( $query, 'SELECT s.event_id FROM event_email_settings' ) === 0 ) {
+			return array_keys( array_filter( $this->tables['event_email_settings'], function ( $row ) {
+				$event = $this->tables['events'][ (int) $row['event_id'] ] ?? null;
+				return $event && ! empty( $row['enabled'] ) && empty( $event['is_locked'] ) && empty( $event['is_archived'] );
+			} ) );
+		}
 		$args = $query['args'];
+		if ( strpos( $query['sql'], 'SELECT event_id FROM event_email_settings' ) !== false ) {
+			return array_keys( array_filter( $this->tables['event_email_settings'], function ( $row ) use ( $args ) { return ! empty( $row['enabled'] ) && (int) $row['event_id'] !== (int) $args[0]; } ) );
+		}
 		return array_values( array_map( function ( $row ) { return $row['bonus_id']; }, array_filter( $this->tables['bonus_points'], function ( $row ) use ( $args ) { return (int) $row['event_id'] === (int) $args[0]; } ) ) );
 	}
 	public function insert( $table, $data ) {
@@ -93,6 +102,13 @@ final class Email_Submission_Test_DB {
 		}
 		return false;
 	}
+	public function delete( $table, $where ) {
+		if ( 'event_email_settings' !== $table ) { return false; }
+		$id = (int) $where['event_id'];
+		if ( ! isset( $this->tables[ $table ][ $id ] ) ) { return 0; }
+		unset( $this->tables[ $table ][ $id ] );
+		return 1;
+	}
 	public function query( $query ) {
 		if ( 'START TRANSACTION' === $query ) { $this->snapshot = $this->tables; $this->active_transaction = true; return 1; }
 		if ( 'COMMIT' === $query ) { $this->active_transaction = false; return 1; }
@@ -110,6 +126,7 @@ final class Email_Submission_Test_DB {
 final class RQE {
 	public static function site_access() { return $GLOBALS['email_site_admin'] ?? true; }
 	public static function table( $name ) { return $name; }
+	public static function row( $table, $id ) { return $GLOBALS['wpdb']->tables[ $table ][ (int) $id ] ?? null; }
 	public static function begin_transaction() { global $wpdb; $wpdb->query( 'START TRANSACTION' ); }
 	public static function commit_transaction() { global $wpdb; $wpdb->query( 'COMMIT' ); }
 	public static function rollback_transaction() { global $wpdb; return false !== $wpdb->query( 'ROLLBACK' ); }
@@ -121,6 +138,13 @@ function sanitize_email( $value ) { return filter_var( $value, FILTER_VALIDATE_E
 function sanitize_text_field( $value ) { return trim( strip_tags( (string) $value ) ); }
 function sanitize_textarea_field( $value ) { return trim( strip_tags( (string) $value ) ); }
 function get_current_user_id() { return 22; }
+function get_option( $key, $default = false ) { return $GLOBALS['email_options'][ $key ] ?? $default; }
+function add_option( $key, $value, $deprecated = '', $autoload = 'yes' ) {
+	if ( array_key_exists( $key, $GLOBALS['email_options'] ?? array() ) ) { return false; }
+	$GLOBALS['email_options'][ $key ] = $value;
+	return true;
+}
+function delete_option( $key ) { unset( $GLOBALS['email_options'][ $key ] ); return true; }
 function wp_safe_remote_request( $url, $args ) {
 	$GLOBALS['email_test_requests'][] = $url;
 	if ( false !== strpos( $url, 'oauth2.googleapis.com/token' ) ) {
@@ -128,6 +152,9 @@ function wp_safe_remote_request( $url, $args ) {
 	}
 	if ( false !== strpos( $url, '/profile' ) ) {
 		return array( 'response' => array( 'code' => 200 ), 'body' => json_encode( array( 'emailAddress' => 'submissions@example.test' ) ) );
+	}
+	if ( ! empty( $GLOBALS['global_empty_fixture'] ) && false !== strpos( $url, '/messages?' ) ) {
+		return array( 'response' => array( 'code' => 200 ), 'body' => '{"messages":[]}' );
 	}
 	if ( ! empty( $GLOBALS['poll_fixture'] ) && false !== strpos( $url, '/messages?' ) ) {
 		return array( 'response' => array( 'code' => 200 ), 'body' => '{"messages":[{"id":"poll-first"},{"id":"poll-second"}]}' );
@@ -232,6 +259,130 @@ check( false !== strpos( RQE_Email_Submissions::test_connection( 7 ), 'passed' )
 check( in_array( 'https://gmail.googleapis.com/gmail/v1/users/me/profile', $GLOBALS['email_test_requests'], true ), 'Gmail connection tests address the authenticated OAuth account' );
 $status = RQE_Email_Submissions::configuration_status( 7 );
 check( $status['connected'] && 'Gmail API (OAuth)' === $status['provider_label'] && $status['last_tested_at'], 'a successful current connection test marks the inbox as connected' );
+	$wpdb->tables['events'][8] = array( 'id' => 8, 'name' => 'Global Mail Event', 'is_locked' => 0, 'is_archived' => 0 );
+	RQE_Email_Submissions::save_configuration( 0, array(
+		'provider' => 'gmail',
+		'enabled' => '1',
+		'mailbox' => 'global@example.test',
+		'client_id' => 'global-client-id',
+		'client_secret' => 'global-client-secret',
+		'refresh_token' => 'global-refresh-token',
+	) );
+	$global_ciphertext = $wpdb->tables['event_email_settings'][0]['encrypted_settings'];
+	check( false === strpos( $global_ciphertext, 'global-client-secret' ) && RQE_Email_Submissions::configuration( 0, true )['settings']['client_secret'] === 'global-client-secret', 'global credentials use the existing encrypted mailbox storage and remain exportable with the plugin table' );
+	try {
+		RQE_Email_Submissions::save_configuration( 0, array(
+			'provider' => 'gmail', 'enabled' => '1', 'mailbox' => 'submissions@example.test',
+			'client_id' => 'global-client-id', 'client_secret' => 'global-client-secret', 'refresh_token' => 'global-refresh-token',
+		) );
+		throw new LogicException( 'Two sources accepted the same enabled mailbox.' );
+	} catch ( RuntimeException $exception ) {
+		check( strpos( $exception->getMessage(), 'already enabled' ) !== false && $wpdb->tables['event_email_settings'][0]['encrypted_settings'] === $global_ciphertext, 'global and event sources cannot enable the same mailbox or overwrite credentials on conflict' );
+	}
+	RQE_Email_Submissions::save_global_assignment( 8 );
+	check( 8 === RQE_Email_Submissions::global_status()['assigned_event_id'] && ! RQE_Email_Submissions::global_status()['connected'], 'global assignment is explicit and saving it invalidates the prior connection verification' );
+	RQE_Email_Submissions::test_connection( 0 );
+	check( RQE_Email_Submissions::global_status()['connected'] && RQE_Email_Submissions::global_status()['assigned_event_active'], 'the global inbox is verified against its provider and its active assigned event' );
+	$wpdb->tables['event_email_settings'][8] = $wpdb->tables['event_email_settings'][7];
+	$before = count( $GLOBALS['email_test_requests'] );
+	check( false !== strpos( invoke_private( 'process_global_event', 8 ), 'override takes precedence' ) && $before === count( $GLOBALS['email_test_requests'] ), 'global inbox leaves unread messages untouched when the assigned event has an explicit override' );
+	unset( $wpdb->tables['event_email_settings'][8] );
+	$GLOBALS['global_empty_fixture'] = true;
+	check( strpos( RQE_Email_Submissions::process_event( 8 ), '0 new message(s)' ) !== false && $wpdb->tables['event_email_settings'][0]['last_checked_at'], 'manual checks resolve the assigned global source and update its own polling status' );
+	$before = count( $GLOBALS['email_test_requests'] );
+	$last_checked = $wpdb->tables['event_email_settings'][0]['last_checked_at'];
+	check( strpos( RQE_Email_Submissions::process_event( 8, true ), 'not due yet' ) !== false && count( $GLOBALS['email_test_requests'] ) === $before && $wpdb->tables['event_email_settings'][0]['last_checked_at'] === $last_checked, 'scheduled inherited polls skip before their interval without provider requests or timestamp changes' );
+	check( strpos( RQE_Email_Submissions::process_event( 8 ), '0 new message(s)' ) !== false && count( $GLOBALS['email_test_requests'] ) > $before, 'manual pulls bypass interval timing for the effective source' );
+	$config = RQE_Email_Submissions::configuration( 0, true );
+	$config['last_checked_at'] = '2026-10-13 00:00:00';
+	$now = strtotime( '2026-10-13 00:00:00 UTC' );
+	check( ! invoke_private( 'poll_due', $config, $now + 299 ) && invoke_private( 'poll_due', $config, $now + 300 ), 'legacy inboxes become due at exactly five minutes' );
+	$config['settings']['poll_interval_minutes'] = 1440;
+	check( ! invoke_private( 'poll_due', $config, $now + 86399 ) && invoke_private( 'poll_due', $config, $now + 86400 ), 'daily inboxes become due at exactly one day' );
+	$config['last_checked_at'] = null;
+	check( invoke_private( 'poll_due', $config, $now ), 'an inbox that has never been checked is immediately due' );
+	$config['last_checked_at'] = 'not-a-date';
+	try {
+		invoke_private( 'poll_due', $config, $now );
+		throw new LogicException( 'Invalid polling timestamp accepted.' );
+	} catch ( RuntimeException $exception ) {
+		check( strpos( $exception->getMessage(), 'timestamp is invalid' ) !== false, 'invalid saved timestamps produce an explicit failure rather than a fabricated eligibility result' );
+	}
+	foreach ( array( '4', '1441', '5.5', '-5', '', 'abc' ) as $invalid ) {
+		try {
+			RQE_Email_Submissions::poll_interval_minutes( $invalid );
+			throw new LogicException( 'Invalid interval accepted.' );
+		} catch ( RuntimeException $exception ) {
+			check( strpos( $exception->getMessage(), '5 to 1440' ) !== false, 'invalid polling interval rejected: ' . $invalid );
+		}
+	}
+	check( RQE_Email_Submissions::poll_interval_minutes( '5' ) === 5 && RQE_Email_Submissions::poll_interval_minutes( '1440' ) === 1440, 'both polling interval limits are accepted' );
+	RQE_Email_Submissions::save_configuration( 0, array(
+		'provider' => 'gmail', 'enabled' => '1', 'mailbox' => 'global@example.test', 'client_id' => 'global-client-id',
+		'client_secret' => '', 'refresh_token' => '', 'poll_interval_minutes' => '1440',
+	) );
+	check( RQE_Email_Submissions::configuration( 0 )['settings']['poll_interval_minutes'] === 1440 && RQE_Email_Submissions::configuration( 7 )['settings']['poll_interval_minutes'] === 5, 'global and event intervals persist independently in encrypted settings' );
+	$wpdb->tables['event_email_settings'][0]['last_checked_at'] = gmdate( 'Y-m-d H:i:s', time() - 86400 );
+	$before = count( $GLOBALS['email_test_requests'] );
+	check( strpos( RQE_Email_Submissions::process_event( 8, true ), '0 new message(s)' ) !== false && count( $GLOBALS['email_test_requests'] ) > $before, 'due daily global polls resolve the inherited source and contact the provider' );
+	$wpdb->tables['event_email_settings'][7]['last_checked_at'] = gmdate( 'Y-m-d H:i:s' );
+	$event_checked = $wpdb->tables['event_email_settings'][7]['last_checked_at'];
+	$before = count( $GLOBALS['email_test_requests'] );
+	RQE_Email_Submissions::process_all();
+	check( count( $GLOBALS['email_test_requests'] ) === $before, 'the real dispatcher skips both independent sources while their intervals have not elapsed' );
+	$wpdb->tables['event_email_settings'][0]['last_checked_at'] = gmdate( 'Y-m-d H:i:s', time() - 86400 );
+	$before = count( $GLOBALS['email_test_requests'] );
+	RQE_Email_Submissions::process_all();
+	check( count( $GLOBALS['email_test_requests'] ) > $before && $wpdb->tables['event_email_settings'][7]['last_checked_at'] === $event_checked, 'the dispatcher polls a due daily global source without polling the not-yet-due event override' );
+	$before = count( $GLOBALS['email_test_requests'] );
+	$last_checked = $wpdb->tables['event_email_settings'][0]['last_checked_at'];
+	RQE_Email_Submissions::process_all();
+	check( count( $GLOBALS['email_test_requests'] ) === $before && $wpdb->tables['event_email_settings'][0]['last_checked_at'] === $last_checked, 'a subsequent dispatcher run rechecks eligibility and does not duplicate provider reads' );
+	$GLOBALS['email_options']['rqe_submission_poll_lock_0'] = time() . ':' . str_repeat( 'a', 32 );
+	try {
+		RQE_Email_Submissions::process_event( 8, true );
+		throw new LogicException( 'Concurrent scheduled request acquired the source lock.' );
+	} catch ( RuntimeException $exception ) {
+		check( strpos( $exception->getMessage(), 'another request' ) !== false && count( $GLOBALS['email_test_requests'] ) === $before && $wpdb->tables['event_email_settings'][0]['last_checked_at'] === $last_checked, 'concurrent scheduled requests cannot read messages or advance the active source timestamp' );
+	}
+	unset( $GLOBALS['email_options']['rqe_submission_poll_lock_0'] );
+	$GLOBALS['global_empty_fixture'] = false;
+	$before = count( $GLOBALS['email_test_requests'] );
+	try {
+		invoke_private( 'process_source', 7, 0, 7 );
+		throw new LogicException( 'A stale global event assignment was polled.' );
+	} catch ( RuntimeException $exception ) {
+		check( strpos( $exception->getMessage(), 'assignment changed' ) !== false && $before === count( $GLOBALS['email_test_requests'] ), 'stale global polling requests cannot consume messages after reassignment' );
+	}
+	$wpdb->tables['events'][8]['is_locked'] = 1;
+	try {
+		RQE_Email_Submissions::save_global_assignment( 8 );
+		throw new RuntimeException( 'A locked event accepted the global inbox.' );
+	} catch ( RuntimeException $exception ) {
+		check( false !== strpos( $exception->getMessage(), 'unlocked, unarchived' ), 'global inbox cannot be assigned to a locked event' );
+	}
+	$wpdb->tables['events'][8]['is_locked'] = 0;
+	$GLOBALS['email_options']['rqe_submission_poll_lock_7'] = time() . ':' . str_repeat( 'a', 32 );
+	try {
+		RQE_Email_Submissions::save_configuration( 7, array_merge( $imap_input, array( 'password' => 'poll-password' ) ) );
+		throw new RuntimeException( 'An inbox configuration changed during a poll.' );
+	} catch ( RuntimeException $exception ) {
+		check( false !== strpos( $exception->getMessage(), 'being checked' ), 'inbox credentials cannot change while that source is being polled' );
+	}
+	try {
+		RQE_Email_Submissions::remove_event_override( 7 );
+		throw new RuntimeException( 'An event inbox override was removed during a poll.' );
+	} catch ( RuntimeException $exception ) {
+		check( false !== strpos( $exception->getMessage(), 'being checked' ), 'an event inbox override cannot be removed while that source is being polled' );
+	}
+	try {
+		RQE_Email_Submissions::test_connection( 7 );
+		throw new RuntimeException( 'A mailbox connection test started during a poll.' );
+	} catch ( RuntimeException $exception ) {
+		check( false !== strpos( $exception->getMessage(), 'being checked' ), 'connection tests cannot verify credentials while that inbox is being polled' );
+	}
+	unset( $GLOBALS['email_options']['rqe_submission_poll_lock_7'] );
+check( RQE_Email_Submissions::has_event_override( 7 ), 'a saved event inbox remains an explicit override until an administrator removes it' );
 check( 'B12' === invoke_private( 'subject_bonus_id', 7, 'Rider submission B12' ), 'one subject bonus code resolves to its library ID' );
 check( '' === invoke_private( 'subject_bonus_id', 7, 'B12 and B13' ), 'multiple subject bonus codes are rejected' );
 check( '' === invoke_private( 'subject_bonus_id', 7, 'B120' ), 'partial bonus-code matches are rejected' );
@@ -275,3 +426,4 @@ try {
 } catch ( RuntimeException $exception ) {
 	check( false !== strpos( $exception->getMessage(), 'could not be recorded' ) && count( $GLOBALS['marked'] ) === 1 && count( $wpdb->tables['bonus_submissions'] ) === 3, 'later intake failures retain committed earlier messages without consuming the failing message' );
 }
+check( false !== strpos( RQE_Email_Submissions::remove_event_override( 7 ), 'global inbox will be used only if it is assigned' ) && ! RQE_Email_Submissions::has_event_override( 7 ), 'removing an event override leaves the global inbox subject to explicit assignment' );

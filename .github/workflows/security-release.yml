@@ -48,11 +48,31 @@ jobs:
           php tests/raster-policy.php
           php tests/read-models.php
           php tests/event-administration.php
+          php tests/admin-navigation.php
           php tests/public-bonus-details.php
           php tests/certificates.php
+          php tests/certificate-history.php
+          php tests/participants.php
           php tests/diagnostic-contracts.php
           php tests/email-submissions.php
           php tests/legacy-import.php
+
+      - name: Check real participant multipart uploads with a loopback scan fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/participant-scan-fixture.php 18752 >"$RUNNER_TEMP/rqe-scan.log" 2>&1 &
+          scan_pid=$!
+          RQE_TEST_SCAN_SOCKET=tcp://127.0.0.1:18752 php -S 127.0.0.1:18751 tests/participants.php >"$RUNNER_TEMP/rqe-http.log" 2>&1 &
+          http_pid=$!
+          trap 'kill "$http_pid" "$scan_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:18751/health | grep -q '^ready$'; then break; fi
+            sleep 1
+          done
+          curl --fail --silent --show-error http://127.0.0.1:18751/health | grep -q '^ready$'
+          curl --fail --silent --show-error -F proof=@tests/fixtures/jpeg-binary-marker.jpg http://127.0.0.1:18751/upload | tee "$RUNNER_TEMP/rqe-upload.log"
+          grep -q 'PASS: failed deletion can restore private proof' "$RUNNER_TEMP/rqe-upload.log"
 
       - name: Audit bundled PDF dependencies
         shell: bash

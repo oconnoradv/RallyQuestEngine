@@ -24,11 +24,27 @@ final class RQE_Certificates {
 
 	public static function expire() {
 		global $wpdb;
-		if ( ! RQE::site_access() ) {
+		if ( ! RQE::site_access() && ! ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) ) {
 			return;
 		}
-		RQE_Admin::checked( $wpdb->query( $wpdb->prepare( 'UPDATE ' . RQE::table( 'certificate_mail' ) . " SET state='stale',snapshot='',subject='',message='',detail='Approval expired. Review again.' WHERE state='pending' AND created_at<%s", gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ) ) ) );
-		RQE_Admin::checked( $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . RQE::table( 'certificate_mail' ) . ' WHERE updated_at<%s', gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS ) ) ) );
+		$cutoff = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
+		$expiring = $wpdb->get_results( $wpdb->prepare( 'SELECT id FROM ' . RQE::table( 'certificate_mail' ) . " WHERE state='pending' AND created_at<%s ORDER BY id LIMIT 500", $cutoff ), ARRAY_A );
+		if ( ! is_array( $expiring ) || $wpdb->last_error ) { throw new RuntimeException( 'Expiring certificate approvals could not be read.' ); }
+		foreach ( $expiring as $entry ) {
+			RQE::begin_transaction();
+			try {
+				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . RQE::table( 'certificate_mail' ) . " WHERE id=%d AND state='pending' FOR UPDATE", $entry['id'] ), ARRAY_A );
+				if ( $wpdb->last_error ) { throw new RuntimeException( 'Expiring certificate approval could not be locked.' ); }
+				if ( ! $row ) { RQE::commit_transaction(); continue; }
+				RQE_Certificate_History::record_delivery( $row, 'stale', 'Approval expired before sending. Review again.' );
+				RQE_Admin::checked( $wpdb->update( RQE::table( 'certificate_mail' ), array( 'state' => 'stale', 'snapshot' => '', 'subject' => '', 'message' => '', 'detail' => 'Approval expired. Review again.', 'updated_at' => gmdate( 'Y-m-d H:i:s' ) ), array( 'id' => $row['id'] ) ) );
+				RQE::commit_transaction();
+			} catch ( RuntimeException $exception ) {
+				RQE::rollback_transaction();
+				throw $exception;
+			}
+		}
+		RQE_Admin::checked( $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . RQE::table( 'certificate_mail' ) . " WHERE state!='pending' AND updated_at<%s", gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS ) ) ) );
 	}
 
 	public static function link( $event_id, $mode, $rider_id = 0 ) {
@@ -384,11 +400,13 @@ final class RQE_Certificates {
 				}
 				$current = self::snapshots( $event_id, (int) $row['rider_id'] );
 				if ( strtotime( $row['created_at'] . ' UTC' ) < time() - DAY_IN_SECONDS || count( $current ) !== 1 || ! hash_equals( $row['fingerprint'], self::fingerprint( $current[0] ) ) ) {
+					RQE_Certificate_History::record_delivery( $row, 'stale', 'Approval expired or data changed before sending. Review again.' );
 					RQE_Admin::checked( $wpdb->update( RQE::table( 'certificate_mail' ), array( 'state' => 'stale', 'snapshot' => '', 'subject' => '', 'message' => '', 'detail' => 'Approval expired or data changed. Review again.', 'updated_at' => gmdate( 'Y-m-d H:i:s' ) ), array( 'id' => $id ) ) );
 					RQE::commit_transaction();
 					continue;
 				}
 				RQE_Admin::checked( $wpdb->update( RQE::table( 'certificate_mail' ), array( 'state' => 'sending', 'updated_at' => gmdate( 'Y-m-d H:i:s' ) ), array( 'id' => $id, 'state' => 'pending' ) ) );
+				RQE_Certificate_History::record_delivery( $row, 'sending', 'Sending started; the outcome is uncertain until it is recorded here.', $current[0] );
 				( new RQE_Import_Audit() )->record( $event_id, 'certificate_attempt', 'Starting reviewed certificate email for participant ID ' . $row['rider_id'] . '; delivery ID ' . $id . '.' );
 				RQE::commit_transaction();
 			} catch ( RuntimeException $exception ) {
@@ -421,6 +439,12 @@ final class RQE_Certificates {
 				}
 			}
 			RQE_Admin::checked( $wpdb->update( RQE::table( 'certificate_mail' ), array( 'state' => $state, 'snapshot' => '', 'subject' => '', 'message' => '', 'detail' => $detail, 'updated_at' => gmdate( 'Y-m-d H:i:s' ) ), array( 'id' => $id, 'state' => 'sending' ) ) );
+			try {
+				RQE_Certificate_History::record_delivery( $row, $state, $detail, $current[0] );
+			} catch ( RuntimeException $exception ) {
+				error_log( 'RQE certificate history: ' . $exception->getMessage() );
+				throw new RuntimeException( 'The mail outcome was saved, but certificate history could not be updated. Inspect the recorded batch before considering a resend.', 0, $exception );
+			}
 			( new RQE_Import_Audit() )->record( $event_id, 'certificate_' . $state, 'Participant ID ' . $row['rider_id'] . '; delivery ID ' . $id . ': ' . $detail );
 		}
 	}
@@ -449,6 +473,7 @@ final class RQE_Certificates {
 				}
 				if ( 'pdf' === $mode ) {
 					$pdf = self::pdf( $rows );
+					RQE_Certificate_History::record_generated( $event_id, 'pdf', $rows );
 					header( 'Content-Type: application/pdf' );
 					header( 'Content-Disposition: attachment; filename="finisher-certificates.pdf"' );
 					echo $pdf;
@@ -456,6 +481,7 @@ final class RQE_Certificates {
 				} else {
 					header( 'Content-Type: text/html; charset=utf-8' );
 					$html = self::document( $rows );
+					RQE_Certificate_History::record_generated( $event_id, 'print', $rows );
 					echo str_replace( '<body>', '<body><div class="controls"><button onclick="window.print()">Print / Save as PDF</button></div>', $html );
 				}
 			} elseif ( 'review' === $mode ) {
