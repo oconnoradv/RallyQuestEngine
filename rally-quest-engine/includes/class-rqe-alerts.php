@@ -36,6 +36,28 @@ final class RQE_Alerts {
 		return array_sum( array_column( self::pending_requests(), 'total' ) );
 	}
 
+	/** Pending bonus submissions for events the current user may score. */
+	private static function pending_bonus_reviews() {
+		global $wpdb;
+		if ( ! is_user_logged_in() ) {
+			return array();
+		}
+		$ids = array_filter( array_map( 'intval', RQE::scoring_event_ids() ) );
+		if ( ! $ids ) {
+			return array();
+		}
+		$rows = $wpdb->get_results(
+			'SELECT s.event_id,e.name,COUNT(*) AS total FROM ' . RQE::table( 'bonus_submissions' ) . ' s INNER JOIN ' . RQE::table( 'events' ) . " e ON e.id=s.event_id WHERE s.status='pending' AND s.event_id IN (" . implode( ',', $ids ) . ') GROUP BY s.event_id,e.name ORDER BY e.name,s.event_id',
+			ARRAY_A
+		);
+		if ( ! is_array( $rows ) || $wpdb->last_error ) {
+			return array();
+		}
+		return array_map( function ( $row ) {
+			return array( 'event_id' => (int) $row['event_id'], 'name' => (string) $row['name'], 'total' => (int) $row['total'] );
+		}, $rows );
+	}
+
 	/** Inbox polling or verification errors; inbox management is restricted to site administrators. */
 	private static function inbox_errors() {
 		global $wpdb;
@@ -81,6 +103,15 @@ final class RQE_Alerts {
 			return self::$cache;
 		}
 		$alerts = array();
+		foreach ( self::pending_bonus_reviews() as $row ) {
+			$alerts[] = array(
+				'type' => 'bonus_review',
+				'severity' => 'warning',
+				'message' => $row['total'] . ' bonus review(s) pending for ' . $row['name'] . '.',
+				'label' => 'Review bonuses',
+				'url' => RQE_Admin::url( 'scoring', array( 'event_id' => $row['event_id'], 'score_tab' => 'pending' ) ) . '#rqe-scoring',
+			);
+		}
 		foreach ( self::pending_requests() as $row ) {
 			$alerts[] = array(
 				'type' => 'participants',

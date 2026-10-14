@@ -4,11 +4,11 @@
 
 # Rally Quest Engine
 
-**Current release: [v0.6.1](https://github.com/oconnoradv/RallyQuestEngine/releases/tag/v0.6.1)**
+**Current release: [v0.6.2](https://github.com/oconnoradv/RallyQuestEngine/releases/tag/v0.6.2)**
 
 Rally Quest Engine is a WordPress plugin that helps organizers produce and manage a high-quality scavenger-hunt style rally for **Motorcyclists, Bicyclists, Geocachers, or Horseback participants**. Efficient setup guides each event through its required details, focused administration keeps participants, conveyances, rosters, and event roles in one place, and near-real-time results update as email or website bonus submissions are reviewed. Requires WordPress 6.2+, PHP 7.4+, MySQL 8.0+ or MariaDB 10.6+ with InnoDB, and the installed/active [Action Scheduler plugin](https://wordpress.org/plugins/action-scheduler/). Licensed under the GNU General Public License v3 or later (see [LICENSE](LICENSE)).
 
-> **Version status:** v0.6.1 provides readiness-aware setup, event administration, encrypted global/event inboxes (Gmail API/IMAP/Microsoft 365), approved participant self-registration with a locked-down participant role, pending-action header alerts, private website bonus submission and history, administrator/scorer review, overall rankings, retained certificate history, public results embeds, and manual exports/backups.
+> **Version status:** v0.6.2 provides readiness-aware setup, event administration, encrypted global/event inboxes (Gmail API/IMAP/Microsoft 365), approved participant self-registration with a locked-down participant role, pending-action header alerts for registration requests, bonus reviews, failed setup checks and inbox errors, private website bonus submission and history, administrator/scorer review, overall rankings, retained certificate history, public results embeds, and manual exports/backups.
 >
 > **Future Enhancements:** Scheduled encrypted filesystem backups (deferred), contested-submission handling, phone applications, and beautification of standings pages.
 
@@ -30,6 +30,10 @@ The plugin supports individual WordPress sites. On multisite, activate and manag
 - **Setup references:** Diagnostics explains persistent private storage (`RQE_IMPORT_TEMP_DIR`), and Bonus Point Library help includes an optional Docker Compose ClamAV setup.
 
 **Upgrade preparation:** back up the database and private participant proofs. Schema 18 creates the participant role, moves RQE-created Contributor accounts to it and locks never-activated accounts whose requests were all rejected; scores are unchanged.
+
+### What's new in v0.6.2
+
+- **Bonus review alerts:** when submissions are awaiting review, assigned event administrators and scorers see the pending count in the Rally Quest header and menu/logo badge, with a direct link to the event's pending-review tab.
 
 ### What's new in v0.5.0
 
