@@ -23,6 +23,7 @@ final class RQE {
 	public static function site_access() { return self::$site_admin; }
 	public static function event_access( $id ) { return 7 === $id; }
 	public static function event_ids() { return array(); }
+	public static function scoring_event_ids() { return array(); }
 	public static function scoring_access( $id ) { return self::event_access( $id ); }
 	public static function row( $table, $id ) { return 7 === $id ? array( 'id' => 7, 'name' => 'Test Rally' ) : null; }
 	public static function table( $name ) { return $name; }
